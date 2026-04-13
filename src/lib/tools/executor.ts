@@ -65,6 +65,19 @@ export function registerTool(tool: LocusTool): void {
   registry.set(tool.name, { tool, validate });
 }
 
+/**
+ * Enumerate every currently registered tool. Used by the agent harness
+ * (`src/lib/agent/tool-bridge.ts`) to assemble the tool set passed to
+ * `streamText` — the harness wraps each LocusTool as an AI-SDK tool and
+ * delegates execution back through `executeTool()`.
+ *
+ * Order is registration order (Map iteration), which makes the resulting
+ * tool set stable across Anthropic prompt-cache hits.
+ */
+export function getAllTools(): LocusTool[] {
+  return Array.from(registry.values()).map((entry) => entry.tool);
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------

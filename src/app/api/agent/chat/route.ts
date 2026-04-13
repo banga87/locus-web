@@ -1,0 +1,199 @@
+// POST /api/agent/chat — Platform Agent streaming chat.
+//
+// This route is a **pure adapter** — it does not import `streamText`
+// directly. All harness concerns (hook bus, prompt caching, model
+// selection, abort propagation, stream assembly) live in
+// `runAgentTurn`. The route's job is HTTP ↔ context translation:
+//   1. Parse the AI SDK `useChat` request body.
+//   2. Resolve the auth context (`companyId`, `userId`, `brainId`).
+//   3. Build the system prompt + tool set.
+//   4. Delegate to `runAgentTurn`.
+//   5. Hand back `result.toUIMessageStreamResponse()`.
+//   6. After completion, persist usage + audit + (Task 2) the session turn.
+//
+// Stubs:
+//   - `sessionManager` is a no-op until Task 2 ships per-turn persistence.
+//     The real implementation lives at `@/lib/sessions/manager`. The route
+//     reads from / writes to the stub through a single import surface so
+//     Task 2 only has to swap that one module.
+//   - `loadMcpOutTools` returns `{}` until Task 3 wires up MCP OUT.
+//
+// Runtime: Node.js (we use `waitUntil` from `@vercel/functions`, which
+// requires the Node runtime; we also need long-running streaming).
+// `maxDuration = 120` covers a multi-step agent turn with tool use.
+
+import { waitUntil } from '@vercel/functions';
+import { eq } from 'drizzle-orm';
+import {
+  convertToModelMessages,
+  type ModelMessage,
+  type UIMessage,
+} from 'ai';
+
+import { db } from '@/db';
+import { categories } from '@/db/schema';
+import { requireAuth } from '@/lib/api/auth';
+import { ApiAuthError } from '@/lib/api/errors';
+import { runAgentTurn, DEFAULT_MODEL } from '@/lib/agent/run';
+import { buildSystemPrompt } from '@/lib/agent/system-prompt';
+import { buildToolSet } from '@/lib/agent/tool-bridge';
+import type { AgentContext } from '@/lib/agent/types';
+import { getBrainForCompany } from '@/lib/brain/queries';
+import { registerLocusTools } from '@/lib/tools';
+import { recordUsage } from '@/lib/usage/record';
+import { flushEvents } from '@/lib/audit/logger';
+import { sessionManager } from '@/lib/sessions/manager';
+import { loadMcpOutTools } from '@/lib/mcp-out/bridge';
+
+export const runtime = 'nodejs';
+export const maxDuration = 120;
+
+interface ChatRequestBody {
+  /** UI message history from `useChat()` (the v6 shape). */
+  messages: UIMessage[];
+  /** Active session id — null on first message before a session exists. */
+  sessionId: string | null;
+}
+
+export async function POST(req: Request) {
+  // Phase 0 tools register lazily — make sure they're in the registry
+  // before `buildToolSet()` enumerates. Idempotent.
+  registerLocusTools();
+
+  let body: ChatRequestBody;
+  try {
+    body = (await req.json()) as ChatRequestBody;
+  } catch {
+    return Response.json({ error: 'invalid_json' }, { status: 400 });
+  }
+
+  let auth;
+  try {
+    auth = await requireAuth();
+  } catch (err) {
+    if (err instanceof ApiAuthError) {
+      return Response.json(
+        { error: err.code, message: err.message },
+        { status: err.statusCode },
+      );
+    }
+    throw err;
+  }
+
+  if (!auth.companyId) {
+    return Response.json(
+      { error: 'no_company', message: 'Complete setup before using chat.' },
+      { status: 403 },
+    );
+  }
+
+  const brain = await getBrainForCompany(auth.companyId);
+  const cats = await db
+    .select({
+      slug: categories.slug,
+      name: categories.name,
+      description: categories.description,
+    })
+    .from(categories)
+    .where(eq(categories.brainId, brain.id));
+
+  // Resolve the company name for the system prompt. We already have the
+  // company id from auth; one more cheap query keeps the prompt builder
+  // pure (no DB lookups inside the harness).
+  const { companies } = await import('@/db/schema');
+  const [companyRow] = await db
+    .select({ name: companies.name })
+    .from(companies)
+    .where(eq(companies.id, auth.companyId))
+    .limit(1);
+
+  const ctx: AgentContext = {
+    actor: {
+      type: 'platform_agent',
+      userId: auth.userId,
+      companyId: auth.companyId,
+      scopes: ['read'],
+    },
+    brainId: brain.id,
+    companyId: auth.companyId,
+    sessionId: body.sessionId,
+    abortSignal: req.signal,
+  };
+
+  // Task 2 will load prior turns from `session_turns` and prepend them to
+  // the message array. The stub returns []; the chat round trip works
+  // (you just lose conversational memory across requests).
+  const priorMessages: ModelMessage[] = body.sessionId
+    ? await sessionManager.getContext(body.sessionId)
+    : [];
+
+  // Convert UI messages from useChat to ModelMessages for the LLM.
+  // v6's converter is async (it can resolve URL data parts on the way).
+  const incomingModelMessages = await convertToModelMessages(body.messages);
+
+  // Task 3 will return tools discovered from the company's connected MCP
+  // OUT servers. Stub returns {}.
+  const externalTools = await loadMcpOutTools(auth.companyId);
+
+  const { result } = await runAgentTurn({
+    ctx,
+    system: buildSystemPrompt({
+      brain,
+      companyName: companyRow?.name ?? 'your company',
+      categories: cats,
+    }),
+    messages: [...priorMessages, ...incomingModelMessages],
+    tools: buildToolSet(
+      // Convert AgentContext.actor.userId → ToolContext.actor.id and
+      // map `platform_agent` to the audit ActorType. ToolContext also
+      // wants `brainId` + `companyId` flat.
+      {
+        actor: {
+          type: 'platform_agent',
+          id: auth.userId,
+          name: auth.fullName ?? undefined,
+          scopes: ['read'],
+        },
+        companyId: auth.companyId,
+        brainId: brain.id,
+        sessionId: body.sessionId ?? undefined,
+        abortSignal: req.signal,
+      },
+      externalTools,
+    ),
+    maxSteps: 6,
+    onFinish: (finish) => {
+      // Persist + bill on the side. `waitUntil` keeps the function alive
+      // long enough for the writes after the response stream closes; we
+      // never await these inline because that would block the stream.
+      waitUntil(
+        (async () => {
+          if (body.sessionId) {
+            await sessionManager.persistTurn({
+              sessionId: body.sessionId,
+              userMessage: body.messages[body.messages.length - 1],
+              assistantMessage: finish.response.messages,
+              toolCalls: finish.toolCalls,
+              usage: finish.usage,
+            });
+          }
+          await recordUsage({
+            companyId: auth.companyId!,
+            sessionId: body.sessionId,
+            userId: auth.userId,
+            modelId: `anthropic/${DEFAULT_MODEL}`,
+            inputTokens: finish.usage.inputTokens ?? 0,
+            outputTokens: finish.usage.outputTokens ?? 0,
+            totalTokens: finish.usage.totalTokens ?? 0,
+            cachedInputTokens:
+              finish.usage.inputTokenDetails?.cacheReadTokens ??
+              finish.usage.cachedInputTokens,
+          });
+          await flushEvents();
+        })(),
+      );
+    },
+  });
+
+  return result.toUIMessageStreamResponse();
+}

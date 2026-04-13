@@ -20,7 +20,7 @@
     "@tiptap/react": "^3.22.3",
     "@tiptap/starter-kit": "^3.22.3",
     "@vercel/functions": "^3.4.3",
-    "ai": "^4.3.19",
+    "ai": "^6.0.158",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "class-variance-authority": "^0.7.1",

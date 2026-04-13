@@ -55,7 +55,7 @@ describe('audit/logger — buffer mechanics (mocked writer)', () => {
   });
 
   it('batches multiple events from the same tick into one INSERT', async () => {
-    const writer = vi.fn(async () => {});
+    const writer = vi.fn(async (_events: Array<{ actorId: string }>) => {});
     __setWriter(writer);
 
     for (let i = 0; i < 5; i++) {
@@ -74,7 +74,7 @@ describe('audit/logger — buffer mechanics (mocked writer)', () => {
     await flushEvents();
 
     expect(writer).toHaveBeenCalledTimes(1);
-    const rows = writer.mock.calls[0][0];
+    const rows = writer.mock.calls[0]![0];
     expect(rows).toHaveLength(5);
     expect(rows.map((r) => r.actorId)).toEqual([
       'test-batch-0',

@@ -116,16 +116,18 @@ export async function setupFixtures(label: string): Promise<Fixtures> {
 export async function teardownFixtures(f: Fixtures): Promise<void> {
   await db.delete(users).where(eq(users.id, f.ownerUserId));
 
-  await db.execute(
-    sql`ALTER TABLE document_versions DISABLE TRIGGER document_versions_immutable`,
-  );
-  try {
-    await db.delete(brains).where(eq(brains.id, f.brainId));
-  } finally {
-    await db.execute(
+  // Use a transaction so DISABLE TRIGGER stays on the same connection as the
+  // cascading DELETE. With the Supabase pooler, separate db.execute calls may
+  // land on different sessions and the DISABLE won't apply to the DELETE.
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`ALTER TABLE document_versions DISABLE TRIGGER document_versions_immutable`,
+    );
+    await tx.delete(brains).where(eq(brains.id, f.brainId));
+    await tx.execute(
       sql`ALTER TABLE document_versions ENABLE TRIGGER document_versions_immutable`,
     );
-  }
+  });
 
   await db.delete(companies).where(eq(companies.id, f.companyId));
 }

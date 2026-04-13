@@ -1,0 +1,52 @@
+/**
+ * Apply the hand-written SQL migrations that Drizzle Kit does not manage.
+ *
+ * Drizzle Kit's `push` only applies the schema declared in TypeScript.
+ * Postgres triggers, RLS policies, and the search_vector function live in
+ * hand-written SQL files under src/db/migrations. This script executes
+ * those files in order against DATABASE_URL.
+ *
+ * Usage:
+ *   npx tsx scripts/apply-custom-migrations.ts
+ *
+ * Each SQL file is written to be idempotent (DROP IF EXISTS + CREATE OR
+ * REPLACE) so re-running this script is safe.
+ */
+
+import 'dotenv/config';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import postgres from 'postgres';
+
+// Hand-written migrations, applied in order. 0001 is Drizzle-generated
+// and handled by drizzle-kit; we skip it here.
+const CUSTOM_MIGRATIONS = [
+  '0002_tsvector_trigger.sql',
+  '0003_rls_policies.sql',
+];
+
+async function main() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('DATABASE_URL is not set');
+  }
+
+  const sql = postgres(connectionString, { max: 1 });
+
+  try {
+    for (const filename of CUSTOM_MIGRATIONS) {
+      const path = resolve(__dirname, '..', 'src', 'db', 'migrations', filename);
+      const content = readFileSync(path, 'utf8');
+      console.log(`Applying ${filename}...`);
+      await sql.unsafe(content);
+      console.log(`  ✓ ${filename} applied`);
+    }
+  } finally {
+    await sql.end();
+  }
+}
+
+main().catch((err) => {
+  console.error('Migration failed:', err);
+  process.exit(1);
+});

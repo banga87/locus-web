@@ -26,7 +26,7 @@ vi.mock('@ai-sdk/anthropic', () => ({
 
 import { clearHooks, registerHook } from '../hooks';
 import { runAgentTurn } from '../run';
-import type { AgentContext, HookEvent } from '../types';
+import type { AgentContext, AgentEvent, HookEvent } from '../types';
 
 // -----------------------------------------------------------------------
 // Mock provider scaffolding. The factory passed into the mocked
@@ -128,7 +128,10 @@ afterEach(() => {
 });
 
 describe('agent/run — SessionStart hook', () => {
-  it('throws session_denied before streamText if a SessionStart hook denies', async () => {
+  it('when a SessionStart hook denies, yields turn_complete with finishReason="denied" and zero usage, and Stop fires with reason="denied" (no throw)', async () => {
+    // Wire a MockLanguageModelV3 so that if the harness were to
+    // erroneously reach streamText, the test would notice — but it
+    // shouldn't even read the model on the deny path.
     mockProvider.setModel(
       mockModelWithStream([
         { type: 'text-start', id: 't1' },
@@ -140,15 +143,45 @@ describe('agent/run — SessionStart hook', () => {
       decision: 'deny',
       reason: 'circuit_breaker_open',
     }));
+    const stopHandler = vi.fn((_event: HookEvent) => ({
+      decision: 'allow' as const,
+    }));
+    registerHook('Stop', stopHandler);
 
-    await expect(
-      runAgentTurn({
-        ctx: buildCtx(),
-        system: 'sys',
-        messages: [{ role: 'user', content: 'hi' }],
-        tools: {},
-      }),
-    ).rejects.toThrow(/session_denied: circuit_breaker_open/);
+    const { result, events, denied } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'sys',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+    });
+
+    // Denied runs return no StreamTextResult — the route synthesises
+    // an empty UI message stream for HTTP surfaces.
+    expect(result).toBeNull();
+    expect(denied).toEqual({ reason: 'circuit_breaker_open' });
+
+    // Stop fired synchronously inside runAgentTurn, before the caller
+    // drains events. Callers depend on this ordering so persistence
+    // decisions can land without awaiting the event generator.
+    expect(stopHandler).toHaveBeenCalledTimes(1);
+    expect(stopHandler.mock.calls[0]?.[0]).toMatchObject({
+      name: 'Stop',
+      reason: 'denied',
+    });
+
+    // Events generator yields turn_start + a terminal turn_complete
+    // with zero usage, then returns cleanly.
+    const collected: AgentEvent[] = [];
+    for await (const event of events) {
+      collected.push(event);
+    }
+    expect(collected).toHaveLength(2);
+    expect(collected[0]).toEqual({ type: 'turn_start', turnNumber: 0 });
+    expect(collected[1]).toEqual({
+      type: 'turn_complete',
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      finishReason: 'denied',
+    });
   });
 
   it('proceeds when no SessionStart hook is registered', async () => {
@@ -166,9 +199,10 @@ describe('agent/run — SessionStart hook', () => {
       messages: [{ role: 'user', content: 'hi' }],
       tools: {},
     });
+    expect(result).not.toBeNull();
     // Drain the result so onFinish + Stop hook fire deterministically.
-    await result.consumeStream();
-    const text = await result.text;
+    await result!.consumeStream();
+    const text = await result!.text;
     expect(text).toBe('hello');
   });
 });
@@ -242,7 +276,8 @@ describe('agent/run — Stop hook', () => {
       messages: [{ role: 'user', content: 'hi' }],
       tools: {},
     });
-    await result.consumeStream();
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
     // onFinish fires once result drains; allow microtasks to settle.
     await new Promise((r) => setTimeout(r, 0));
 
@@ -289,7 +324,8 @@ describe('agent/run — abort propagation', () => {
     });
     // Consume the stream so doStream actually runs and captures the
     // abort signal handed to the provider.
-    await result.consumeStream();
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
 
     expect(receivedAbort).toBe(ac.signal);
   });
@@ -355,7 +391,8 @@ describe('agent/run — tool hook bus integration', () => {
     for await (const event of events) {
       collected.push(event);
     }
-    await result.consumeStream();
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
 
     expect(pre).toHaveBeenCalledTimes(1);
     expect(pre.mock.calls[0]?.[0]).toMatchObject({
@@ -423,10 +460,194 @@ describe('agent/run — providerOptions caching', () => {
       messages: [{ role: 'user', content: 'hi' }],
       tools: {},
     });
-    await result.consumeStream();
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
 
     expect(receivedProviderOptions).toMatchObject({
       anthropic: { cacheControl: { type: 'ephemeral' } },
     });
+  });
+});
+
+// --------------------------------------------------------------------
+// Stop hook: reason must match the terminal path. The spec (plan
+// line 217) requires Stop to fire on completed / aborted / error /
+// denied — ALL of them, each with the correct reason, and EXACTLY
+// ONCE per turn. These tests pin the invariant.
+// --------------------------------------------------------------------
+
+describe('agent/run — Stop reason: aborted', () => {
+  it('fires Stop with reason="aborted" when ctx.abortSignal aborts mid-stream', async () => {
+    // Model whose stream never finishes unless aborted. We use a custom
+    // ReadableStream so we can hold the stream open, let the harness
+    // subscribe, then abort — triggering streamText's onAbort callback.
+    const ac = new AbortController();
+    let cancelled = false;
+    const model = new MockLanguageModelV3({
+      doStream: async ({ abortSignal }) => {
+        const stream = new ReadableStream<LanguageModelV3StreamPart>({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 't1' });
+            // Dangle here; no enqueue until abort.
+            abortSignal?.addEventListener('abort', () => {
+              cancelled = true;
+              controller.error(
+                new DOMException('The user aborted a request.', 'AbortError'),
+              );
+            });
+          },
+        });
+        return { stream };
+      },
+    });
+    mockProvider.setModel(model);
+
+    const stopHandler = vi.fn((_event: HookEvent) => ({
+      decision: 'allow' as const,
+    }));
+    registerHook('Stop', stopHandler);
+
+    const { result } = await runAgentTurn({
+      ctx: buildCtx({ abortSignal: ac.signal }),
+      system: 'sys',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+    });
+    expect(result).not.toBeNull();
+
+    // Start draining in the background, then abort.
+    const consumePromise = Promise.resolve(
+      result!.consumeStream({
+        // Swallow the abort-as-error so consumeStream resolves rather
+        // than rejecting — the runtime behaviour we care about is that
+        // onAbort fired, not how callers handle the error.
+        onError: () => {},
+      }),
+    ).catch(() => {});
+
+    // Yield once so the provider's `start` runs and subscribes to the
+    // abort signal before we trip it.
+    await new Promise((r) => setTimeout(r, 0));
+    ac.abort();
+
+    await consumePromise;
+    // Extra tick to let onAbort → fireStopOnce resolve.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(cancelled).toBe(true);
+    expect(stopHandler).toHaveBeenCalledTimes(1);
+    expect(stopHandler.mock.calls[0]?.[0]).toMatchObject({
+      name: 'Stop',
+      reason: 'aborted',
+    });
+  });
+});
+
+describe('agent/run — Stop reason: error', () => {
+  it('fires Stop with reason="error" when streamText surfaces a stream-level error', async () => {
+    // Provider emits a `{ type: 'error' }` stream part — the AI SDK
+    // invokes `onError` for these.
+    mockProvider.setModel(
+      new MockLanguageModelV3({
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'stream-start', warnings: [] },
+              { type: 'error', error: new Error('provider_exploded') },
+            ] satisfies LanguageModelV3StreamPart[],
+          }),
+        }),
+      }),
+    );
+
+    const stopHandler = vi.fn((_event: HookEvent) => ({
+      decision: 'allow' as const,
+    }));
+    registerHook('Stop', stopHandler);
+
+    const { result } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'sys',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+    });
+    expect(result).not.toBeNull();
+
+    // Drain the stream. The error surfaces as an `onError`-observable
+    // event; consumeStream resolves rather than throwing because we
+    // provide an onError sink. The original error is still available
+    // via the stream surface — we just don't need to inspect it here.
+    await result!.consumeStream({ onError: () => {} });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(stopHandler).toHaveBeenCalledTimes(1);
+    expect(stopHandler.mock.calls[0]?.[0]).toMatchObject({
+      name: 'Stop',
+      reason: 'error',
+    });
+  });
+});
+
+describe('agent/run — Stop single-fire invariant', () => {
+  it('fires Stop exactly once across every terminal path (completed)', async () => {
+    mockProvider.setModel(
+      mockModelWithStream([
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: 'done' },
+        { type: 'text-end', id: 't1' },
+      ]),
+    );
+    let stopCount = 0;
+    registerHook('Stop', () => {
+      stopCount += 1;
+      return { decision: 'allow' };
+    });
+
+    const { result } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'sys',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+    });
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(stopCount).toBe(1);
+  });
+
+  it('fires Stop exactly once on the deny path', async () => {
+    mockProvider.setModel(
+      mockModelWithStream([
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: 'never' },
+        { type: 'text-end', id: 't1' },
+      ]),
+    );
+    registerHook('SessionStart', () => ({
+      decision: 'deny',
+      reason: 'no_go',
+    }));
+
+    let stopCount = 0;
+    registerHook('Stop', () => {
+      stopCount += 1;
+      return { decision: 'allow' };
+    });
+
+    const { events } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'sys',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+    });
+    // Drain the generator to completion.
+    for await (const _e of events) {
+      // no-op
+    }
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(stopCount).toBe(1);
   });
 });

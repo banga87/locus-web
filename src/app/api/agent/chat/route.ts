@@ -26,6 +26,8 @@ import { waitUntil } from '@vercel/functions';
 import { eq } from 'drizzle-orm';
 import {
   convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
   type ModelMessage,
   type UIMessage,
 } from 'ai';
@@ -135,7 +137,7 @@ export async function POST(req: Request) {
   // OUT servers. Stub returns {}.
   const externalTools = await loadMcpOutTools(auth.companyId);
 
-  const { result } = await runAgentTurn({
+  const { result, denied } = await runAgentTurn({
     ctx,
     system: buildSystemPrompt({
       brain,
@@ -194,6 +196,29 @@ export async function POST(req: Request) {
       );
     },
   });
+
+  // Deny path: SessionStart refused the turn. runAgentTurn returned
+  // result: null; build a properly-terminated empty UI message stream
+  // that writes a single text part with the denial reason and closes.
+  // HTTP status stays 200 so the browser's EventSource doesn't reject —
+  // the denial is visible to the user as the message content, and Stop
+  // fired with reason='denied' inside runAgentTurn.
+  if (!result) {
+    const reason = denied?.reason ?? 'denied';
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        const textId = 'denial-0';
+        writer.write({ type: 'text-start', id: textId });
+        writer.write({
+          type: 'text-delta',
+          id: textId,
+          delta: `Session denied: ${reason}`,
+        });
+        writer.write({ type: 'text-end', id: textId });
+      },
+    });
+    return createUIMessageStreamResponse({ stream });
+  }
 
   return result.toUIMessageStreamResponse();
 }

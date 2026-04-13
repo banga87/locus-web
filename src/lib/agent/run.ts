@@ -8,17 +8,29 @@
 //     `ai` everywhere except this file
 //   - scripts/check-harness-boundary.sh: a CI grep guard
 //
-// The shape (plain function returning `{ result, events }`) is modelled
-// on claude-code's `query()` async generator:
+// The shape (plain function returning `{ result, events, denied? }`) is
+// modelled on claude-code's `query()` async generator:
 //   - `result` is the underlying `StreamTextResult` so HTTP callers can
 //     `.toUIMessageStreamResponse()` directly without us reimplementing
-//     the AI SDK's stream framing.
+//     the AI SDK's stream framing. It is `null` if SessionStart denied —
+//     the route in that case builds an empty UI message stream response.
 //   - `events` is a typed `AsyncGenerator<AgentEvent>` for non-HTTP
 //     callers (autonomous loop, subagents) that need to react to deltas
 //     and tool boundaries to drive persistence + UI.
+//   - `denied` is present iff the turn was short-circuited by a
+//     SessionStart deny; callers use it to surface the reason.
 //
 // Hook order per turn:
 //   SessionStart → (tool loop: PreToolUse → tool → PostToolUse)* → Stop
+//
+// Stop semantics: fires EXACTLY ONCE per turn with one of four reasons:
+//   - 'completed' — normal onFinish
+//   - 'aborted'   — onAbort (ctx.abortSignal tripped)
+//   - 'error'     — onError (streamText or a step threw)
+//   - 'denied'    — SessionStart returned deny
+// A module-scoped `stopFired` guard in every runAgentTurn invocation
+// prevents double-firing when the AI SDK raises more than one terminal
+// callback in edge cases. Never zero, never twice.
 //
 // Prompt caching: `providerOptions.anthropic.cacheControl = { type:
 // 'ephemeral' }` is pinned on the request. Anthropic caches the system
@@ -72,34 +84,77 @@ interface RunAgentTurnParams {
 }
 
 interface RunAgentTurnResult {
-  /** Underlying AI SDK result. HTTP routes call `.toUIMessageStreamResponse()`. */
-  result: StreamTextResult<ToolSet, never>;
+  /**
+   * Underlying AI SDK result. HTTP routes call
+   * `.toUIMessageStreamResponse()`. `null` when the turn was short-
+   * circuited by a SessionStart deny — the route builds an empty UI
+   * message stream response in that case (see `denied`).
+   */
+  result: StreamTextResult<ToolSet, never> | null;
   /** Typed event stream for non-HTTP callers. Drives autonomous-loop persistence. */
   events: AsyncGenerator<AgentEvent, void, void>;
+  /** Populated iff a SessionStart hook denied. `result` is null when this is set. */
+  denied?: { reason: string };
 }
 
 /**
  * Drive a single turn of an agent. See module header for the full hook
- * order and prompt-caching rationale.
+ * order, Stop semantics, and prompt-caching rationale.
  *
- * Throws `Error('session_denied: <reason>')` synchronously if a registered
- * `SessionStart` handler denies. This is intentional — the route layer
- * needs a clear failure mode before it commits to streaming a response.
+ * On SessionStart deny: returns `{ result: null, events, denied }`. The
+ * events generator yields `turn_start` → `turn_complete` (finishReason
+ * 'denied', zero usage) and returns. Stop fires with `reason: 'denied'`
+ * before this function returns — callers don't need to drain events
+ * before observing Stop.
  */
 export async function runAgentTurn(
   params: RunAgentTurnParams,
 ): Promise<RunAgentTurnResult> {
+  // Per-turn Stop-fired guard. Closed over by onFinish / onAbort /
+  // onError / the deny path below. Race-free in a single-turn scope
+  // (JS is single-threaded; the AI SDK won't invoke two terminal
+  // callbacks at the same microtask).
+  let stopFired = false;
+  const fireStopOnce = async (
+    reason: 'completed' | 'aborted' | 'error' | 'denied',
+  ): Promise<void> => {
+    if (stopFired) return;
+    stopFired = true;
+    await runHook({ name: 'Stop', ctx: params.ctx, reason });
+  };
+
+  // --- SessionStart -----------------------------------------------------
   const startDecision = await runHook({
     name: 'SessionStart',
     ctx: params.ctx,
   });
   if (startDecision.decision === 'deny') {
-    throw new Error(`session_denied: ${startDecision.reason}`);
+    const reason = startDecision.reason;
+    // Fire Stop immediately so the caller observes the terminal hook
+    // without having to drain events first. This also anchors the
+    // "exactly once" invariant — no other path can fire Stop now.
+    await fireStopOnce('denied');
+
+    async function* deniedEvents(): AsyncGenerator<AgentEvent, void, void> {
+      yield { type: 'turn_start', turnNumber: 0 };
+      yield {
+        type: 'turn_complete',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        finishReason: 'denied',
+      };
+    }
+
+    return {
+      result: null,
+      events: deniedEvents(),
+      denied: { reason },
+    };
   }
   // `inject` payloads are reserved for Phase 2 (brain-diff context on
   // resume). Phase 1 has nothing to splice in, so we ignore the payload
   // shape and treat any non-deny as allow.
 
+  // --- Stream -----------------------------------------------------------
   const result = streamText({
     model: anthropic(params.model ?? DEFAULT_MODEL),
     system: params.system,
@@ -160,14 +215,25 @@ export async function runAgentTurn(
     },
 
     onFinish: async (finish) => {
-      await runHook({
-        name: 'Stop',
-        ctx: params.ctx,
-        reason: 'completed',
-      });
+      // Guarded by fireStopOnce — if onAbort or onError already fired
+      // Stop on the error path, this becomes a no-op.
+      await fireStopOnce('completed');
       if (params.onFinish) {
         await params.onFinish(finish);
       }
+    },
+
+    onAbort: async () => {
+      await fireStopOnce('aborted');
+    },
+
+    onError: async () => {
+      // Don't swallow — the error still propagates through the stream
+      // (`tool-error` / stream-level rejection). This callback only
+      // exists to pin down Stop's reason. The caller's try/catch
+      // around `result.consumeStream()` or the events generator will
+      // observe the original error.
+      await fireStopOnce('error');
     },
   });
 
@@ -211,7 +277,8 @@ export async function runAgentTurn(
         case 'abort':
           // Treat abort as terminal. Drain stops here; the trailing
           // turn_complete event below will report finishReason 'aborted'
-          // once `result.finishReason` resolves.
+          // once `result.finishReason` resolves. onAbort (wired above)
+          // fires Stop.
           break;
         // Other part types (text-start/end, reasoning-start/end,
         // tool-input-*, source, file, start, finish, start-step,

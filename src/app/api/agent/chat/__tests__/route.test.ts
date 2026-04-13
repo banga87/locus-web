@@ -291,6 +291,48 @@ describe('POST /api/agent/chat — happy path', () => {
   });
 });
 
+describe('POST /api/agent/chat — deny path', () => {
+  beforeEach(() => {
+    requireAuthMock.mockResolvedValue(TEST_AUTH);
+    getBrainForCompanyMock.mockResolvedValue(TEST_BRAIN);
+    dbSelectMock.mockResolvedValue([{ name: 'Acme Co' }]);
+  });
+
+  it('returns a properly-terminated 200 UI message stream when runAgentTurn returns result=null (SessionStart denied)', async () => {
+    // Simulate runAgentTurn's deny return shape: no StreamTextResult,
+    // just the `denied` reason. Route should synthesise an empty UI
+    // message stream response rather than crash with "null.toUIMessageStreamResponse()".
+    runAgentTurnMock.mockResolvedValueOnce({
+      result: null,
+      events: (async function* () {
+        // Minimal events generator — the route doesn't drain it.
+      })(),
+      denied: { reason: 'circuit_breaker_open' },
+    });
+
+    const res = await POST(
+      buildRequest(
+        buildBody([
+          {
+            id: 'msg-1',
+            role: 'user',
+            parts: [{ type: 'text', text: 'hello' }],
+          },
+        ]),
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    // Drain the body so we can assert the SSE stream terminated
+    // without throwing.
+    const text = await res.text();
+    // The empty stream carries one text-delta with the denial reason;
+    // the UI message SSE protocol prefixes `data:` frames.
+    expect(text).toContain('circuit_breaker_open');
+    expect(text).toContain('data:');
+  });
+});
+
 describe('POST /api/agent/chat — single entry point invariant', () => {
   it("does not import 'streamText' from 'ai' (the harness is the only entry point)", async () => {
     const fs = await import('node:fs');

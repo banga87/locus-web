@@ -46,9 +46,8 @@ export function ChatInterface({
   initialMessages,
 }: ChatInterfaceProps) {
   // useAgentChat returns the full useChat helpers — pull what we need.
-  // We don't memoise the result; useChat is stable across renders (it
-  // owns its internal store keyed by sessionId).
-  const chat = useAgentChat(sessionId);
+  // `setMessages` is a first-class field on the v6 UseChatHelpers
+  // surface (see `@ai-sdk/react` types), so no cast is required.
   const {
     messages,
     sendMessage,
@@ -57,30 +56,22 @@ export function ChatInterface({
     regenerate,
     error,
     clearError,
-  } = chat;
+    setMessages,
+  } = useAgentChat(sessionId);
 
   // Hydrate the AI SDK store from server-rendered turns ONCE on mount.
-  // useChat doesn't take an `initialMessages` option in v6 the way it
-  // did in v4 — instead we splice them in via `setMessages` from the
-  // underlying chat instance. A ref (not state) tracks "already done"
-  // so the effect doesn't trigger a cascading re-render: hydration is
-  // a fire-and-forget side effect; useChat's own state owns the
-  // messages from there on.
+  // useChat doesn't expose an `initialMessages` option in v6 the way it
+  // did in v4 — we splice them in via `setMessages`. A ref (not state)
+  // tracks "already done" so the effect doesn't trigger a cascading
+  // re-render: hydration is a fire-and-forget side effect; useChat's
+  // own state owns the messages from there on.
   const hydratedRef = useRef(false);
   useEffect(() => {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
     if (initialMessages.length === 0) return;
-    // The chat object exposes a `setMessages` mutator on the instance.
-    // We type it loosely because it's not in the publicly declared
-    // useChat helper signature in some v6 betas.
-    const setter = (chat as unknown as {
-      setMessages?: (messages: UIMessage[]) => void;
-    }).setMessages;
-    if (typeof setter === 'function') {
-      setter(initialMessages);
-    }
-  }, [initialMessages, chat]);
+    setMessages(initialMessages);
+  }, [initialMessages, setMessages]);
 
   const [draft, setDraft] = useState('');
 

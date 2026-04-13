@@ -9,18 +9,26 @@
 // by `id`). `null` means "no session yet" — Task 4 will make sure the
 // /chat redirect creates a session before any UI renders.
 //
-// Phase 1 keeps this wrapper minimal — Task 4 layers on the actual UI
-// components that consume `messages`, `sendMessage`, `status`, `stop`.
+// `transport` is memoised on `sessionId` so re-renders of the consuming
+// component don't hand `useChat` a fresh transport instance each pass
+// (which would thrash the SDK's internal subscriptions). The identity
+// only needs to change when we legitimately switch sessions.
 
+import { useMemo } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 
 export function useAgentChat(sessionId: string | null) {
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: '/api/agent/chat',
+        body: { sessionId },
+      }),
+    [sessionId],
+  );
   return useChat({
     id: sessionId ?? undefined,
-    transport: new DefaultChatTransport({
-      api: '/api/agent/chat',
-      body: { sessionId },
-    }),
+    transport,
   });
 }

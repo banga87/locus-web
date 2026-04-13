@@ -88,11 +88,43 @@ export function SessionSidebar({
       if (!res.ok) throw new Error(`create_failed_${res.status}`);
       const json = (await res.json()) as {
         success: true;
-        data: { id: string };
+        data: {
+          id: string;
+          status?: 'active' | 'completed';
+          turnCount?: number;
+          firstMessage?: string | null;
+          createdAt?: string;
+          lastActiveAt?: string;
+          totalTokens?: number;
+        };
       };
-      await mutate(); // pull the new session into the list
+
+      // Optimistically prepend the new session into the cached list so
+      // the destination page renders with the correct sidebar state
+      // immediately — even on slow networks where revalidation trails
+      // the client navigation. We trust the server's shape where it's
+      // provided and fall back to sensible defaults otherwise.
+      const nowIso = new Date().toISOString();
+      const newItem: SessionListItem = {
+        id: json.data.id,
+        status: json.data.status ?? 'active',
+        turnCount: json.data.turnCount ?? 0,
+        firstMessage: json.data.firstMessage ?? null,
+        createdAt: json.data.createdAt ?? nowIso,
+        lastActiveAt: json.data.lastActiveAt ?? nowIso,
+        totalTokens: json.data.totalTokens ?? 0,
+      };
+      await mutate(
+        (current) => [newItem, ...(current ?? [])],
+        { revalidate: false },
+      );
+
       onNavigate?.();
       router.push(`/chat/${json.data.id}`);
+
+      // Reconcile with the server in the background. No await — we've
+      // already navigated and the cached row covers the transient state.
+      void mutate();
     } catch (err) {
       console.error('[chat] create session failed', err);
     }

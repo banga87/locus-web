@@ -75,6 +75,22 @@ export function ChatContainer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Second pin: hydration populates messages AFTER the initial mount
+  // pin above (the `setMessages` call lives in `useEffect`, which runs
+  // after `useLayoutEffect`). Without this, resuming a multi-turn
+  // session opens scrolled to the TOP because the mount-time scroll
+  // happened while the viewport was empty. Fire once when the first
+  // non-zero streamTick arrives; after that, the streamTick effect
+  // below handles normal auto-follow.
+  const hydratedScrollRef = useRef(false);
+  useEffect(() => {
+    if (hydratedScrollRef.current) return;
+    if (!streamTick) return;
+    hydratedScrollRef.current = true;
+    scrollToBottom('auto');
+    updateAtBottom();
+  }, [streamTick, scrollToBottom, updateAtBottom]);
+
   // Auto-follow the stream ONLY while the user is already at the bottom.
   useEffect(() => {
     if (!atBottom) return;

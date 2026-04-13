@@ -16,8 +16,12 @@ import { randomUUID } from 'node:crypto';
 import { db } from '@/db';
 import {
   agentAccessTokens,
+  auditEvents,
   brains,
   companies,
+  mcpConnections,
+  sessions,
+  usageRecords,
   users,
 } from '@/db/schema';
 import { createToken } from '@/lib/auth/tokens';
@@ -82,12 +86,39 @@ export async function createSeededCompany(
 }
 
 /**
- * Fully tear down a seeded company. Deletes users, tokens, the brain
- * (cascades to categories/documents/manifests/versions with the
- * immutability trigger briefly disabled), then the company itself.
+ * Fully tear down a seeded company. Deletes Phase 1 dependents (sessions,
+ * MCP connections, usage records, audit events) plus Phase 0 rows (tokens,
+ * users, brain + cascades, company).
+ *
+ * Order matters: sessions have FKs to `users`, `brains`, `companies`. We
+ * drop sessions first so deleting users / brains / companies cannot
+ * violate the FK. session_turns cascades via the session FK.
+ *
+ * `audit_events` has no FK by design (append-only; survives row deletion)
+ * but we clean it here so test runs don't accumulate drift on the shared
+ * Supabase instance.
  */
 export async function cleanupCompany(c: TestCompany): Promise<void> {
-  // Users and tokens first (FK targets of companies).
+  // Phase 1 dependents first — these have FKs pointing into users /
+  // brains / companies. audit_events has an immutability trigger (see
+  // migration 0003) so we drop it inside a transaction with the
+  // trigger briefly disabled, mirroring the document_versions pattern.
+  await db.delete(sessions).where(eq(sessions.companyId, c.companyId));
+  await db
+    .delete(mcpConnections)
+    .where(eq(mcpConnections.companyId, c.companyId));
+  await db.delete(usageRecords).where(eq(usageRecords.companyId, c.companyId));
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`ALTER TABLE audit_events DISABLE TRIGGER audit_events_immutable`,
+    );
+    await tx.delete(auditEvents).where(eq(auditEvents.companyId, c.companyId));
+    await tx.execute(
+      sql`ALTER TABLE audit_events ENABLE TRIGGER audit_events_immutable`,
+    );
+  });
+
+  // Users and tokens next (FK targets of companies).
   await db.delete(users).where(eq(users.id, c.userId));
   await db
     .delete(agentAccessTokens)

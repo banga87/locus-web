@@ -12,3 +12,5 @@ export * from './navigation-manifests';
 export * from './agent-access-tokens';
 export * from './audit-events';
 export * from './usage-records';
+export * from './sessions';
+export * from './session-turns';

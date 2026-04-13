@@ -7,7 +7,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { HomeIcon, BookOpenIcon, SettingsIcon, PlugIcon } from 'lucide-react';
+import {
+  HomeIcon,
+  BookOpenIcon,
+  MessageSquareIcon,
+  SettingsIcon,
+  PlugIcon,
+} from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -18,6 +24,14 @@ const items = [
     label: 'Brain',
     icon: BookOpenIcon,
     match: (p: string) => p === '/brain' || p.startsWith('/brain/'),
+  },
+  {
+    href: '/chat',
+    label: 'Chat',
+    icon: MessageSquareIcon,
+    // /chat creates a new session and redirects; /chat/[id] is the
+    // session view. Highlight the nav item for both.
+    match: (p: string) => p === '/chat' || p.startsWith('/chat/'),
   },
   {
     href: '/settings/agent-tokens',

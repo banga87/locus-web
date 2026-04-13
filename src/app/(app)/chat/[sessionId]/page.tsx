@@ -1,75 +1,76 @@
-// /chat/[sessionId] — minimal Client Component. Just enough to verify
-// the streaming round-trip end-to-end. Task 4 replaces this with the
-// real chat UI (sidebar, message bubbles, tool-call indicators, stop
-// button styling).
+// /chat/[sessionId] — Server Component.
+//
+// Loads the session row + ordered turns via Drizzle (NOT through the
+// HTTP API — we're on the server, no point in the round trip). Hands
+// initial messages off to <ChatRoot>, which composes the session
+// sidebar + the streaming <ChatInterface>.
+//
+// Auth: ownership-scoped. A session that belongs to a different user
+// returns 404 (not 403) so cross-tenant id guesses can't leak existence.
 
-'use client';
+import { and, asc, eq } from 'drizzle-orm';
+import { notFound, redirect } from 'next/navigation';
 
-import { useState, use } from 'react';
+import { db } from '@/db';
+import { sessions, sessionTurns } from '@/db/schema';
+import { requireAuth } from '@/lib/api/auth';
+import { ApiAuthError } from '@/lib/api/errors';
+import { hydrateUIMessages } from '@/lib/sessions/hydrate-ui-messages';
 
-import { useAgentChat } from '@/components/chat/use-agent-chat';
+import { ChatRoot } from './chat-root';
 
-export default function ChatSessionPage({
-  params,
-}: {
+interface PageProps {
   params: Promise<{ sessionId: string }>;
-}) {
-  const { sessionId } = use(params);
-  const { messages, sendMessage, status, stop } = useAgentChat(sessionId);
-  const [draft, setDraft] = useState('');
+}
 
-  const isStreaming = status === 'streaming' || status === 'submitted';
+export default async function ChatSessionPage({ params }: PageProps) {
+  const { sessionId } = await params;
+
+  let auth;
+  try {
+    auth = await requireAuth();
+  } catch (err) {
+    if (err instanceof ApiAuthError && err.statusCode === 401) {
+      redirect('/login');
+    }
+    throw err;
+  }
+
+  if (!auth.companyId) {
+    redirect('/setup');
+  }
+
+  const [session] = await db
+    .select({
+      id: sessions.id,
+      status: sessions.status,
+    })
+    .from(sessions)
+    .where(
+      and(eq(sessions.id, sessionId), eq(sessions.userId, auth.userId)),
+    )
+    .limit(1);
+
+  if (!session) {
+    notFound();
+  }
+
+  // Hard cap matches the API route's limit. Long sessions get the
+  // tail; chat history pagination is a Phase 2 concern (compaction).
+  const turns = await db
+    .select({
+      turnNumber: sessionTurns.turnNumber,
+      userMessage: sessionTurns.userMessage,
+      assistantMessages: sessionTurns.assistantMessages,
+    })
+    .from(sessionTurns)
+    .where(eq(sessionTurns.sessionId, sessionId))
+    .orderBy(asc(sessionTurns.turnNumber))
+    .limit(200);
+
+  const initialMessages = hydrateUIMessages(turns);
 
   return (
-    <div style={{ padding: '1rem', maxWidth: 720 }}>
-      <h1>Chat — {sessionId}</h1>
-      <p style={{ color: '#888' }}>
-        Minimal harness for Task 1 verification. Real UI lands in Task 4.
-      </p>
-
-      <div style={{ marginTop: '1rem' }}>
-        {messages.map((m) => (
-          <div key={m.id} style={{ marginBottom: '0.75rem' }}>
-            <strong>{m.role}:</strong>{' '}
-            {m.parts.map((p, i) => {
-              if (p.type === 'text') return <span key={i}>{p.text}</span>;
-              if (p.type.startsWith('tool-')) {
-                return (
-                  <em key={i} style={{ color: '#888' }}>
-                    [{p.type}]
-                  </em>
-                );
-              }
-              return null;
-            })}
-          </div>
-        ))}
-      </div>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!draft.trim()) return;
-          sendMessage({ text: draft });
-          setDraft('');
-        }}
-        style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}
-      >
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Ask the brain a question…"
-          disabled={isStreaming}
-          style={{ flex: 1, padding: '0.5rem' }}
-        />
-        {isStreaming ? (
-          <button type="button" onClick={() => stop()}>
-            Stop
-          </button>
-        ) : (
-          <button type="submit">Send</button>
-        )}
-      </form>
-    </div>
+    <ChatRoot sessionId={session.id} initialMessages={initialMessages} />
   );
 }

@@ -68,8 +68,9 @@ vi.mock('@/lib/sessions/manager', () => ({
   },
 }));
 
+const closeMcpMock = vi.fn(async () => {});
 vi.mock('@/lib/mcp-out/bridge', () => ({
-  loadMcpOutTools: vi.fn(async () => ({})),
+  loadMcpOutTools: vi.fn(async () => ({ tools: {}, close: closeMcpMock })),
 }));
 
 vi.mock('@/lib/tools', () => ({
@@ -141,6 +142,7 @@ beforeEach(() => {
   recordUsageMock.mockReset();
   flushEventsMock.mockReset();
   runAgentTurnMock.mockReset();
+  closeMcpMock.mockReset().mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -330,6 +332,58 @@ describe('POST /api/agent/chat — deny path', () => {
     // the UI message SSE protocol prefixes `data:` frames.
     expect(text).toContain('circuit_breaker_open');
     expect(text).toContain('data:');
+  });
+});
+
+describe('POST /api/agent/chat — MCP OUT teardown', () => {
+  beforeEach(() => {
+    requireAuthMock.mockResolvedValue(TEST_AUTH);
+    getBrainForCompanyMock.mockResolvedValue(TEST_BRAIN);
+    dbSelectMock.mockResolvedValue([{ name: 'Acme Co' }]);
+  });
+
+  it('invokes MCP close() via waitUntil on the happy path', async () => {
+    const result = {
+      toUIMessageStreamResponse: vi.fn(() => new Response('ok')),
+    };
+    runAgentTurnMock.mockResolvedValueOnce({ result });
+
+    await POST(
+      buildRequest(
+        buildBody([
+          {
+            id: 'msg-1',
+            role: 'user',
+            parts: [{ type: 'text', text: 'hello' }],
+          },
+        ]),
+      ),
+    );
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(closeMcpMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes MCP close() via waitUntil on the deny path', async () => {
+    runAgentTurnMock.mockResolvedValueOnce({
+      result: null,
+      denied: { reason: 'circuit_breaker_open' },
+    });
+
+    await POST(
+      buildRequest(
+        buildBody([
+          {
+            id: 'msg-1',
+            role: 'user',
+            parts: [{ type: 'text', text: 'hello' }],
+          },
+        ]),
+      ),
+    );
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(closeMcpMock).toHaveBeenCalledTimes(1);
   });
 });
 

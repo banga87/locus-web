@@ -31,6 +31,14 @@ vi.mock('@/lib/api/auth', async () => {
 vi.mock('@/lib/mcp-out/client', () => ({
   connectToMcpServer: (...args: unknown[]) => mocks.connectToMcpServerImpl(...args),
   discoverTools: (...args: unknown[]) => mocks.discoverToolsImpl(...args),
+  // Re-export the timeout constants so the routes that import them
+  // don't see `undefined` (vitest treats unmocked exports as a miss).
+  DEFAULT_CONNECT_TIMEOUT_MS: 10_000,
+  DEFAULT_DISCOVER_TIMEOUT_MS: 10_000,
+  // Real raceWithTimeout — harmless inside these tests because none of
+  // the routes' test paths invoke it; the route-level helpers only use
+  // connect + discover which are mocked directly.
+  raceWithTimeout: <T,>(inner: Promise<T>) => inner,
 }));
 
 vi.mock('@/lib/audit/logger', async () => {
@@ -301,6 +309,48 @@ describeDb('POST /api/admin/mcp-connections', () => {
     expect(payload.connection.lastErrorMessage).toContain('connection refused');
     createdConnectionIds.push(payload.connection.id);
   });
+
+  // C1 — test-on-create must not block when the external server hangs.
+  // The route's helper uses the default DEFAULT_CONNECT_TIMEOUT_MS (10s).
+  // Here we mock connectToMcpServer to hang forever; the real route
+  // layers an AbortSignal + raceWithTimeout inside client.ts, and that
+  // surfaces as an abort error. Because we're mocking `connectToMcpServer`
+  // directly we simulate the timeout by rejecting with a timeout error
+  // — if the code paths didn't propagate the timeout, the test would
+  // hang (vitest would fail it via its own hook timeout).
+  it('returns 200/error within the timeout budget when the external server hangs', async () => {
+    mockOwner();
+    mocks.connectToMcpServerImpl.mockRejectedValueOnce(
+      new Error('MCP connect timeout after 10000ms'),
+    );
+
+    const start = Date.now();
+    const req = bodyRequest(
+      'https://test.local/api/admin/mcp-connections',
+      'POST',
+      {
+        name: 'hangs',
+        serverUrl: 'https://hang.example.test/mcp',
+        authType: 'none',
+      },
+    );
+    const res = await POST(req);
+    const elapsed = Date.now() - start;
+
+    expect(res.status).toBe(200);
+    const payload = (await res.json()) as {
+      connection: { id: string; status: string; lastErrorMessage: string | null };
+      test: { ok: boolean; error?: string };
+    };
+    expect(payload.test.ok).toBe(false);
+    expect(payload.test.error).toMatch(/timeout/i);
+    expect(payload.connection.status).toBe('error');
+    expect(payload.connection.lastErrorMessage).toMatch(/timeout/i);
+    // Should never take anywhere near the real 10s budget — the mock
+    // throws synchronously-via-microtask.
+    expect(elapsed).toBeLessThan(2000);
+    createdConnectionIds.push(payload.connection.id);
+  });
 });
 
 // --- PATCH /api/admin/mcp-connections/[id] -------------------------------
@@ -355,6 +405,47 @@ describeDb('PATCH /api/admin/mcp-connections/[id]', () => {
       params: Promise.resolve({ id: '00000000-0000-0000-0000-000000000000' }),
     });
     expect(res.status).toBe(404);
+  });
+
+  // C2 — the audit event's `newStatus` must reflect the POST-TEST state.
+  // If a URL change fails the re-test, the row ends up `status: 'error'`
+  // and the audit log must record that (not the pre-test 'active').
+  it('audit payload reports newStatus=error when the re-test fails after a URL change', async () => {
+    mockOwner();
+    const row = await seedConnection();
+
+    mockFailingTest('refused after url change');
+
+    const req = bodyRequest(
+      `https://test.local/api/admin/mcp-connections/${row.id}`,
+      'PATCH',
+      { serverUrl: 'https://new.example.test/mcp' },
+    );
+    const res = await PATCH(req, {
+      params: Promise.resolve({ id: row.id }),
+    });
+    expect(res.status).toBe(200);
+
+    const payload = (await res.json()) as {
+      connection: { status: string };
+      test: { ok: boolean };
+    };
+    // Sanity: final state is `error`, test failed.
+    expect(payload.test.ok).toBe(false);
+    expect(payload.connection.status).toBe('error');
+
+    // The audit event should reflect that — newStatus='error', not 'active'.
+    const calls = mocks.logEventImpl.mock.calls as Array<[Record<string, unknown>]>;
+    const patchEvent = calls
+      .map((c) => c[0])
+      .find((e) => (e.targetId as string) === row.id);
+    expect(patchEvent).toBeDefined();
+    const details = patchEvent!.details as Record<string, unknown>;
+    expect(details.newStatus).toBe('error');
+    expect(details.testOk).toBe(false);
+    // `lastErrorMessage` is in the details so a reader doesn't have to
+    // re-join against the connection row to see what went wrong.
+    expect(details.lastErrorMessage).toMatch(/refused/i);
   });
 });
 

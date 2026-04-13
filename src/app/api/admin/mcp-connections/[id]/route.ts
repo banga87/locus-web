@@ -25,7 +25,12 @@ import {
   markConnectionError,
   updateConnection,
 } from '@/lib/mcp-out/connections';
-import { connectToMcpServer, discoverTools } from '@/lib/mcp-out/client';
+import {
+  connectToMcpServer,
+  discoverTools,
+  DEFAULT_CONNECT_TIMEOUT_MS,
+  DEFAULT_DISCOVER_TIMEOUT_MS,
+} from '@/lib/mcp-out/client';
 import type { McpConnection } from '@/lib/mcp-out/types';
 
 export const runtime = 'nodejs';
@@ -228,11 +233,19 @@ export async function PATCH(
     testResult = await testConnection(updated);
   }
 
-  // Audit: pick the most specific event type we can infer.
+  // Re-fetch AFTER the test so the audit event reflects the real
+  // post-test status. Without this, a URL change that fails the
+  // re-test would emit `newStatus: 'active'` even though the row was
+  // flipped to `status: 'error'` by testConnection().
+  const final = (await getConnection(id, ctx.companyId)) ?? updated;
+
+  // Audit: pick the most specific event type we can infer. Uses the
+  // final (post-test) status so enabled/disabled/error transitions are
+  // captured accurately.
   const eventType =
-    patch.status === 'disabled' && existing.status !== 'disabled'
+    final.status === 'disabled' && existing.status !== 'disabled'
       ? 'mcp.connection.disabled'
-      : patch.status === 'active' && existing.status !== 'active'
+      : final.status === 'active' && existing.status !== 'active'
       ? 'mcp.connection.enabled'
       : 'mcp.connection.updated';
 
@@ -244,20 +257,19 @@ export async function PATCH(
     actorId: ctx.userId,
     actorName: ctx.fullName ?? undefined,
     targetType: 'connection',
-    targetId: updated.id,
+    targetId: final.id,
     details: {
-      name: updated.name,
-      serverUrl: updated.serverUrl,
-      authType: updated.authType,
+      name: final.name,
+      serverUrl: final.serverUrl,
+      authType: final.authType,
       previousStatus: existing.status,
-      newStatus: updated.status,
+      newStatus: final.status,
+      lastErrorMessage: final.lastErrorMessage,
       tested: testResult !== null,
       testOk: testResult?.ok ?? null,
     },
   });
 
-  // Return the freshest row post-test (test may have flipped status).
-  const final = (await getConnection(id, ctx.companyId)) ?? updated;
   return Response.json({
     connection: serializeConnection(final),
     test: testResult,
@@ -318,8 +330,8 @@ async function testConnection(
 ): Promise<{ ok: true; toolCount: number } | { ok: false; error: string }> {
   let client: Awaited<ReturnType<typeof connectToMcpServer>> | null = null;
   try {
-    client = await connectToMcpServer(conn);
-    const tools = await discoverTools(client);
+    client = await connectToMcpServer(conn, DEFAULT_CONNECT_TIMEOUT_MS);
+    const tools = await discoverTools(client, DEFAULT_DISCOVER_TIMEOUT_MS);
     return { ok: true, toolCount: tools.length };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Connection failed.';

@@ -27,7 +27,12 @@ import {
   listConnections,
   markConnectionError,
 } from '@/lib/mcp-out/connections';
-import { connectToMcpServer, discoverTools } from '@/lib/mcp-out/client';
+import {
+  connectToMcpServer,
+  discoverTools,
+  DEFAULT_CONNECT_TIMEOUT_MS,
+  DEFAULT_DISCOVER_TIMEOUT_MS,
+} from '@/lib/mcp-out/client';
 import type { McpConnection } from '@/lib/mcp-out/types';
 
 export const runtime = 'nodejs';
@@ -207,14 +212,18 @@ function serializeConnection(c: McpConnection) {
  * Attempt `connectToMcpServer` + `discoverTools`. On failure, mark the
  * connection row as errored and return the sanitised message so the UI
  * can display it inline.
+ *
+ * Both stages run under their default 10-second per-call timeouts. A
+ * TCP-responsive-but-dead external server will produce a timeout error
+ * within the budget rather than hanging the entire HTTP request.
  */
 async function testConnection(
   conn: McpConnection,
 ): Promise<{ ok: true; toolCount: number } | { ok: false; error: string }> {
   let client: Awaited<ReturnType<typeof connectToMcpServer>> | null = null;
   try {
-    client = await connectToMcpServer(conn);
-    const tools = await discoverTools(client);
+    client = await connectToMcpServer(conn, DEFAULT_CONNECT_TIMEOUT_MS);
+    const tools = await discoverTools(client, DEFAULT_DISCOVER_TIMEOUT_MS);
     return { ok: true, toolCount: tools.length };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Connection failed.';

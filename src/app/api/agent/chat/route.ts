@@ -16,7 +16,13 @@
 //     The real implementation lives at `@/lib/sessions/manager`. The route
 //     reads from / writes to the stub through a single import surface so
 //     Task 2 only has to swap that one module.
-//   - `loadMcpOutTools` returns `{}` until Task 3 wires up MCP OUT.
+//
+// MCP OUT:
+//   `loadMcpOutTools` returns `{ tools, close }`. The `close` callback
+//   releases every open transport opened during discovery. We invoke it
+//   via `waitUntil` in all terminal paths (deny branch + normal stream)
+//   so the stream isn't blocked on transport teardown but the closes
+//   still land before the function shuts down.
 //
 // Runtime: Node.js (we use `waitUntil` from `@vercel/functions`, which
 // requires the Node runtime; we also need long-running streaming).
@@ -133,9 +139,13 @@ export async function POST(req: Request) {
   // v6's converter is async (it can resolve URL data parts on the way).
   const incomingModelMessages = await convertToModelMessages(body.messages);
 
-  // Task 3 will return tools discovered from the company's connected MCP
-  // OUT servers. Stub returns {}.
-  const externalTools = await loadMcpOutTools(auth.companyId);
+  // Tools discovered from the company's connected MCP OUT servers.
+  // `close` must be invoked once the turn is done so per-request MCP
+  // transports are released; we defer via `waitUntil` below in every
+  // terminal path so teardown doesn't block the response stream.
+  const { tools: externalTools, close: closeMcp } = await loadMcpOutTools(
+    auth.companyId,
+  );
 
   const { result, denied } = await runAgentTurn({
     ctx,
@@ -204,6 +214,10 @@ export async function POST(req: Request) {
   // the denial is visible to the user as the message content, and Stop
   // fired with reason='denied' inside runAgentTurn.
   if (!result) {
+    // Release MCP transports on the deny path — the tools were opened
+    // but will never be called.
+    waitUntil(closeMcp());
+
     const reason = denied?.reason ?? 'denied';
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
@@ -219,6 +233,11 @@ export async function POST(req: Request) {
     });
     return createUIMessageStreamResponse({ stream });
   }
+
+  // Normal path: schedule MCP transport teardown after the response
+  // stream closes. `waitUntil` keeps the function alive long enough for
+  // the close to complete without blocking the stream delivery.
+  waitUntil(closeMcp());
 
   return result.toUIMessageStreamResponse();
 }

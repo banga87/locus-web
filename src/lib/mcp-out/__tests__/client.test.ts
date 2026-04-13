@@ -32,8 +32,9 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => {
     constructor(info: unknown, options: unknown) {
       mocks.clientCtorSpy(info, options);
     }
-    connect = (t: unknown) => mocks.clientConnect(t);
-    listTools = () => mocks.clientListTools();
+    connect = (t: unknown, opts?: unknown) => mocks.clientConnect(t, opts);
+    listTools = (params?: unknown, opts?: unknown) =>
+      mocks.clientListTools(params, opts);
     close = () => mocks.clientClose();
   }
   return { Client: FakeClient };
@@ -131,6 +132,23 @@ describe('connectToMcpServer', () => {
     await connectToMcpServer(makeConn());
     expect(clientConnect).toHaveBeenCalledOnce();
   });
+
+  it('passes an AbortSignal and timeout into client.connect', async () => {
+    await connectToMcpServer(makeConn(), 2000);
+    expect(clientConnect).toHaveBeenCalledOnce();
+    const [, opts] = clientConnect.mock.calls[0] as [unknown, { signal?: AbortSignal; timeout?: number } | undefined];
+    expect(opts?.signal).toBeInstanceOf(AbortSignal);
+    expect(opts?.timeout).toBe(2000);
+  });
+
+  it('passes an AbortSignal into the transport requestInit', async () => {
+    await connectToMcpServer(makeConn());
+    const [, transportOpts] = transportCtorSpy.mock.calls[0] as [
+      URL,
+      { requestInit?: { signal?: AbortSignal } } | undefined,
+    ];
+    expect(transportOpts?.requestInit?.signal).toBeInstanceOf(AbortSignal);
+  });
 });
 
 describe('discoverTools', () => {
@@ -171,5 +189,14 @@ describe('discoverTools', () => {
     const tools = await discoverTools(client);
 
     expect(tools[0].inputSchema).toEqual({ type: 'object', properties: {} });
+  });
+
+  it('passes the timeout option into client.listTools', async () => {
+    clientListTools.mockResolvedValueOnce({ tools: [] });
+
+    const client = await connectToMcpServer(makeConn());
+    await discoverTools(client, 3000);
+
+    expect(clientListTools).toHaveBeenCalledWith(undefined, { timeout: 3000 });
   });
 });

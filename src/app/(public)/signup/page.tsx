@@ -34,7 +34,7 @@ export default function SignupPage() {
     const redirectBase =
       typeof window !== 'undefined' ? window.location.origin : '';
 
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
@@ -45,6 +45,13 @@ export default function SignupPage() {
     if (signUpError) {
       setError(signUpError.message || 'Sign up failed.');
       setPending(false);
+      return;
+    }
+
+    // If email confirmation is disabled in Supabase, signUp returns an
+    // active session immediately — skip the "check your email" screen.
+    if (data.session) {
+      router.replace('/setup');
       return;
     }
 

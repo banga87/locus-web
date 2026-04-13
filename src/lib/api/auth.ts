@@ -41,20 +41,30 @@ export async function requireAuth(): Promise<AuthContext> {
     throw new ApiAuthError(401, 'unauthenticated', 'Sign in required.');
   }
 
-  const [profile] = await db
+  let [profile] = await db
     .select()
     .from(users)
     .where(eq(users.id, user.id))
     .limit(1);
 
   if (!profile) {
-    // Auth user exists but no public.users row yet — post-signup gap.
-    // Callers (middleware, setup wizard) should route to /setup.
-    throw new ApiAuthError(
-      403,
-      'no_profile',
-      'No user profile. Complete setup.',
-    );
+    // Auth user exists but no public.users row yet. This happens when
+    // email confirmation is disabled in Supabase and signUp immediately
+    // returns a session — the /auth/callback route (which also seeds the
+    // profile) never runs. Self-heal here so the setup wizard can proceed.
+    const email = user.email ?? '';
+    const fallbackName = email.split('@')[0] || 'New user';
+    [profile] = await db
+      .insert(users)
+      .values({
+        id: user.id,
+        email,
+        fullName: fallbackName,
+        role: 'owner',
+        status: 'active',
+        companyId: null,
+      })
+      .returning();
   }
 
   if (profile.status !== 'active' && profile.status !== 'invited') {

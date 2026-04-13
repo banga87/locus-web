@@ -16,7 +16,9 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 // The db chain: db.select().from(users).where(...).limit(1) -> array.
+// Plus the insert path: db.insert(users).values(...).returning() -> array.
 const limitMock = vi.fn();
+const returningMock = vi.fn();
 vi.mock('@/db', () => ({
   db: {
     select: () => ({
@@ -24,6 +26,11 @@ vi.mock('@/db', () => ({
         where: () => ({
           limit: limitMock,
         }),
+      }),
+    }),
+    insert: () => ({
+      values: () => ({
+        returning: returningMock,
       }),
     }),
   },
@@ -42,6 +49,7 @@ import { ApiAuthError } from '../errors';
 beforeEach(() => {
   getUser.mockReset();
   limitMock.mockReset();
+  returningMock.mockReset();
 });
 
 describe('requireAuth', () => {
@@ -79,15 +87,31 @@ describe('requireAuth', () => {
     });
   });
 
-  it('throws 403 no_profile when auth user exists but public.users row is missing', async () => {
+  it('self-heals: creates public.users row when auth user has no profile yet', async () => {
     getUser.mockResolvedValue({
       data: { user: { id: 'u-1', email: 'a@example.com' } },
     });
-    limitMock.mockResolvedValue([]);
+    // First select → empty (no profile).
+    limitMock.mockResolvedValueOnce([]);
+    // insert().values().returning() → newly-created row.
+    returningMock.mockResolvedValueOnce([
+      {
+        id: 'u-1',
+        email: 'a@example.com',
+        fullName: 'a',
+        role: 'owner',
+        status: 'active',
+        companyId: null,
+      },
+    ]);
 
-    await expect(requireAuth()).rejects.toMatchObject({
-      statusCode: 403,
-      code: 'no_profile',
+    const ctx = await requireAuth();
+    expect(ctx).toEqual({
+      userId: 'u-1',
+      companyId: null,
+      role: 'owner',
+      email: 'a@example.com',
+      fullName: 'a',
     });
   });
 

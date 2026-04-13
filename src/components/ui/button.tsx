@@ -44,12 +44,22 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  nativeButton,
+  render,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  // Base UI defaults to nativeButton={true}. When callers pass `render` to
+  // compose with a non-<button> element (e.g. <Link>), flip the default so
+  // the accessibility warning doesn't fire. Explicit caller values win.
+  const resolvedNativeButton =
+    nativeButton !== undefined ? nativeButton : render === undefined
+
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      nativeButton={resolvedNativeButton}
+      render={render}
       {...props}
     />
   )

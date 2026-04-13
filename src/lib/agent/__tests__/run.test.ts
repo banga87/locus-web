@@ -205,6 +205,35 @@ describe('agent/run — SessionStart hook', () => {
     const text = await result!.text;
     expect(text).toBe('hello');
   });
+
+  it('rejects with an explicit error when a SessionStart hook returns decision="inject" (Phase 2 contract)', async () => {
+    // `inject` is a valid HookDecision variant reserved for Phase 2's
+    // brain-diff-on-resume splice. Phase 1 has no splice site wired in,
+    // so silently discarding the payload would turn a Phase 2
+    // misconfiguration into a debugging nightmare. runAgentTurn throws
+    // loudly instead; this test pins that contract so the guard can't
+    // regress before Phase 2 removes it.
+    mockProvider.setModel(
+      mockModelWithStream([
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: 'never' },
+        { type: 'text-end', id: 't1' },
+      ]),
+    );
+    registerHook('SessionStart', () => ({
+      decision: 'inject',
+      payload: { extraContext: 'brain-diff here' },
+    }));
+
+    await expect(
+      runAgentTurn({
+        ctx: buildCtx(),
+        system: 'sys',
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: {},
+      }),
+    ).rejects.toThrow(/inject payloads not yet implemented/);
+  });
 });
 
 describe('agent/run — events generator', () => {

@@ -150,9 +150,21 @@ export async function runAgentTurn(
       denied: { reason },
     };
   }
-  // `inject` payloads are reserved for Phase 2 (brain-diff context on
-  // resume). Phase 1 has nothing to splice in, so we ignore the payload
-  // shape and treat any non-deny as allow.
+  // `inject` is a valid HookDecision variant (see types.ts — reserved
+  // for Phase 2 brain-diff context on session resume), but Phase 1 has
+  // no splice semantics wired in. Silently ignoring an injected payload
+  // would turn a Phase 2 misconfiguration into a hard-to-diagnose "the
+  // handler ran but its output vanished" bug. Throw loudly so the
+  // regression is caught the moment someone registers an inject
+  // handler before Phase 2 adds the splice site. Phase 2: remove this
+  // guard, process `startDecision.payload`, and splice into
+  // `params.messages` before calling `streamText`.
+  if (startDecision.decision === 'inject') {
+    throw new Error(
+      'SessionStart inject payloads not yet implemented (Phase 2 — see docstring)',
+    );
+  }
+  // Any remaining decision is `allow` — proceed to streamText.
 
   // --- Stream -----------------------------------------------------------
   const result = streamText({

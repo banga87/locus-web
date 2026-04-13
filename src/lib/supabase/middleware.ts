@@ -11,6 +11,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 //  - authenticated users on /login or /signup get bounced to `/`
 
 export async function updateSession(request: NextRequest) {
+  // Stamp the current pathname so server components / layouts can read it
+  // via `headers()`. Next.js doesn't expose `usePathname`-equivalent on the
+  // server, and we need it in `(app)/layout.tsx` to decide whether to
+  // redirect to /setup without infinite-looping the /setup page itself.
+  request.headers.set('x-pathname', request.nextUrl.pathname);
+
   let supabaseResponse = NextResponse.next({
     request,
   });

@@ -16,6 +16,7 @@ import { brains, companies, users } from '@/db/schema';
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
 import { seedBrainFromUniversalPack } from '@/lib/templates/seed';
+import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import { Button } from '@/components/ui/button';
 
 // ----- Server Action -----------------------------------------------------
@@ -119,22 +120,14 @@ async function completeSetup(formData: FormData) {
   // Seed outside the outer transaction so the (itself transactional)
   // seeder manages its own atomicity — keeping the first transaction
   // narrowly scoped avoids long-running locks on companies/users/brains.
+  //
+  // `seedBrainFromUniversalPack` already regenerates the manifest on
+  // success. The extra `tryRegenerateManifest` call is a defensive
+  // idempotent refresh — cheap, and guarantees a current manifest even if
+  // the seed's regen failed silently.
   if (companyId && brainId) {
     await seedBrainFromUniversalPack(brainId, companyId);
-
-    // Task 11 will wire manifest regeneration. Until then the module may
-    // not exist; swallow the import error rather than block setup.
-    try {
-      // @ts-expect-error — module may not exist yet; dynamic import keeps
-      //  this file compiling before Task 11 ships.
-      const mod = await import('@/lib/brain/manifest');
-      if (typeof mod?.regenerateManifest === 'function') {
-        await mod.regenerateManifest(brainId);
-      }
-    } catch {
-      // Task 11 will wire this. Skipping for now is safe — the manifest
-      // is rebuilt lazily on first read.
-    }
+    await tryRegenerateManifest(brainId);
   }
 
   redirect('/');

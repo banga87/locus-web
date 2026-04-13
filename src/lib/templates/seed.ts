@@ -9,6 +9,7 @@
 
 import { db } from '@/db';
 import { categories, documents } from '@/db/schema';
+import { regenerateManifest } from '@/lib/brain/manifest';
 
 import { UNIVERSAL_PACK } from './universal-pack';
 
@@ -72,4 +73,9 @@ export async function seedBrainFromUniversalPack(
       });
     }
   });
+
+  // Regenerate the navigation manifest outside the seed transaction. If
+  // this fails the seed itself is already committed — the next write to
+  // this brain will rebuild it, so we don't need to roll back.
+  await regenerateManifest(brainId);
 }

@@ -7,7 +7,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { HomeIcon, BookOpenIcon, SettingsIcon } from 'lucide-react';
+import { HomeIcon, BookOpenIcon, SettingsIcon, PlugIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -23,7 +23,18 @@ const items = [
     href: '/settings/agent-tokens',
     label: 'Settings',
     icon: SettingsIcon,
-    match: (p: string) => p.startsWith('/settings'),
+    // Match the settings root and the agent-tokens subpage, but not
+    // MCP connections — those get their own nav item below.
+    match: (p: string) =>
+      p === '/settings' ||
+      p === '/settings/agent-tokens' ||
+      p.startsWith('/settings/agent-tokens/'),
+  },
+  {
+    href: '/settings/mcp-connections',
+    label: 'MCP connections',
+    icon: PlugIcon,
+    match: (p: string) => p.startsWith('/settings/mcp-connections'),
   },
 ] as const;
 

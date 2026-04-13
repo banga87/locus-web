@@ -28,6 +28,7 @@ const CUSTOM_MIGRATIONS = [
   '0002_tsvector_trigger.sql',
   '0003_rls_policies.sql',
   '0004_sessions.sql',
+  '0005_mcp_connections.sql',
 ];
 
 async function main() {

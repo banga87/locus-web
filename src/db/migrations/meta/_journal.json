@@ -15,6 +15,13 @@
       "when": 1776081061013,
       "tag": "0004_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776083625125,
+      "tag": "0005_mcp_connections",
+      "breakpoints": true
     }
   ]
 }

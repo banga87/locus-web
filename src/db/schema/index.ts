@@ -14,3 +14,4 @@ export * from './audit-events';
 export * from './usage-records';
 export * from './sessions';
 export * from './session-turns';
+export * from './mcp-connections';

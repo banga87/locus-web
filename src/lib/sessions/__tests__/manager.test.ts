@@ -230,6 +230,19 @@ function makeDbFake(state: FakeState, opts?: { failTransactionTimes?: number }) 
             };
           }
           if (tableName === 'session_turns') {
+            // Mirror the UNIQUE (session_id, turn_number) DB constraint
+            // so tests can exercise the manager's retry-on-conflict path
+            // without a live Postgres.
+            const dupe = state.turns.find(
+              (t) =>
+                t.sessionId === (values.sessionId as string) &&
+                t.turnNumber === (values.turnNumber as number),
+            );
+            if (dupe) {
+              throw new Error(
+                'duplicate key value violates unique constraint "session_turns_session_turn_idx"',
+              );
+            }
             const id = cryptoRandomId();
             const row: TurnRow = {
               id,
@@ -517,6 +530,77 @@ describe('sessionManager.persistTurn', () => {
     expect(state.sessions.get(session.id)!.turnCount).toBe(1);
   });
 
+  it('rejects a duplicate (session_id, turn_number) — UNIQUE constraint enforcement', async () => {
+    // Mirrors the DB-level UNIQUE index on session_turns. Two
+    // concurrent persistTurn calls (e.g., from two browser tabs) can
+    // both compute the same turnNumber via count(*); the constraint
+    // turns the race into a clean conflict the manager's retry loop
+    // observes. This test exercises the constraint itself by driving
+    // the fake's insert path directly with a duplicate (sessionId,
+    // turnNumber).
+    const state: FakeState = { sessions: new Map(), turns: [] };
+    const fake = makeDbFake(state);
+    setDbFake(fake);
+
+    const session = await sessionManager.create({
+      companyId: COMPANY,
+      brainId: BRAIN,
+      userId: USER,
+    });
+
+    // Seed turn #1 directly (bypasses the manager's count(*) so we can
+    // engineer the conflict).
+    await (
+      fake as unknown as {
+        insert: (t: unknown) => {
+          values: (v: Record<string, unknown>) => {
+            returning: () => Promise<unknown[]>;
+          };
+        };
+      }
+    )
+      .insert(sessionTurns)
+      .values({
+        sessionId: session.id,
+        turnNumber: 1,
+        userMessage: {},
+        assistantMessages: [],
+        toolCalls: [],
+        inputTokens: 0,
+        outputTokens: 0,
+      })
+      .returning();
+
+    // Second insert with the same (sessionId, turnNumber) must throw.
+    // Wrap in an async lambda — the fake throws synchronously inside
+    // `.values()` (mirroring the DB constraint), so we need a function
+    // boundary for `rejects.toThrow` to catch it.
+    await expect(async () =>
+      (
+        fake as unknown as {
+          insert: (t: unknown) => {
+            values: (v: Record<string, unknown>) => {
+              returning: () => Promise<unknown[]>;
+            };
+          };
+        }
+      )
+        .insert(sessionTurns)
+        .values({
+          sessionId: session.id,
+          turnNumber: 1,
+          userMessage: {},
+          assistantMessages: [],
+          toolCalls: [],
+          inputTokens: 0,
+          outputTokens: 0,
+        })
+        .returning(),
+    ).rejects.toThrow(/duplicate key|unique constraint/i);
+
+    expect(state.turns).toHaveLength(1);
+  });
+
   it('logs and gives up after the second failure — does not throw to caller', async () => {
     const state: FakeState = { sessions: new Map(), turns: [] };
     setDbFake(makeDbFake(state, { failTransactionTimes: 2 }));
@@ -657,5 +741,67 @@ describe('sessionManager.getContext', () => {
     expect((ctx[1] as { role: string }).role).toBe('assistant');
     expect((ctx[2] as { role: string }).role).toBe('user');
     expect((ctx[3] as { role: string }).role).toBe('assistant');
+  });
+
+  it('drops the WHOLE turn when userMessage conversion throws — no orphan assistant', async () => {
+    // Regression guard: a malformed historical userMessage must not
+    // cause the assistant side of the same turn to be replayed solo.
+    // Some LLMs reject prompts with assistant turns that have no
+    // preceding user turn.
+    const state: FakeState = { sessions: new Map(), turns: [] };
+    setDbFake(makeDbFake(state));
+
+    const session = await sessionManager.create({
+      companyId: COMPANY,
+      brainId: BRAIN,
+      userId: USER,
+    });
+
+    // Turn 1: malformed user message — `convertToModelMessages` rejects
+    // anything missing `role` / `parts`. Plain object triggers the
+    // throw.
+    await sessionManager.persistTurn({
+      sessionId: session.id,
+      userMessage: { broken: true },
+      assistantMessage: [
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'orphan if not dropped' }],
+        },
+      ],
+      toolCalls: [],
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    });
+
+    // Turn 2: well-formed.
+    await sessionManager.persistTurn({
+      sessionId: session.id,
+      userMessage: {
+        id: 'm2',
+        role: 'user',
+        parts: [{ type: 'text', text: 'second user turn' }],
+      },
+      assistantMessage: [
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'second reply' }],
+        },
+      ],
+      toolCalls: [],
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    });
+
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const ctx = await sessionManager.getContext(session.id);
+    errSpy.mockRestore();
+
+    // Only turn 2 contributes — turn 1's assistant is dropped along
+    // with its broken user message.
+    expect(ctx).toHaveLength(2);
+    expect((ctx[0] as { role: string }).role).toBe('user');
+    expect((ctx[1] as { role: string }).role).toBe('assistant');
+    // Sanity: the orphan reply is NOT in the context.
+    const flat = JSON.stringify(ctx);
+    expect(flat).not.toMatch(/orphan if not dropped/);
   });
 });

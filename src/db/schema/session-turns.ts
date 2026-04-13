@@ -24,7 +24,7 @@ import {
   integer,
   jsonb,
   timestamp,
-  index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sessions } from './sessions';
 
@@ -37,9 +37,10 @@ export const sessionTurns = pgTable(
       .notNull()
       .references(() => sessions.id, { onDelete: 'cascade' }),
 
-    // 1-indexed sequential within a session. Derived in
-    // `persistTurn` inside the same transaction as the insert + counter
-    // bump so concurrent writes can't interleave.
+    // 1-indexed sequential within a session. Derived in `persistTurn`
+    // via count(*), which races under concurrent writes — the UNIQUE
+    // index on (session_id, turn_number) below turns a race into a
+    // hard conflict that the manager's retry loop recovers from.
     turnNumber: integer('turn_number').notNull(),
 
     // Raw shapes — see file header.
@@ -55,6 +56,12 @@ export const sessionTurns = pgTable(
       .defaultNow(),
   },
   (t) => [
-    index('session_turns_session_turn_idx').on(t.sessionId, t.turnNumber),
+    // UNIQUE — see `turnNumber` comment above. Guards concurrent-tab
+    // writes from producing duplicate turn numbers that would later
+    // replay as garbled history in `getContext`.
+    uniqueIndex('session_turns_session_turn_idx').on(
+      t.sessionId,
+      t.turnNumber,
+    ),
   ],
 );

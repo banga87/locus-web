@@ -40,11 +40,15 @@ export const GET = (_req: Request, { params }: RouteCtx) =>
       return error('not_found', 'Session not found.', 404);
     }
 
+    // TODO(Phase 2): paginate turns when context-window compaction lands.
+    // Hard cap for now so a long session can't dump every jsonb blob
+    // over the wire on a single GET.
     const turns = await db
       .select()
       .from(sessionTurns)
       .where(eq(sessionTurns.sessionId, id))
-      .orderBy(asc(sessionTurns.turnNumber));
+      .orderBy(asc(sessionTurns.turnNumber))
+      .limit(200);
 
     return success({ session, turns });
   });

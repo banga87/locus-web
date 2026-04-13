@@ -97,21 +97,23 @@ export const sessionManager = {
       // The route stored the raw UIMessage from useChat; convert it back
       // to the LLM-facing shape. `convertToModelMessages` accepts an
       // array, so we wrap and unwrap.
+      let convertedUser: ModelMessage[];
       try {
-        const converted = await convertToModelMessages([
+        convertedUser = await convertToModelMessages([
           t.userMessage as UIMessage,
         ]);
-        messages.push(...converted);
       } catch (err) {
         // Defensive: a malformed historical row shouldn't poison the
-        // whole session. Log and skip the user message; we still
-        // include the assistant side so the conversation isn't
-        // entirely silent on resume.
+        // whole session. We drop the WHOLE turn rather than orphan the
+        // assistant side — an assistant reply with no preceding user
+        // turn is invalid for many LLMs and would corrupt the prompt.
         console.error(
-          `[sessions] failed to convert userMessage for turn ${t.turnNumber}`,
+          `[sessions] failed to convert userMessage for turn ${t.turnNumber}; dropping the whole turn`,
           err,
         );
+        continue;
       }
+      messages.push(...convertedUser);
       const assistant = t.assistantMessages as ModelMessage[];
       if (Array.isArray(assistant)) {
         messages.push(...assistant);

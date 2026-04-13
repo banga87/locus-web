@@ -16,6 +16,8 @@
 // audit surface later it should be the explicit DELETE/PATCH path that
 // emits, not this cron.
 
+import { timingSafeEqual } from 'node:crypto';
+
 import { lt, eq, and } from 'drizzle-orm';
 
 import { db } from '@/db';
@@ -32,8 +34,13 @@ export async function GET(req: Request) {
     return new Response('cron_secret_missing', { status: 500 });
   }
 
-  const auth = req.headers.get('authorization') ?? '';
-  if (auth !== `Bearer ${expected}`) {
+  // Constant-time bearer comparison. The naive `!==` short-circuits on
+  // the first byte mismatch and leaks the secret one byte at a time
+  // under timing-attack conditions. Low severity here (one static
+  // secret, narrow caller surface) but trivially fixable.
+  const got = Buffer.from(req.headers.get('authorization') ?? '');
+  const want = Buffer.from(`Bearer ${expected}`);
+  if (got.length !== want.length || !timingSafeEqual(got, want)) {
     return new Response('unauthorized', { status: 401 });
   }
 

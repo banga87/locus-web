@@ -77,7 +77,7 @@ CREATE INDEX IF NOT EXISTS "sessions_status_last_active_idx"
   ON "sessions" USING btree ("status","last_active_at");
 --> statement-breakpoint
 
-CREATE INDEX IF NOT EXISTS "session_turns_session_turn_idx"
+CREATE UNIQUE INDEX IF NOT EXISTS "session_turns_session_turn_idx"
   ON "session_turns" USING btree ("session_id","turn_number");
 --> statement-breakpoint
 

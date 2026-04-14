@@ -206,33 +206,288 @@ describe('agent/run — SessionStart hook', () => {
     expect(text).toBe('hello');
   });
 
-  it('rejects with an explicit error when a SessionStart hook returns decision="inject" (Phase 2 contract)', async () => {
-    // `inject` is a valid HookDecision variant reserved for Phase 2's
-    // brain-diff-on-resume splice. Phase 1 has no splice site wired in,
-    // so silently discarding the payload would turn a Phase 2
-    // misconfiguration into a debugging nightmare. runAgentTurn throws
-    // loudly instead; this test pins that contract so the guard can't
-    // regress before Phase 2 removes it.
+  it('splices SessionStart inject payload blocks into the system prompt before the base prompt', async () => {
+    // Phase 1.5 pre-Task-9 splice: SessionStart handlers that return
+    // `{ decision: 'inject', payload: { blocks: [...] } }` get their
+    // blocks rendered and prepended to the base system prompt. The
+    // rendered content lands BEFORE the base prompt so session-stable
+    // context (scaffolding, baseline docs) reads first; the base
+    // prompt's agent-identity + tools guidance still anchors the
+    // cached prefix.
+    let receivedSystem: string | undefined;
+    const model = new MockLanguageModelV3({
+      doStream: async (options) => {
+        // The AI SDK threads `system` through as a `role: 'system'`
+        // message at the head of `options.prompt`. We capture that to
+        // assert the splice happened.
+        const prompt = (options.prompt ?? []) as Array<{
+          role: string;
+          content: unknown;
+        }>;
+        const sys = prompt.find((m) => m.role === 'system');
+        if (sys && typeof sys.content === 'string') {
+          receivedSystem = sys.content;
+        } else if (Array.isArray(sys?.content)) {
+          // v6 sometimes represents system as content parts; flatten to
+          // a string we can assert against.
+          receivedSystem = (sys!.content as Array<{ text?: string }>)
+            .map((p) => p.text ?? '')
+            .join('');
+        }
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 't1' },
+              { type: 'text-delta', id: 't1', delta: 'ok' },
+              { type: 'text-end', id: 't1' },
+              {
+                type: 'finish',
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
+                finishReason: { unified: 'stop', raw: 'end_turn' },
+              },
+            ] satisfies LanguageModelV3StreamPart[],
+          }),
+        };
+      },
+    });
+    mockProvider.setModel(model);
+
+    registerHook('SessionStart', () => ({
+      decision: 'inject',
+      payload: {
+        blocks: [
+          {
+            kind: 'scaffolding',
+            title: 'How Acme Works',
+            body: 'Acme is a marketing agency.',
+          },
+          {
+            kind: 'baseline',
+            title: 'Brand Voice',
+            body: 'We are friendly and direct.',
+          },
+        ],
+      },
+    }));
+
+    const { result } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'BASE_PROMPT',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+    });
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
+
+    // Each block rendered as `## <title>\n\n<body>`.
+    expect(receivedSystem).toContain('## How Acme Works');
+    expect(receivedSystem).toContain('Acme is a marketing agency.');
+    expect(receivedSystem).toContain('## Brand Voice');
+    // Blocks joined by `---`.
+    expect(receivedSystem).toContain('---');
+    // Base prompt is preserved, AFTER the injected blocks.
+    expect(receivedSystem).toContain('BASE_PROMPT');
+    const brandIdx = receivedSystem!.indexOf('## Brand Voice');
+    const baseIdx = receivedSystem!.indexOf('BASE_PROMPT');
+    expect(brandIdx).toBeGreaterThanOrEqual(0);
+    expect(baseIdx).toBeGreaterThan(brandIdx);
+  });
+
+  it('ignores malformed / empty inject payloads and falls back to the base system prompt', async () => {
+    // Defence-in-depth: if a handler returns a shape that isn't
+    // `{ blocks: [...] }`, the turn still runs with the base prompt
+    // rather than crashing. Matches the "missing scaffolding doc"
+    // degradation path in buildScaffoldingPayload.
+    let receivedSystem: string | undefined;
+    mockProvider.setModel(
+      new MockLanguageModelV3({
+        doStream: async (options) => {
+          const prompt = (options.prompt ?? []) as Array<{
+            role: string;
+            content: unknown;
+          }>;
+          const sys = prompt.find((m) => m.role === 'system');
+          if (sys && typeof sys.content === 'string') {
+            receivedSystem = sys.content;
+          }
+          return {
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 't1' },
+                { type: 'text-delta', id: 't1', delta: 'ok' },
+                { type: 'text-end', id: 't1' },
+                {
+                  type: 'finish',
+                  usage: {
+                    inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 1, text: 1, reasoning: undefined },
+                  },
+                  finishReason: { unified: 'stop', raw: 'end_turn' },
+                },
+              ] satisfies LanguageModelV3StreamPart[],
+            }),
+          };
+        },
+      }),
+    );
+    // Empty blocks → render returns '' → base prompt unchanged.
+    registerHook('SessionStart', () => ({
+      decision: 'inject',
+      payload: { blocks: [] },
+    }));
+
+    const { result } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'ONLY_BASE',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+    });
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
+    expect(receivedSystem).toBe('ONLY_BASE');
+  });
+});
+
+describe('agent/run — UserPromptSubmit hook', () => {
+  it('dispatches UserPromptSubmit with the latest user message and splices inject payloads as a system-role message before the latest user turn', async () => {
+    // UserPromptSubmit fires once per turn after SessionStart. An
+    // `inject` here is per-turn context (skills, attachments, filing
+    // notices); we prepend it as a `role: 'system'` message right
+    // before the latest user turn so prior turns stay cache-stable.
+    let receivedPromptMessages: Array<{ role: string; content: unknown }> = [];
+    const capturedEvents: HookEvent[] = [];
+    mockProvider.setModel(
+      new MockLanguageModelV3({
+        doStream: async (options) => {
+          receivedPromptMessages = (options.prompt ?? []) as typeof receivedPromptMessages;
+          return {
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 't1' },
+                { type: 'text-delta', id: 't1', delta: 'ok' },
+                { type: 'text-end', id: 't1' },
+                {
+                  type: 'finish',
+                  usage: {
+                    inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 1, text: 1, reasoning: undefined },
+                  },
+                  finishReason: { unified: 'stop', raw: 'end_turn' },
+                },
+              ] satisfies LanguageModelV3StreamPart[],
+            }),
+          };
+        },
+      }),
+    );
+
+    registerHook('UserPromptSubmit', (event) => {
+      capturedEvents.push(event);
+      return {
+        decision: 'inject',
+        payload: {
+          blocks: [
+            {
+              kind: 'skill',
+              title: 'Applicable Skill',
+              body: 'Follow this checklist: ...',
+            },
+          ],
+        },
+      };
+    });
+
+    const { result } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'BASE',
+      messages: [
+        { role: 'user', content: 'prior question' },
+        { role: 'assistant', content: 'prior answer' },
+        { role: 'user', content: 'new question' },
+      ],
+      tools: {},
+    });
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
+
+    // Hook fired exactly once, with the latest user message.
+    expect(capturedEvents).toHaveLength(1);
+    const evt = capturedEvents[0];
+    expect(evt.name).toBe('UserPromptSubmit');
+    if (evt.name === 'UserPromptSubmit') {
+      expect(evt.message).toMatchObject({
+        role: 'user',
+        content: 'new question',
+      });
+    }
+
+    // Spliced system-role message sits immediately before the latest
+    // user turn. Layout (ignoring AI SDK's own leading `system` for
+    // `params.system`): prior user, prior assistant, injected system,
+    // new user.
+    const rolesAfterBaseSystem = receivedPromptMessages
+      .map((m) => m.role)
+      // Drop the base `system` the SDK prepends for `params.system`.
+      .filter((r, i, arr) =>
+        !(r === 'system' && i === 0 && arr.length > 1),
+      );
+    expect(rolesAfterBaseSystem).toEqual([
+      'user',
+      'assistant',
+      'system',
+      'user',
+    ]);
+    // The injected system message carries the rendered block body.
+    const injectedSys = receivedPromptMessages.find(
+      (m, i) => m.role === 'system' && i > 0,
+    );
+    expect(JSON.stringify(injectedSys)).toContain('## Applicable Skill');
+    expect(JSON.stringify(injectedSys)).toContain(
+      'Follow this checklist: ...',
+    );
+  });
+
+  it('short-circuits the turn when UserPromptSubmit denies, firing Stop with reason="denied"', async () => {
+    // Symmetry with SessionStart deny: a UserPromptSubmit handler that
+    // wants to block the turn (prompt-injection scrub, budget check)
+    // returns `{ decision: 'deny', reason }`; the harness returns the
+    // same triple as SessionStart deny.
     mockProvider.setModel(
       mockModelWithStream([
         { type: 'text-start', id: 't1' },
-        { type: 'text-delta', id: 't1', delta: 'never' },
+        { type: 'text-delta', id: 't1', delta: 'should not stream' },
         { type: 'text-end', id: 't1' },
       ]),
     );
-    registerHook('SessionStart', () => ({
-      decision: 'inject',
-      payload: { extraContext: 'brain-diff here' },
+    registerHook('UserPromptSubmit', () => ({
+      decision: 'deny',
+      reason: 'prompt_too_long',
     }));
+    const stopHandler = vi.fn((_event: HookEvent) => ({
+      decision: 'allow' as const,
+    }));
+    registerHook('Stop', stopHandler);
 
-    await expect(
-      runAgentTurn({
-        ctx: buildCtx(),
-        system: 'sys',
-        messages: [{ role: 'user', content: 'hi' }],
-        tools: {},
-      }),
-    ).rejects.toThrow(/inject payloads not yet implemented/);
+    const { result, denied } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'sys',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+    });
+
+    expect(result).toBeNull();
+    expect(denied).toEqual({ reason: 'prompt_too_long' });
+    expect(stopHandler).toHaveBeenCalledTimes(1);
+    expect(stopHandler.mock.calls[0]?.[0]).toMatchObject({
+      name: 'Stop',
+      reason: 'denied',
+    });
   });
 });
 

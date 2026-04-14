@@ -98,6 +98,55 @@ interface RunAgentTurnResult {
 }
 
 /**
+ * Render an `inject` hook payload into a markdown string. The payload
+ * shape we expect is `{ blocks: Array<{ title: string; body: string }> }`
+ * — matching `InjectedContext` from `src/lib/context/types.ts`. We duck-
+ * type at runtime rather than importing the type because the harness
+ * must stay decoupled from the context-injection module (it's the
+ * *consumer* of whatever a handler hands back, not a collaborator on
+ * the payload schema).
+ *
+ * Rendering rules:
+ *   - Each block becomes `## <title>\n\n<body>`.
+ *   - Blocks are joined with `\n\n---\n\n` so the LLM sees distinct
+ *     sections.
+ *   - A malformed payload (missing `blocks`, non-array, non-string
+ *     fields) produces an empty string — handlers that return malformed
+ *     data degrade to "no extra context" rather than crashing the turn.
+ *     The context module's own `buildScaffoldingPayload` is contract-
+ *     bound to hand back a well-formed shape; this is defence-in-depth.
+ *   - An empty `blocks` array also produces an empty string, matching
+ *     the "missing scaffolding doc" degradation path in
+ *     `buildScaffoldingPayload`.
+ */
+function renderInjectedContext(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return '';
+  const blocks = (payload as { blocks?: unknown }).blocks;
+  if (!Array.isArray(blocks) || blocks.length === 0) return '';
+  const sections: string[] = [];
+  for (const block of blocks) {
+    if (!block || typeof block !== 'object') continue;
+    const title = (block as { title?: unknown }).title;
+    const body = (block as { body?: unknown }).body;
+    if (typeof title !== 'string' || typeof body !== 'string') continue;
+    sections.push(`## ${title}\n\n${body}`);
+  }
+  return sections.join('\n\n---\n\n');
+}
+
+/**
+ * Index of the last `role === 'user'` entry in `messages`, or -1. Used
+ * by the UserPromptSubmit splice to insert a system-role context
+ * message immediately before the latest user turn.
+ */
+function findLastUserIndex(messages: ModelMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === 'user') return i;
+  }
+  return -1;
+}
+
+/**
  * Drive a single turn of an agent. See module header for the full hook
  * order, Stop semantics, and prompt-caching rationale.
  *
@@ -123,13 +172,11 @@ export async function runAgentTurn(
     await runHook({ name: 'Stop', ctx: params.ctx, reason });
   };
 
-  // --- SessionStart -----------------------------------------------------
-  const startDecision = await runHook({
-    name: 'SessionStart',
-    ctx: params.ctx,
-  });
-  if (startDecision.decision === 'deny') {
-    const reason = startDecision.reason;
+  // Short-circuit helper: hook deny → synthesise a denied-events
+  // generator and fire Stop once. Shared between SessionStart and
+  // UserPromptSubmit. Returns the standard `{ result: null, events,
+  // denied }` triple every deny path yields.
+  const denyTurn = async (reason: string): Promise<RunAgentTurnResult> => {
     // Fire Stop immediately so the caller observes the terminal hook
     // without having to drain events first. This also anchors the
     // "exactly once" invariant — no other path can fire Stop now.
@@ -149,28 +196,82 @@ export async function runAgentTurn(
       events: deniedEvents(),
       denied: { reason },
     };
+  };
+
+  // --- SessionStart -----------------------------------------------------
+  const startDecision = await runHook({
+    name: 'SessionStart',
+    ctx: params.ctx,
+  });
+  if (startDecision.decision === 'deny') {
+    return denyTurn(startDecision.reason);
   }
-  // `inject` is a valid HookDecision variant (see types.ts — reserved
-  // for Phase 2 brain-diff context on session resume), but Phase 1 has
-  // no splice semantics wired in. Silently ignoring an injected payload
-  // would turn a Phase 2 misconfiguration into a hard-to-diagnose "the
-  // handler ran but its output vanished" bug. Throw loudly so the
-  // regression is caught the moment someone registers an inject
-  // handler before Phase 2 adds the splice site. Phase 2: remove this
-  // guard, process `startDecision.payload`, and splice into
-  // `params.messages` before calling `streamText`.
+  // SessionStart `inject` → splice the rendered blocks into the system
+  // prompt. Session-stable context (scaffolding, agent-prompt-snippet,
+  // baseline docs) lands BEFORE the base system prompt so the agent's
+  // identity + available-tools guidance stays cache-stable across turns
+  // while the company-specific preamble is read first. `renderInjected
+  // Context` duck-types the payload — the harness doesn't import the
+  // context module's `InjectedContext` type so the boundary between
+  // harness and context handlers stays a plain contract (see
+  // AGENTS.md).
+  let systemPrompt = params.system;
   if (startDecision.decision === 'inject') {
-    throw new Error(
-      'SessionStart inject payloads not yet implemented (Phase 2 — see docstring)',
-    );
+    const rendered = renderInjectedContext(startDecision.payload);
+    if (rendered) {
+      systemPrompt = `${rendered}\n\n${params.system}`;
+    }
   }
-  // Any remaining decision is `allow` — proceed to streamText.
+  // Any remaining SessionStart decision is `allow` — proceed.
+
+  // --- UserPromptSubmit --------------------------------------------------
+  // Fires once per turn, after SessionStart and before streamText. The
+  // hook's `message` payload is the most recent user message from
+  // `params.messages` — handlers (skills matcher, attachment inliner,
+  // ingestion-filing notice) use it to decide what per-turn context to
+  // splice. A `deny` here short-circuits the turn the same way
+  // SessionStart deny does; an `inject` prepends a system-role message
+  // right before the latest user turn so the LLM sees the context as
+  // part of the current exchange without polluting the cached system
+  // prompt.
+  const lastUserMessage = [...params.messages]
+    .reverse()
+    .find((m) => m.role === 'user');
+  const promptDecision = await runHook({
+    name: 'UserPromptSubmit',
+    ctx: params.ctx,
+    message: lastUserMessage,
+  });
+  if (promptDecision.decision === 'deny') {
+    return denyTurn(promptDecision.reason);
+  }
+  let effectiveMessages: ModelMessage[] = params.messages;
+  if (promptDecision.decision === 'inject') {
+    const rendered = renderInjectedContext(promptDecision.payload);
+    if (rendered) {
+      // Splice as a system-role message immediately before the latest
+      // user turn. Keeping the prior conversation intact means prompt
+      // caching still hits for the earlier turns; only the per-turn
+      // context ahead of the new user message is fresh.
+      const lastUserIdx = findLastUserIndex(params.messages);
+      const insertAt = lastUserIdx === -1 ? params.messages.length : lastUserIdx;
+      const systemMsg: ModelMessage = {
+        role: 'system',
+        content: rendered,
+      };
+      effectiveMessages = [
+        ...params.messages.slice(0, insertAt),
+        systemMsg,
+        ...params.messages.slice(insertAt),
+      ];
+    }
+  }
 
   // --- Stream -----------------------------------------------------------
   const result = streamText({
     model: anthropic(params.model ?? DEFAULT_MODEL),
-    system: params.system,
-    messages: params.messages,
+    system: systemPrompt,
+    messages: effectiveMessages,
     tools: params.tools,
     stopWhen: stepCountIs(params.maxSteps ?? 6),
     abortSignal: params.ctx.abortSignal,

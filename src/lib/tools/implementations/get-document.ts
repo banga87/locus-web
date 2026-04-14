@@ -52,8 +52,10 @@ export const getDocumentTool: LocusTool<GetDocumentInput, GetDocumentOutput> = {
       include_metadata: { type: 'boolean' },
     },
     additionalProperties: false,
-    // Exactly one of path or id must be present.
-    oneOf: [{ required: ['path'] }, { required: ['id'] }],
+    // NOTE: "exactly one of path or id" is enforced at runtime in `call()`
+    // rather than via a top-level `oneOf`. Anthropic's tool `input_schema`
+    // does not support `oneOf`/`allOf`/`anyOf` at the top level, and the
+    // same schema is forwarded to the AI SDK tool bridge.
   },
 
   isReadOnly() {
@@ -66,6 +68,36 @@ export const getDocumentTool: LocusTool<GetDocumentInput, GetDocumentOutput> = {
   ): Promise<ToolResult<GetDocumentOutput>> {
     const includeMetadata = input.include_metadata !== false;
     const section = input.section ?? null;
+
+    // Exactly one of `path` or `id` must be provided. Enforced here
+    // because the JSON Schema can't express this without a top-level
+    // `oneOf`, which Anthropic's tool input_schema rejects.
+    const hasPath = typeof input.path === 'string' && input.path.length > 0;
+    const hasId = typeof input.id === 'string' && input.id.length > 0;
+    if (hasPath === hasId) {
+      return {
+        success: false,
+        error: {
+          code: 'invalid_input',
+          message: hasPath
+            ? 'Provide exactly one of `path` or `id`, not both.'
+            : 'Provide exactly one of `path` or `id`.',
+          hint: 'Call search_documents first if you need to discover paths.',
+          retryable: false,
+        },
+        metadata: {
+          responseTokens: 0,
+          executionMs: 0,
+          documentsAccessed: [],
+          details: {
+            eventType: 'document.read',
+            path: input.path ?? null,
+            section_requested: section,
+            found: false,
+          },
+        },
+      };
+    }
 
     // -------- Lookup ----------------------------------------------------
     const whereClause = input.id

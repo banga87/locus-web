@@ -1,5 +1,6 @@
-import { Button as ButtonPrimitive } from "@base-ui/react/button"
+import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
+import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
@@ -44,22 +45,20 @@ function Button({
   className,
   variant = "default",
   size = "default",
-  nativeButton,
-  render,
+  asChild = false,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
-  // Base UI defaults to nativeButton={true}. When callers pass `render` to
-  // compose with a non-<button> element (e.g. <Link>), flip the default so
-  // the accessibility warning doesn't fire. Explicit caller values win.
-  const resolvedNativeButton =
-    nativeButton !== undefined ? nativeButton : render === undefined
+}: React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean
+  }) {
+  const Comp = asChild ? Slot.Root : "button"
 
   return (
-    <ButtonPrimitive
+    <Comp
       data-slot="button"
+      data-variant={variant}
+      data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
-      nativeButton={resolvedNativeButton}
-      render={render}
       {...props}
     />
   )

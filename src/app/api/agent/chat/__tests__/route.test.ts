@@ -61,6 +61,15 @@ vi.mock('@/db/schema', () => ({
     companyId: 'sessions.company_id',
     agentDefinitionId: 'sessions.agent_definition_id',
   },
+  // Task 11: `createDbAgentCapabilitiesRepo` queries `documents` when the
+  // session has an agent-definition bound. Truthy-placeholder fields are
+  // enough for Drizzle's `eq()` / `and()` / `isNull()` to run symbolically.
+  documents: {
+    id: 'documents.id',
+    type: 'documents.type',
+    content: 'documents.content',
+    deletedAt: 'documents.deleted_at',
+  },
 }));
 
 const recordUsageMock = vi.fn(async (_: unknown) => {});
@@ -322,6 +331,11 @@ describe('POST /api/agent/chat — agentDefinitionId threading (Task 9)', () => 
     dbSelectMock.mockResolvedValueOnce([
       { agentDefinitionId: 'agent-def-123' },
     ]); // sessions
+    // Task 11: capabilities lookup fires when the session has an agent
+    // bound. An empty-content doc → empty frontmatter → `capabilities`
+    // field absent → repo returns []. That keeps this test focused on
+    // agentDefinitionId threading; capability derivation has its own unit.
+    dbSelectMock.mockResolvedValueOnce([{ content: '' }]); // documents (capabilities)
 
     const result = {
       toUIMessageStreamResponse: vi.fn(() => new Response('ok')),

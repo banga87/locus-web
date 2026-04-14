@@ -480,3 +480,39 @@ export function createDbAgentSkillsRepo(): AgentSkillsRepo {
     },
   };
 }
+
+export interface AgentCapabilitiesRepo {
+  /**
+   * Return the agent-definition doc's `capabilities:` frontmatter array,
+   * or `null` when the doc is missing / soft-deleted / mistyped. Empty
+   * array (legacy docs without the key) is an intentional "no capabilities
+   * granted" signal — not the same as `null`.
+   */
+  getAgentCapabilities(agentDefinitionId: string): Promise<string[] | null>;
+}
+
+export function createDbAgentCapabilitiesRepo(): AgentCapabilitiesRepo {
+  return {
+    async getAgentCapabilities(agentDefinitionId) {
+      const rows = await db
+        .select({ content: documents.content })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.id, agentDefinitionId),
+            eq(documents.type, 'agent-definition'),
+            isNull(documents.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) return null;
+
+      const fm = parseFrontmatterYaml(row.content);
+      // Task 12 will populate this field; older docs won't have it —
+      // treat missing key as empty array (default-deny).
+      return readStringArrayField(fm, 'capabilities') ?? [];
+    },
+  };
+}

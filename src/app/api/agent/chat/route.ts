@@ -45,9 +45,11 @@ import { ApiAuthError } from '@/lib/api/errors';
 import { runAgentTurn, DEFAULT_MODEL } from '@/lib/agent/run';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { buildToolSet } from '@/lib/agent/tool-bridge';
-import type { AgentContext } from '@/lib/agent/types';
+import type { AgentActor, AgentContext } from '@/lib/agent/types';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { registerContextHandlers } from '@/lib/context/register';
+import { createDbAgentCapabilitiesRepo } from '@/lib/context/repos';
+import { deriveGrantedCapabilities } from './grantedCapabilities';
 import { registerLocusTools } from '@/lib/tools';
 import { recordUsage } from '@/lib/usage/record';
 import { flushEvents } from '@/lib/audit/logger';
@@ -158,22 +160,36 @@ export async function POST(req: Request) {
     agentDefinitionId = sessionRow?.agentDefinitionId ?? null;
   }
 
+  // Task 11: load the agent-definition's `capabilities` field — only when
+  // the session is tied to a user-built definition. When it's null, the
+  // default Platform Agent behaviour kicks in (web enabled). Keeps the
+  // load to a single-row query reusing the sessions-scoping indexes.
+  let agentCapabilities: string[] | null = null;
+  if (agentDefinitionId) {
+    const capsRepo = createDbAgentCapabilitiesRepo();
+    agentCapabilities = await capsRepo.getAgentCapabilities(agentDefinitionId);
+  }
+
+  const agentActor: AgentActor = {
+    type: 'platform_agent',
+    userId: auth.userId,
+    companyId: auth.companyId,
+    scopes: ['read'],
+  };
+
+  const grantedCapabilities = deriveGrantedCapabilities({
+    actor: agentActor,
+    agentCapabilities,
+  });
+
   const ctx: AgentContext = {
-    actor: {
-      type: 'platform_agent',
-      userId: auth.userId,
-      companyId: auth.companyId,
-      scopes: ['read'],
-    },
+    actor: agentActor,
     brainId: brain.id,
     companyId: auth.companyId,
     sessionId: body.sessionId,
     agentDefinitionId,
     abortSignal: req.signal,
-    // Task 11 will derive this from the agent-definition's tool-allowlist.
-    // Platform Agent default: ['web'] so web_search + web_fetch are
-    // visible to the LLM once the implementations land.
-    grantedCapabilities: ['web'],
+    grantedCapabilities,
   };
 
   // Task 2 will load prior turns from `session_turns` and prepend them to
@@ -218,10 +234,7 @@ export async function POST(req: Request) {
         brainId: brain.id,
         sessionId: body.sessionId ?? undefined,
         abortSignal: req.signal,
-        // Task 11 wires capability derivation properly; mirrors the
-        // AgentContext above so buildToolSet sees the Platform Agent
-        // defaults.
-        grantedCapabilities: ['web'],
+        grantedCapabilities,
         webCallsThisTurn: 0,
       },
       externalTools,

@@ -15,7 +15,10 @@ import { withAuth, requireCompany } from '@/lib/api/handler';
 import { error, success } from '@/lib/api/response';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
-import { extractDocumentTypeFromContent } from '@/lib/brain/save';
+import {
+  extractDocumentTypeFromContent,
+  maybeScheduleSkillManifestRebuild,
+} from '@/lib/brain/save';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -143,10 +146,12 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
     // frontmatter whenever content is updated. If the patch leaves
     // content alone, leave the existing `type` alone — no point
     // re-parsing unchanged content.
-    const typeUpdate =
+    const newType =
       patch.content !== undefined
-        ? { type: extractDocumentTypeFromContent(patch.content) }
-        : {};
+        ? extractDocumentTypeFromContent(patch.content)
+        : existing.type;
+    const typeUpdate =
+      patch.content !== undefined ? { type: newType } : {};
 
     const changedKeys = Object.keys(patch);
     const summary = `updated: ${changedKeys.join(', ')}`;
@@ -185,6 +190,14 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
     });
 
     await tryRegenerateManifest(brain.id);
+    // Trigger on either side of the change: a doc being re-typed away
+    // from `'skill'` must drop out of the manifest, and a doc newly
+    // re-typed to `'skill'` must appear in it. Two calls collapse into
+    // one rebuild via the loader's per-company debounce.
+    maybeScheduleSkillManifestRebuild(companyId, existing.type);
+    if (newType !== existing.type) {
+      maybeScheduleSkillManifestRebuild(companyId, newType);
+    }
 
     return success(updated);
   });
@@ -221,6 +234,9 @@ export const DELETE = (_req: Request, { params }: RouteCtx) =>
       .where(eq(documents.id, id));
 
     await tryRegenerateManifest(brain.id);
+    // The deleted doc's `type` is the trigger — a skill being
+    // soft-deleted must drop out of the manifest.
+    maybeScheduleSkillManifestRebuild(companyId, existing.type);
 
     return success({ id });
   });

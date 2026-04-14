@@ -1,19 +1,22 @@
 // Brain-document write-path helpers.
 //
-// This module intentionally contains only pure functions. The DB write
-// itself happens in the brain-document route handlers
+// This module sits between the brain-document route handlers
 // (`src/app/api/brain/documents/route.ts`, and the `[id]/route.ts`
-// counterpart). Keeping this file pure means:
+// counterpart) and the storage layer. It exposes:
 //
-//   - Every helper is trivially unit-testable without a DB.
-//   - The route handler keeps the single source of truth for the
-//     insert/update Drizzle calls — no parallel write path to diverge.
-//   - A later task extends this module with `scheduleManifestRebuild`
-//     and friends; centralising pure helpers here keeps that addition
-//     a pure import rather than a cross-file refactor.
+//   - Pure frontmatter helpers (`parseFrontmatterRaw`,
+//     `extractDocumentTypeFromFrontmatter`, `extractDocumentTypeFromContent`)
+//     for deriving the denormalised `documents.type` column from a doc's
+//     YAML preamble.
+//   - One dispatch helper (`maybeScheduleSkillManifestRebuild`) that
+//     forwards skill-doc edits to the manifest loader's debounced
+//     rebuild scheduler. Pure dispatch — no DB calls itself, just a
+//     conditional re-export.
 //
-// Scope note: Phase 1.5 Task 1 only ships frontmatter→type extraction.
-// Manifest-rebuild scheduling is explicitly deferred to Task 3.
+// Why these live together: route handlers need both on every write
+// (extract → write to `type` column → schedule rebuild). Co-locating
+// them keeps the call sites small and gives Task 3 a single import
+// surface to add the rebuild trigger to.
 //
 // Why a separate, generic frontmatter parser here — `parseFrontmatter`
 // in `./frontmatter.ts` is narrowly typed to the 8 keys the document
@@ -21,6 +24,8 @@
 // raw Record<string, unknown> view to pick out arbitrary vocabulary
 // fields. This helper is a tiny superset — same on-disk format, no
 // key allowlist.
+
+import { scheduleManifestRebuild } from '@/lib/skills/loader';
 
 /**
  * Parse a frontmatter block from raw document content into a generic
@@ -105,4 +110,30 @@ export function extractDocumentTypeFromContent(
   content: string,
 ): string | null {
   return extractDocumentTypeFromFrontmatter(parseFrontmatterRaw(content));
+}
+
+/**
+ * Dispatch a skill-manifest rebuild when a brain-doc write touches a
+ * skill doc. Routes call this on POST/PATCH/DELETE — the helper is a
+ * thin guard that forwards to the loader's debouncer when the doc type
+ * is `'skill'` and no-ops otherwise.
+ *
+ * Why dispatch sits in the brain layer (and not the loader): the
+ * manifest loader is generic — it doesn't know which write paths exist.
+ * The brain save path is the one that knows when a write happens. Pure
+ * dispatch (no DB calls) keeps this helper unit-testable without
+ * touching the loader's debounce timer.
+ *
+ * `docType` may be the new type (writes), the old type (deletes), or
+ * either side of a re-typing (PATCH that flips skill -> knowledge);
+ * the route handler is responsible for calling this with both old and
+ * new on a re-type so the manifest can drop the orphaned entry.
+ */
+export function maybeScheduleSkillManifestRebuild(
+  companyId: string,
+  docType: string | null,
+): void {
+  if (docType === 'skill') {
+    scheduleManifestRebuild(companyId);
+  }
 }

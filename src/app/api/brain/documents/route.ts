@@ -18,7 +18,10 @@ import { decodeCursor, encodeCursor } from '@/lib/api/pagination';
 import { created, error, paginated } from '@/lib/api/response';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
-import { extractDocumentTypeFromContent } from '@/lib/brain/save';
+import {
+  extractDocumentTypeFromContent,
+  maybeScheduleSkillManifestRebuild,
+} from '@/lib/brain/save';
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 
@@ -170,6 +173,7 @@ export const POST = (req: Request) =>
       });
 
       await tryRegenerateManifest(brain.id);
+      maybeScheduleSkillManifestRebuild(companyId, documentType);
 
       return created(doc);
     } catch (e) {

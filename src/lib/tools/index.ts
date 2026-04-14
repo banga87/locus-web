@@ -9,6 +9,8 @@ import { searchDocumentsTool } from './implementations/search-documents';
 import { getDocumentTool } from './implementations/get-document';
 import { getDocumentDiffTool } from './implementations/get-document-diff';
 import { getDiffHistoryTool } from './implementations/get-diff-history';
+import { webSearchTool } from './implementations/web-search';
+import { webFetchTool } from './implementations/web-fetch';
 
 let registered = false;
 
@@ -22,6 +24,8 @@ export function registerLocusTools(): void {
   registerTool(getDocumentTool);
   registerTool(getDocumentDiffTool);
   registerTool(getDiffHistoryTool);
+  registerTool(webSearchTool);
+  registerTool(webFetchTool);
   registered = true;
 }
 
@@ -35,4 +39,6 @@ export {
   getDocumentTool,
   getDocumentDiffTool,
   getDiffHistoryTool,
+  webSearchTool,
+  webFetchTool,
 };

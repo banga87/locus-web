@@ -69,23 +69,31 @@ describe('MVP MCP IN — tool surface', () => {
   // by inspecting the authoritative source: the Locus tool registry,
   // which is what both paths (MCP IN handler + Platform Agent bridge)
   // dispatch through.
-  it('exactly 4 Locus tools are registered and all are read-only', async () => {
+  it('Locus tool registry is all read-only and includes the MVP MCP IN read tools', async () => {
     // Import dynamically so the registerLocusTools() call in beforeAll
     // has definitely landed.
     const { getAllTools } = await import('@/lib/tools/executor');
     const names = getAllTools().map((t) => t.name).sort();
 
-    expect(names).toEqual([
-      'get_diff_history',
-      'get_document',
-      'get_document_diff',
-      'search_documents',
-    ]);
+    // The four read tools surfaced over MCP IN must be registered.
+    // Phase 1 WebFetch adds `web_search` + `web_fetch` to the registry
+    // as Platform-Agent-only tools — they're read-only (no brain
+    // mutation) and gated by the `web` capability in the tool bridge,
+    // so the MCP registrar's explicit 4-tool allowlist still prevents
+    // external agents from seeing them.
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'get_diff_history',
+        'get_document',
+        'get_document_diff',
+        'search_documents',
+      ]),
+    );
 
     // Defence in depth — no tool advertises as a write tool. The MCP
-    // registrar (src/lib/mcp/tools.ts) hard-codes these 4 by name; this
-    // assertion catches a regression where someone adds a write tool
-    // without updating the MCP registrar.
+    // registrar (src/lib/mcp/tools.ts) hard-codes its 4 tools by name;
+    // this assertion catches a regression where someone adds a write
+    // tool to the registry without updating the MCP registrar.
     for (const t of getAllTools()) {
       expect(t.isReadOnly()).toBe(true);
     }

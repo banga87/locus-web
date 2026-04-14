@@ -162,8 +162,8 @@ export function NewDocumentForm({ categories }: Props) {
       )}
 
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" render={<Link href="/brain" />}>
-          Cancel
+        <Button variant="ghost" asChild>
+          <Link href="/brain">Cancel</Link>
         </Button>
         <Button type="submit" disabled={submitting}>
           {submitting ? 'Creating…' : 'Create & edit'}

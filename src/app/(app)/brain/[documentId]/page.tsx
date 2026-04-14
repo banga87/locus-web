@@ -90,18 +90,18 @@ export default async function DocumentViewPage({ params }: PageProps) {
 
           <div className="flex items-center gap-2">
             {canEdit && (
-              <Button
-                variant="outline"
-                size="sm"
-                render={<Link href={`/brain/${row.id}/edit`} />}
-              >
-                <PencilIcon className="size-3.5" />
-                Edit
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/brain/${row.id}/edit`}>
+                  <PencilIcon className="size-3.5" />
+                  Edit
+                </Link>
               </Button>
             )}
-            <Button variant="ghost" size="sm" render={<Link href="#" />}>
-              <HistoryIcon className="size-3.5" />
-              History
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="#">
+                <HistoryIcon className="size-3.5" />
+                History
+              </Link>
             </Button>
           </div>
         </div>

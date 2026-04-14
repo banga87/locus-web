@@ -158,12 +158,8 @@ export function DocumentEditor({ document, owners }: Props) {
         <div className="flex items-center gap-2 text-xs">
           <SaveIndicator state={saveState} />
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          render={<Link href={`/brain/${document.id}`} />}
-        >
-          Done editing
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/brain/${document.id}`}>Done editing</Link>
         </Button>
       </div>
 

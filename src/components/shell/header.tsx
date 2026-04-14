@@ -69,18 +69,16 @@ export function Header({ user, companyName, onMenuClick }: HeaderProps) {
       </div>
 
       <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Account menu"
-            />
-          }
-        >
-          <Avatar className="size-8">
-            <AvatarFallback>{initials(user.fullName, user.email)}</AvatarFallback>
-          </Avatar>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Account menu"
+          >
+            <Avatar className="size-8">
+              <AvatarFallback>{initials(user.fullName, user.email)}</AvatarFallback>
+            </Avatar>
+          </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <div className="flex flex-col gap-0.5 px-2 py-1.5">
@@ -93,9 +91,7 @@ export function Header({ user, companyName, onMenuClick }: HeaderProps) {
             </span>
           </div>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            render={<button type="button" onClick={signOut} className="w-full" />}
-          >
+          <DropdownMenuItem onClick={signOut}>
             <LogOutIcon className="size-4" />
             Sign out
           </DropdownMenuItem>

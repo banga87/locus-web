@@ -16,11 +16,9 @@
 // so we render `dynamic-tool` parts with a custom `ToolCallIndicator`
 // that knows about our brain-tool naming and per-state UX (pending /
 // pill / muted-error); (b) the layout is custom — session sidebar,
-// stop button styling, three-dot indicator, scroll-to-bottom — and
-// the wrapper components compose against Radix-flavoured primitives
-// while this codebase ships `@base-ui/react`. The narrow
-// MessageResponse import gives us the safe markdown path without
-// conflating two component systems.
+// stop button styling, three-dot indicator, scroll-to-bottom. The
+// narrow MessageResponse import gives us the safe markdown path
+// without pulling in shell components we'd just override.
 // ============================================================================
 
 import { useMemo, useRef, useState, useEffect } from 'react';

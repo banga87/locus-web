@@ -20,9 +20,11 @@ export function DocumentList({ documents, canCreate, heading }: Props) {
       <div className="mb-4 flex items-center justify-between gap-4">
         <h1 className="text-xl font-semibold tracking-tight">{heading}</h1>
         {canCreate && (
-          <Button render={<Link href="/brain/new" />}>
-            <PlusIcon className="size-4" />
-            New Document
+          <Button asChild>
+            <Link href="/brain/new">
+              <PlusIcon className="size-4" />
+              New Document
+            </Link>
           </Button>
         )}
       </div>

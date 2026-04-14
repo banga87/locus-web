@@ -79,9 +79,11 @@ export function CreateTokenDialog() {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger render={<Button />}>
-        <PlusIcon className="size-4" />
-        Create token
+      <DialogTrigger asChild>
+        <Button>
+          <PlusIcon className="size-4" />
+          Create token
+        </Button>
       </DialogTrigger>
       <DialogContent>
         {rawToken ? (

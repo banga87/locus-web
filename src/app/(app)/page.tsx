@@ -68,13 +68,17 @@ export default async function HomePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
-          <Button render={<Link href="/brain" />}>
-            <BookOpenIcon className="size-4" />
-            Browse brain
+          <Button asChild>
+            <Link href="/brain">
+              <BookOpenIcon className="size-4" />
+              Browse brain
+            </Link>
           </Button>
-          <Button variant="outline" render={<Link href="/settings/agent-tokens" />}>
-            <KeyIcon className="size-4" />
-            Manage agent tokens
+          <Button variant="outline" asChild>
+            <Link href="/settings/agent-tokens">
+              <KeyIcon className="size-4" />
+              Manage agent tokens
+            </Link>
           </Button>
         </CardContent>
       </Card>

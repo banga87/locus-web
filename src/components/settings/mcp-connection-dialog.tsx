@@ -190,7 +190,7 @@ export function McpConnectionDialog({ mode, connection }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger render={triggerButton} />
+      <DialogTrigger asChild>{triggerButton}</DialogTrigger>
       <DialogContent>
         <form onSubmit={onSubmit}>
           <DialogHeader>

@@ -1,11 +1,14 @@
 // Unit tests for the skill manifest compiler. Pure logic — no DB.
 //
-// Two cases per the Phase 1.5 plan:
+// Cases per the Phase 1.5 plan:
 //   1. Happy path — a well-formed skill doc compiles to a single manifest
 //      entry with all trigger fields parsed.
 //   2. Diagnostic path — a skill doc missing the `triggers` block (or with
 //      otherwise unusable frontmatter) is rejected without throwing, and a
 //      diagnostic is appended to the manifest.
+//   3. YAML-throw path — a skill doc whose frontmatter is malformed enough
+//      to make `yaml.load` throw is caught, skipped, and folded into the
+//      same "missing or invalid frontmatter" diagnostic bucket as case 2.
 
 import { describe, it, expect } from 'vitest';
 import { compileSkillDocs } from './manifest-compiler';
@@ -57,5 +60,20 @@ describe('compileSkillDocs', () => {
     expect(manifest.skills).toHaveLength(0);
     expect(manifest.diagnostics).toHaveLength(1);
     expect(manifest.diagnostics[0].docId).toBe('bad-1');
+  });
+
+  it('skips skill docs whose frontmatter YAML fails to parse and logs diagnostic', () => {
+    // Unterminated double-quoted scalar — `yaml.load` throws on this
+    // (verified manually via js-yaml REPL). The compiler must catch the
+    // throw, drop the skill, and emit the same diagnostic reason as the
+    // no-frontmatter case so the dashboard can bucket them together.
+    const malformed = `---\ntype: skill\ntriggers:\n  phrases: ["unterminated\n---\nbody`;
+    const manifest = compileSkillDocs([
+      { id: 'yaml-throw-1', companyId: 'co-1', title: 'Malformed', content: malformed },
+    ]);
+    expect(manifest.skills).toHaveLength(0);
+    expect(manifest.diagnostics).toHaveLength(1);
+    expect(manifest.diagnostics[0].docId).toBe('yaml-throw-1');
+    expect(manifest.diagnostics[0].reason).toBe('missing or invalid frontmatter');
   });
 });

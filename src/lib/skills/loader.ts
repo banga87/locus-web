@@ -45,10 +45,19 @@ export function scheduleManifestRebuild(companyId: string): void {
   const existing = pendingRebuilds.get(companyId);
   if (existing) clearTimeout(existing);
   const t = setTimeout(() => {
+    // Delete the map entry before invoking rebuild so a throw — sync or
+    // async — cannot leave a stale handle wedged in `pendingRebuilds`.
     pendingRebuilds.delete(companyId);
-    rebuildManifest(companyId).catch((err) => {
+    // The outer try/catch guards against a future refactor that turns
+    // `rebuildManifest` into a sync-throwing function; today it is async
+    // and the `.catch` alone is sufficient.
+    try {
+      rebuildManifest(companyId).catch((err) => {
+        console.warn(`[skills/loader] rebuild failed for ${companyId}:`, err);
+      });
+    } catch (err) {
       console.warn(`[skills/loader] rebuild failed for ${companyId}:`, err);
-    });
+    }
   }, DEBOUNCE_MS);
   pendingRebuilds.set(companyId, t);
 }

@@ -30,13 +30,16 @@
 //     Redis via the Vercel Marketplace) when the autonomous loop
 //     starts running on separate workers.
 
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, ilike, inArray, isNull } from 'drizzle-orm';
 import yaml from 'js-yaml';
 
 import { db } from '@/db';
 import { documents } from '@/db/schema';
+import { loadManifest } from '@/lib/skills/loader';
+import type { SkillManifest } from '@/lib/skills/manifest-compiler';
 
 import type { ScaffoldingRepo } from './scaffolding';
+import type { UserPromptRepo } from './user-prompt';
 
 // ---- Scaffolding cache ----------------------------------------------------
 //
@@ -300,4 +303,172 @@ export function stripFrontmatter(raw: string): string {
   // after `\n---\n`.
   const after = raw.slice(closeIdx + '\n---'.length);
   return after.startsWith('\n') ? after.slice(1) : after;
+}
+
+// ---- UserPromptSubmit repo ------------------------------------------------
+//
+// Drizzle-backed `UserPromptRepo` factory. The shape lives in
+// `./user-prompt.ts` so the pure builder stays platform-agnostic.
+// Mirrors the scaffolding-repo pattern: a thin closure over `db`; no
+// state beyond shared Drizzle client and its own caching layers
+// (the skill manifest owns its own cache in `src/lib/skills/loader.ts`).
+
+/**
+ * Build a Drizzle-backed UserPromptRepo. Safe to call per request —
+ * the returned object is a thin closure. Two of the four methods are
+ * stubs pending downstream tasks:
+ *
+ *   - `getExtractedAttachments` — Task 8 wires up
+ *     `session_attachments` reads. Returns `[]` until then.
+ *   - `getIngestionFilingSkill` — Task 10 seeds the built-in
+ *     `ingestion-filing` skill doc. Returns `null` until the seed is
+ *     present in the company's brain.
+ *
+ * The skill-matching half (getManifest + getSkillBodies) is fully
+ * wired; the Phase 1.5 plan explicitly orders Task 6 ahead of Tasks
+ * 8 + 10 so the UserPromptSubmit handler lands in one pass.
+ */
+export function createDbUserPromptRepo(): UserPromptRepo {
+  return {
+    async getManifest(companyId) {
+      // Delegates to the skill-loader's `loadManifest`, which reads
+      // from `skill_manifests.manifest` (a JSONB blob populated by
+      // `rebuildManifest`). The loader returns `SkillManifest | null`;
+      // we return that through unchanged.
+      return loadManifest(companyId) as Promise<SkillManifest | null>;
+    },
+
+    async getSkillBodies(ids) {
+      // Short-circuit an empty IN () — Drizzle / Postgres tolerate it
+      // but the round trip is pointless. Guard here so callers can
+      // hand through raw id arrays (the matcher's output is unbounded
+      // in principle; in practice the manifest caps at whatever the
+      // user authored, but defence-in-depth is cheap).
+      if (ids.length === 0) return [];
+
+      // Filter by `type = 'skill'` + `deletedAt IS NULL` so soft-
+      // deleted or retyped docs never leak through. Company isolation
+      // is enforced transitively — the matcher only proposes ids that
+      // came from this company's manifest, so the ids themselves
+      // carry the company scope.
+      const rows = await db
+        .select({
+          id: documents.id,
+          content: documents.content,
+        })
+        .from(documents)
+        .where(
+          and(
+            inArray(documents.id, ids),
+            eq(documents.type, 'skill'),
+            isNull(documents.deletedAt),
+          ),
+        );
+
+      return rows.map((r) => ({
+        id: r.id,
+        body: stripFrontmatter(r.content),
+      }));
+    },
+
+    async getExtractedAttachments(sessionId) {
+      // TODO(Task 8): replace with a Drizzle query
+      //   SELECT id, filename, extracted_text, size_bytes
+      //   FROM session_attachments
+      //   WHERE session_id = ? AND status = 'extracted' AND extracted_text IS NOT NULL
+      //   ORDER BY created_at DESC
+      // When Task 8 lands it will map `size_bytes` (bigint) to `number`
+      // via `Number(r.sizeBytes)` — safe for typical attachment sizes.
+      // Until then the user-prompt builder short-circuits the
+      // attachment branch and no ingestion-filing block lands either.
+      void sessionId;
+      return [];
+    },
+
+    async getIngestionFilingSkill(companyId) {
+      // Task 10 will seed a built-in skill doc with a stable slug
+      // ('ingestion-filing') — once that's in place, filter by
+      // `slug = 'ingestion-filing'` for a precise match. Until then
+      // we fall back to a title ILIKE so a manually-authored doc can
+      // satisfy the contract during development; returns `null` when
+      // no doc matches, and the builder skips the filing block
+      // gracefully.
+      //
+      // TODO(Task 10): tighten the filter to `eq(documents.slug,
+      // 'ingestion-filing')` once the seed guarantees that slug.
+      const rows = await db
+        .select({
+          id: documents.id,
+          content: documents.content,
+        })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.companyId, companyId),
+            eq(documents.type, 'skill'),
+            ilike(documents.title, '%ingestion filing%'),
+            isNull(documents.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) return null;
+      return { id: row.id, body: stripFrontmatter(row.content) };
+    },
+  };
+}
+
+// ---- Agent skills lookup (lightweight sibling repo) ----------------------
+//
+// The UserPromptSubmit handler needs the agent-definition's
+// `skills:` frontmatter array. `ScaffoldingRepo.getAgentDefinition`
+// already reads the same doc but returns `baseline_docs`, not
+// `skills`. Rather than widen that method's return shape (which
+// would couple the SessionStart path to skill-matching concerns),
+// we expose a focused lookup here.
+//
+// Future: when Phase 2 adds more per-turn agent-definition fields
+// (tool allowlists, etc.) we can consolidate into a single
+// `AgentDefinitionRepo`; for MVP the two-call split is trivial.
+
+export interface AgentSkillsRepo {
+  /**
+   * Return the agent-definition doc's `skills:` frontmatter array,
+   * or `null` when the doc is missing / soft-deleted / mistyped. The
+   * register.ts handler treats `null` as "no candidate pool" and
+   * skips skill matching for the turn.
+   */
+  getAgentSkillIds(agentDefinitionId: string): Promise<string[] | null>;
+}
+
+/**
+ * Drizzle-backed `AgentSkillsRepo`. Re-uses the local frontmatter
+ * helpers (same js-yaml dependency as the scaffolding repo); company
+ * isolation is enforced at call time — the register.ts wrapper only
+ * passes through `ctx.agentDefinitionId` when the session already
+ * belongs to the caller's company.
+ */
+export function createDbAgentSkillsRepo(): AgentSkillsRepo {
+  return {
+    async getAgentSkillIds(agentDefinitionId) {
+      const rows = await db
+        .select({ content: documents.content })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.id, agentDefinitionId),
+            eq(documents.type, 'agent-definition'),
+            isNull(documents.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) return null;
+
+      const fm = parseFrontmatterYaml(row.content);
+      return readStringArrayField(fm, 'skills');
+    },
+  };
 }

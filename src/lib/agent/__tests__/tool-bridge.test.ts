@@ -37,6 +37,8 @@ const TEST_CTX: ToolContext = {
   companyId: 'c-test',
   brainId: 'b-test',
   sessionId: 's-test',
+  grantedCapabilities: ['web'],
+  webCallsThisTurn: 0,
 };
 
 function buildEchoTool(

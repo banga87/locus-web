@@ -170,6 +170,10 @@ export async function POST(req: Request) {
     sessionId: body.sessionId,
     agentDefinitionId,
     abortSignal: req.signal,
+    // Task 11 will derive this from the agent-definition's tool-allowlist.
+    // Platform Agent default: ['web'] so web_search + web_fetch are
+    // visible to the LLM once the implementations land.
+    grantedCapabilities: ['web'],
   };
 
   // Task 2 will load prior turns from `session_turns` and prepend them to
@@ -214,6 +218,11 @@ export async function POST(req: Request) {
         brainId: brain.id,
         sessionId: body.sessionId ?? undefined,
         abortSignal: req.signal,
+        // Task 11 wires capability derivation properly; mirrors the
+        // AgentContext above so buildToolSet sees the Platform Agent
+        // defaults.
+        grantedCapabilities: ['web'],
+        webCallsThisTurn: 0,
       },
       externalTools,
     ),

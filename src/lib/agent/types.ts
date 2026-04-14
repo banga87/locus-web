@@ -45,6 +45,12 @@ export interface AgentContext {
    * `turn_complete` with `finishReason: 'aborted'`.
    */
   abortSignal: AbortSignal;
+  /**
+   * Capability labels granted to this actor for this turn. Derived by
+   * the route layer. Harness is agnostic — it just threads the field
+   * onto the ToolContext it hands to buildToolSet.
+   */
+  grantedCapabilities: string[];
 }
 
 /**

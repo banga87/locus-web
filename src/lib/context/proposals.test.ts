@@ -35,6 +35,7 @@ function makeCtx(): AgentContext {
     sessionId: 's-1',
     agentDefinitionId: null,
     abortSignal: new AbortController().signal,
+    grantedCapabilities: [],
   };
 }
 

@@ -63,6 +63,7 @@ function buildCtx(overrides: Partial<AgentContext> = {}): AgentContext {
     companyId: 'c-test',
     sessionId: 's-test',
     abortSignal: new AbortController().signal,
+    grantedCapabilities: [],
     ...overrides,
   };
 }

@@ -23,5 +23,10 @@ export function buildToolContext(params: {
     companyId: params.companyId,
     brainId: params.brainId,
     tokenId: params.tokenId,
+    // Task 11 will derive this from the MCP actor + agent-definition.
+    // For now the MCP server has no web capabilities — web_search +
+    // web_fetch are Platform Agent-only surface.
+    grantedCapabilities: [],
+    webCallsThisTurn: 0,
   };
 }

@@ -37,6 +37,8 @@ function buildContext(overrides: Partial<ToolContext> = {}): ToolContext {
     companyId: TEST_COMPANY_ID,
     brainId: TEST_BRAIN_ID,
     tokenId: TEST_TOKEN_ID,
+    grantedCapabilities: ['web'],
+    webCallsThisTurn: 0,
     ...overrides,
   };
 }

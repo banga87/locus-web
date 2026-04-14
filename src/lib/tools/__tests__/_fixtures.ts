@@ -87,6 +87,8 @@ export async function setupFixtures(label: string): Promise<Fixtures> {
     companyId: company.id,
     brainId: brain.id,
     tokenId,
+    grantedCapabilities: ['web'],
+    webCallsThisTurn: 0,
   };
 
   return {

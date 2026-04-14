@@ -243,6 +243,8 @@ describe('MVP MCP IN — audit trail actor differentiation', () => {
       },
       companyId: company.companyId,
       brainId: company.brainId,
+      grantedCapabilities: ['web'],
+      webCallsThisTurn: 0,
     };
 
     await executeTool('search_documents', { query: 'voice' }, platformCtx);

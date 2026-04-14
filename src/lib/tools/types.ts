@@ -63,6 +63,17 @@ export interface ToolContext {
   traceId?: string;
   /** Cancellation propagation. Phase 1 concern. */
   abortSignal?: AbortSignal;
+  /**
+   * Capability labels the caller has been granted. Derived by the route
+   * layer from actor + agent-definition. Platform Agent default: ['web'].
+   */
+  grantedCapabilities: string[];
+  /**
+   * Running count of web_search + web_fetch calls in the current turn.
+   * The route layer initialises to 0 at turn start; web_* tools read and
+   * increment. Used to enforce the 15-call safety rail.
+   */
+  webCallsThisTurn: number;
 }
 
 /**
@@ -129,6 +140,16 @@ export interface LocusTool<I = unknown, O = unknown> {
   readonly description: string;
   /** JSON Schema for ajv validation. Pre-compiled at registration. */
   readonly inputSchema: ToolInputSchema;
+  /**
+   * Capability labels this tool requires on the caller's context. Absent
+   * or empty = universal (every caller may invoke). buildToolSet filters
+   * tools whose required capabilities aren't satisfied by the current
+   * ToolContext.grantedCapabilities.
+   *
+   * Known labels (v1):
+   *   - 'web'   — web_search + web_fetch declare this
+   */
+  readonly capabilities?: string[];
 
   /** True if the tool does not modify brain state. */
   isReadOnly(): boolean;

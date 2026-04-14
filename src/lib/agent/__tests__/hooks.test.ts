@@ -21,6 +21,7 @@ const TEST_CTX: AgentContext = {
   companyId: 'c-test',
   sessionId: null,
   abortSignal: new AbortController().signal,
+  grantedCapabilities: [],
 };
 
 function sessionStartEvent(): HookEvent {

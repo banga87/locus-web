@@ -3,9 +3,15 @@
 // PATCH — partial update. Increments version, writes a document_versions
 // snapshot, rejects `isCore` mutations.
 // DELETE — Owner only. Soft-delete. Core documents (is_core = true) are
-// rejected with 403.
+// rejected with 403. Docs referenced by any active agent-definition (via
+// the `baseline_docs` or `skills` frontmatter arrays) are rejected with
+// 409 + the referencing-agents list so the user can detach them before
+// retrying. This mirrors the /api/agents/[id] DELETE guard (which blocks
+// agent deletion while an active session references it) — the invariant
+// is "no dangling references between live artefacts".
 
 import { and, eq, isNull } from 'drizzle-orm';
+import yaml from 'js-yaml';
 import { z } from 'zod';
 
 import { db } from '@/db';
@@ -254,6 +260,68 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
     return success(updated);
   });
 
+/**
+ * Return the ids + titles of active agent-definition docs whose
+ * `baseline_docs` or `skills` frontmatter arrays reference `docId`.
+ *
+ * Phase 1.5 stores the reference as YAML inside the agent-definition's
+ * markdown content (see `buildAgentDefinitionDoc`), so we parse the
+ * frontmatter block per row. Returning `{id, title}` (not just id) gives
+ * the 409 response a human-readable list the UI can render inline —
+ * "Marketing Copywriter, Growth Agent" beats "2 agents reference this".
+ *
+ * Scoped to the caller's company + non-deleted docs. A small N here
+ * (single-digit agent-definition rows per company for MVP) keeps the
+ * per-DELETE scan cheap; a denormalised reference table would be the
+ * Phase 2 optimisation if this ever grows.
+ */
+async function findReferencingAgents(
+  companyId: string,
+  docId: string,
+): Promise<Array<{ id: string; title: string }>> {
+  const rows = await db
+    .select({
+      id: documents.id,
+      title: documents.title,
+      content: documents.content,
+    })
+    .from(documents)
+    .where(
+      and(
+        eq(documents.companyId, companyId),
+        eq(documents.type, 'agent-definition'),
+        isNull(documents.deletedAt),
+      ),
+    );
+
+  const referencing: Array<{ id: string; title: string }> = [];
+  for (const row of rows) {
+    if (!row.content.startsWith('---\n')) continue;
+    const closeIdx = row.content.indexOf('\n---', 4);
+    if (closeIdx === -1) continue;
+    const block = row.content.slice(4, closeIdx);
+    let parsed: unknown;
+    try {
+      parsed = yaml.load(block);
+    } catch {
+      // Malformed YAML — skip rather than fail the DELETE. The
+      // agent-definition route's own GET / PATCH paths will surface
+      // the corruption the next time the user touches this agent.
+      continue;
+    }
+    if (!parsed || typeof parsed !== 'object') continue;
+    const fm = parsed as Record<string, unknown>;
+    const baselines = Array.isArray(fm.baseline_docs)
+      ? (fm.baseline_docs as unknown[])
+      : [];
+    const skills = Array.isArray(fm.skills) ? (fm.skills as unknown[]) : [];
+    if (baselines.includes(docId) || skills.includes(docId)) {
+      referencing.push({ id: row.id, title: row.title });
+    }
+  }
+  return referencing;
+}
+
 export const DELETE = (_req: Request, { params }: RouteCtx) =>
   withAuth(async (ctx) => {
     requireRole(ctx, 'owner');
@@ -278,6 +346,34 @@ export const DELETE = (_req: Request, { params }: RouteCtx) =>
 
     if (existing.isCore) {
       return error('core_document_protected', 'Core documents cannot be deleted.', 403);
+    }
+
+    // Protective delete: a doc tagged by any active agent-definition as
+    // a baseline doc or a skill cannot be soft-deleted out from under
+    // it — the agent's next SessionStart would either degrade silently
+    // to scaffolding-only (baseline case) or drop the skill from the
+    // candidate pool (skill case), and neither is what the user
+    // expects when they hit "delete" on a document. The 409 forces the
+    // user to detach the reference first.
+    //
+    // We SKIP this guard for agent-definition docs themselves — that
+    // surface has its own active-session guard on /api/agents/[id];
+    // knowledge-docs referencing agent-definitions isn't a valid shape
+    // anyway. And we skip for `agent-scaffolding` (there's exactly one
+    // per company and nothing references it by id).
+    if (existing.type !== 'agent-definition' && existing.type !== 'agent-scaffolding') {
+      const referencing = await findReferencingAgents(companyId, id);
+      if (referencing.length > 0) {
+        return error(
+          'document_in_use',
+          'Document is referenced by one or more agents.',
+          409,
+          {
+            reason: 'document is referenced by agent-definition(s)',
+            agents: referencing,
+          },
+        );
+      }
     }
 
     await db

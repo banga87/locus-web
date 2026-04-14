@@ -22,6 +22,10 @@ import {
   extractDocumentTypeFromContent,
   maybeScheduleSkillManifestRebuild,
 } from '@/lib/brain/save';
+import {
+  getAttachment,
+  markCommitted,
+} from '@/lib/ingestion/attachments';
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 
@@ -41,6 +45,12 @@ const createSchema = z.object({
   summary: z.string().optional(),
   status: z.enum(['draft', 'active', 'archived']).optional(),
   confidenceLevel: z.enum(['high', 'medium', 'low']).optional(),
+  // Phase 1.5 Task 8: when the proposal being approved originated
+  // from an extracted attachment, the client forwards the attachment
+  // id. On a successful create we flip the attachment's status to
+  // `committed` and link `committed_doc_id` → new doc. Optional —
+  // non-ingestion proposals (agent-authored drafts) omit this field.
+  attachmentId: z.string().uuid().optional(),
 });
 
 export const GET = (req: Request) =>
@@ -129,6 +139,21 @@ export const POST = (req: Request) =>
       return error('category_not_found', 'Category does not belong to your brain.', 400);
     }
 
+    // Validate the optional attachment id before the transaction —
+    // a mismatched tenant is a 400, not a silent skip. Deferring the
+    // `markCommitted` call until AFTER the insert succeeds so we
+    // never commit an attachment against a doc that failed to create.
+    if (input.attachmentId) {
+      const attachment = await getAttachment(input.attachmentId, companyId);
+      if (!attachment) {
+        return error(
+          'attachment_not_found',
+          'Attachment does not exist or belongs to a different company.',
+          400,
+        );
+      }
+    }
+
     const path = `${category.slug}/${input.slug}`;
 
     // Phase 1.5: mirror the frontmatter `type` field into the
@@ -174,6 +199,19 @@ export const POST = (req: Request) =>
 
       await tryRegenerateManifest(brain.id);
       maybeScheduleSkillManifestRebuild(companyId, documentType);
+
+      // Transition the originating attachment (if any) to `committed`.
+      // Fire-and-forget: if the update fails, the doc has still been
+      // created — the attachment will linger at `extracted` and a
+      // future maintenance pass can reconcile. We log but do not fail
+      // the request on this step.
+      if (input.attachmentId) {
+        try {
+          await markCommitted(input.attachmentId, doc.id);
+        } catch (err) {
+          console.error('[api/brain/documents] markCommitted failed', err);
+        }
+      }
 
       return created(doc);
     } catch (e) {

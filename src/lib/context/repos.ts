@@ -35,6 +35,7 @@ import yaml from 'js-yaml';
 
 import { db } from '@/db';
 import { documents } from '@/db/schema';
+import { getExtractedAttachmentsForSession } from '@/lib/ingestion/attachments';
 import { loadManifest } from '@/lib/skills/loader';
 import type { SkillManifest } from '@/lib/skills/manifest-compiler';
 
@@ -372,17 +373,23 @@ export function createDbUserPromptRepo(): UserPromptRepo {
     },
 
     async getExtractedAttachments(sessionId) {
-      // TODO(Task 8): replace with a Drizzle query
-      //   SELECT id, filename, extracted_text, size_bytes
-      //   FROM session_attachments
-      //   WHERE session_id = ? AND status = 'extracted' AND extracted_text IS NOT NULL
-      //   ORDER BY created_at DESC
-      // When Task 8 lands it will map `size_bytes` (bigint) to `number`
-      // via `Number(r.sizeBytes)` — safe for typical attachment sizes.
-      // Until then the user-prompt builder short-circuits the
-      // attachment branch and no ingestion-filing block lands either.
-      void sessionId;
-      return [];
+      // Task 8: wired to the live session_attachments table via the
+      // ingestion library. Scoping is two-layered:
+      //   1. The API route upstream (/api/agent/chat) establishes the
+      //      session ownership via the Supabase auth cookie → we only
+      //      reach this code once the session's user_id matches
+      //      auth.uid(). Company isolation flows from there — a
+      //      session belongs to exactly one company, so every
+      //      attachment under that session is implicitly company-
+      //      scoped.
+      //   2. Migration 0009's `company_and_session_owner_isolation`
+      //      policy on `session_attachments` spells the session-owner
+      //      check out at the DB layer for auth-scoped clients. This
+      //      repo uses the service-role `db` connection (bypasses
+      //      RLS), so the scoping relies on (1) — which is why the
+      //      session id is threaded through ctx rather than being
+      //      inferred from `auth.uid()` here.
+      return getExtractedAttachmentsForSession(sessionId);
     },
 
     async getIngestionFilingSkill(companyId) {

@@ -21,12 +21,12 @@
 //     visual language matches the rest of the chat UI. No bespoke
 //     design system invented here.
 //
-// TODO (Task 8): wire `attachmentId` end-to-end. Today the card
-// accepts + forwards it, but the Brain CRUD routes don't yet
-// consume it. Task 8 ships the `session_attachments` status update
-// (approval → `committed`, with the generated doc id stored as the
-// commit target). Leaving the prop + forwarding in place now so the
-// Task 8 work is additive on the client.
+// Attachment wiring: when the proposal originated from a session
+// attachment (agent's `propose_document_create` referenced an extracted
+// file), the parent forwards `attachmentId` here. The approve handler
+// includes it in the Brain CRUD POST/PATCH body; the server then
+// transitions the attachment to `committed` and sets
+// `committed_doc_id` on success. See `/api/brain/documents/route.ts`.
 //
 // Slug + category resolution: the POST endpoint requires a `slug`
 // (kebab-case) and a `categoryId` (UUID). The agent-generated
@@ -287,9 +287,10 @@ async function submitCreate(
       slug: slugify(proposal.title),
       content: proposal.body_markdown,
       categoryId: match.id,
-      // TODO(Task 8): consume `attachmentId` server-side to mark the
-      // session_attachments row as `committed`. Today the field is
-      // simply carried through — the server will ignore it.
+      // Forwards to `/api/brain/documents` POST. When present the
+      // server calls `markCommitted(attachmentId, newDocId)` after
+      // insert. A mismatched company is a 400 — caught inline by the
+      // error path above.
       attachmentId,
     }),
   });
@@ -311,7 +312,8 @@ async function submitUpdate(
   if (proposal.frontmatter_patch) {
     body.frontmatterPatch = proposal.frontmatter_patch;
   }
-  // TODO(Task 8): see note in `submitCreate` — attachmentId wiring.
+  // Forwards to `/api/brain/documents/[id]` PATCH. See the paired
+  // note in `submitCreate` for the server-side contract.
   if (attachmentId) {
     body.attachmentId = attachmentId;
   }

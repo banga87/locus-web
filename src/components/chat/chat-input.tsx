@@ -12,13 +12,31 @@
 // During streaming the textarea is disabled and the send button
 // becomes a Stop button. The caller owns the `sendMessage` + `stop`
 // wiring and the isStreaming flag — we don't touch `useChat` here.
+//
+// Phase 1.5: attachment support. When `sessionId` is passed, the
+// composer renders a paperclip button + a chip list for attached
+// files. Uploads go through `/api/attachments` server-side; the
+// UserPromptSubmit hook reads `session_attachments` on the next turn,
+// so we don't need to include attachment ids in the chat POST body —
+// the chips are purely cosmetic client state.
 
-import { useCallback, useRef, type KeyboardEvent } from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import { ArrowUpIcon, SquareIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+
+import {
+  AttachmentInput,
+  type AttachmentUploadItem,
+} from './attachment-input';
+import { AttachmentChip } from './attachment-chip';
 
 interface ChatInputProps {
   value: string;
@@ -28,6 +46,12 @@ interface ChatInputProps {
   isStreaming: boolean;
   disabled?: boolean;
   placeholder?: string;
+  /**
+   * When provided, enables attachment upload UI. Attachments are
+   * persisted server-side against this session; removing a chip calls
+   * DELETE /api/attachments/[id] to discard.
+   */
+  sessionId?: string;
 }
 
 export function ChatInput({
@@ -38,14 +62,22 @@ export function ChatInput({
   isStreaming,
   disabled = false,
   placeholder = 'Message the agent…',
+  sessionId,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [attachments, setAttachments] = useState<AttachmentUploadItem[]>([]);
 
   const trySubmit = useCallback(() => {
     if (!value.trim()) return;
     if (isStreaming) return;
+    // Block submit while any attachment is still uploading — the
+    // UserPromptSubmit handler runs on the server against the
+    // session's attachment rows, so a chat turn that predates the
+    // upload completion would miss the attached content. Waiting for
+    // the chip to flip to extracted/error keeps the contract simple.
+    if (attachments.some((a) => a.status === 'uploading')) return;
     onSubmit();
-  }, [value, isStreaming, onSubmit]);
+  }, [value, isStreaming, attachments, onSubmit]);
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -64,6 +96,57 @@ export function ChatInput({
     [trySubmit, value, onChange],
   );
 
+  // Attachment list management. The chip list is cosmetic state —
+  // uploads are tracked server-side against the session.
+  const handleUploadStart = useCallback((item: AttachmentUploadItem) => {
+    setAttachments((prev) => [...prev, item]);
+  }, []);
+
+  const handleUploadComplete = useCallback(
+    (localId: string, update: Partial<AttachmentUploadItem>) => {
+      setAttachments((prev) =>
+        prev.map((a) => (a.localId === localId ? { ...a, ...update } : a)),
+      );
+    },
+    [],
+  );
+
+  const handleUploadError = useCallback((localId: string, message: string) => {
+    setAttachments((prev) =>
+      prev.map((a) =>
+        a.localId === localId
+          ? { ...a, status: 'error', errorMessage: message }
+          : a,
+      ),
+    );
+  }, []);
+
+  const handleRemoveAttachment = useCallback(
+    async (item: AttachmentUploadItem) => {
+      // Drop from local state immediately.
+      setAttachments((prev) => prev.filter((a) => a.localId !== item.localId));
+
+      // If the server ever saw this attachment, flip it to discarded.
+      // Fire-and-forget: the UI has already removed the chip, and a
+      // failed discard lingers as a stuck extracted row until the
+      // nightly cron — no worse than before.
+      if (item.serverId) {
+        try {
+          await fetch(`/api/attachments/${item.serverId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+        } catch (err) {
+          console.warn('[chat-input] discard request failed', err);
+        }
+      }
+    },
+    [],
+  );
+
+  const canAttach = Boolean(sessionId);
+  const hasAttachments = attachments.length > 0;
+
   return (
     <form
       onSubmit={(e) => {
@@ -72,6 +155,25 @@ export function ChatInput({
       }}
       className="flex flex-col gap-2"
     >
+      {hasAttachments ? (
+        <ul
+          className="flex flex-wrap gap-1.5"
+          role="list"
+          aria-label="Attached files"
+        >
+          {attachments.map((a) => (
+            <AttachmentChip
+              key={a.localId}
+              filename={a.filename}
+              status={a.status}
+              sizeBytes={a.sizeBytes}
+              errorMessage={a.errorMessage}
+              onRemove={() => handleRemoveAttachment(a)}
+            />
+          ))}
+        </ul>
+      ) : null}
+
       <div
         className={cn(
           'flex items-end gap-2 rounded-2xl border border-input bg-background px-3 py-2',
@@ -79,6 +181,16 @@ export function ChatInput({
           'transition-colors',
         )}
       >
+        {canAttach && sessionId ? (
+          <AttachmentInput
+            sessionId={sessionId}
+            onUploadStart={handleUploadStart}
+            onUploadComplete={handleUploadComplete}
+            onUploadError={handleUploadError}
+            disabled={disabled || isStreaming}
+          />
+        ) : null}
+
         <Textarea
           ref={textareaRef}
           value={value}
@@ -112,7 +224,11 @@ export function ChatInput({
             size="icon-sm"
             variant="default"
             aria-label="Send message"
-            disabled={disabled || value.trim().length === 0}
+            disabled={
+              disabled ||
+              value.trim().length === 0 ||
+              attachments.some((a) => a.status === 'uploading')
+            }
           >
             <ArrowUpIcon className="size-3.5" aria-hidden="true" />
           </Button>

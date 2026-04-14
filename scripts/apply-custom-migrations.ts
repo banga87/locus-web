@@ -33,6 +33,7 @@ const CUSTOM_MIGRATIONS = [
   '0007_agents_ingestion.sql',
   '0008_skill_manifests_select_only.sql',
   '0009_session_attachments_owner_scope.sql',
+  '0010_attachment_storage.sql',
 ];
 
 async function main() {

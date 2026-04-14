@@ -19,6 +19,10 @@ import {
   extractDocumentTypeFromContent,
   maybeScheduleSkillManifestRebuild,
 } from '@/lib/brain/save';
+import {
+  getAttachment,
+  markCommitted,
+} from '@/lib/ingestion/attachments';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -31,10 +35,33 @@ const patchSchema = z
     confidenceLevel: z.enum(['high', 'medium', 'low']).optional(),
     ownerId: z.string().uuid().nullable().optional(),
     categoryId: z.string().uuid().optional(),
+    // Phase 1.5 Task 8: attachment id forwarded from the proposal-card
+    // client-side approve handler. On a successful PATCH we mark the
+    // attachment as `committed` against this document. Optional — non-
+    // ingestion updates omit this.
+    //
+    // `frontmatterPatch` is accepted for forward compatibility with
+    // the proposal-card submitUpdate path; the current PATCH doesn't
+    // merge it into frontmatter yet (Phase 2 work). Kept in the
+    // schema so Zod doesn't strip it and the client doesn't 400.
+    attachmentId: z.string().uuid().optional(),
+    frontmatterPatch: z.record(z.string(), z.unknown()).optional(),
     // isCore is intentionally absent from schema — stripped by Zod via
     // strict parsing below (default zod strips unknown keys).
   })
-  .refine((v) => Object.keys(v).length > 0, 'At least one field required.');
+  .refine(
+    (v) => {
+      // "At least one field required" — ignore attachmentId +
+      // frontmatterPatch for the refinement: they're metadata, not
+      // content changes. An empty PATCH with only these would be a
+      // no-op update.
+      const keys = Object.keys(v).filter(
+        (k) => k !== 'attachmentId' && k !== 'frontmatterPatch',
+      );
+      return keys.length > 0;
+    },
+    'At least one field required.',
+  );
 
 export const GET = (_req: Request, { params }: RouteCtx) =>
   withAuth(async (ctx) => {
@@ -125,6 +152,19 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
       .limit(1);
     if (!existing) return error('not_found', 'Document not found.', 404);
 
+    // Validate attachment id (if provided) against the company. Same
+    // contract as POST — mismatch is 400, not a silent skip.
+    if (patch.attachmentId) {
+      const attachment = await getAttachment(patch.attachmentId, companyId);
+      if (!attachment) {
+        return error(
+          'attachment_not_found',
+          'Attachment does not exist or belongs to a different company.',
+          400,
+        );
+      }
+    }
+
     // Recompute path if category changed.
     let newPath: string | undefined;
     if (patch.categoryId && patch.categoryId !== existing.categoryId) {
@@ -197,6 +237,16 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
     maybeScheduleSkillManifestRebuild(companyId, existing.type);
     if (newType !== existing.type) {
       maybeScheduleSkillManifestRebuild(companyId, newType);
+    }
+
+    // Mark the originating attachment as committed (fire-and-forget;
+    // see POST handler for the rationale).
+    if (patch.attachmentId) {
+      try {
+        await markCommitted(patch.attachmentId, id);
+      } catch (err) {
+        console.error('[api/brain/documents/[id]] markCommitted failed', err);
+      }
     }
 
     return success(updated);

@@ -72,4 +72,32 @@ describe('ChatInput', () => {
     setup({ value: '' });
     expect(screen.getByLabelText('Send message')).toBeDisabled();
   });
+
+  it('renders the attachment paperclip button only when sessionId is provided', () => {
+    // No sessionId — no paperclip. Phase 1 behaviour.
+    const withoutSession = render(
+      <ChatInput
+        value=""
+        onChange={() => {}}
+        onSubmit={() => {}}
+        isStreaming={false}
+      />,
+    );
+    expect(
+      withoutSession.queryByLabelText('Attach file'),
+    ).not.toBeInTheDocument();
+    withoutSession.unmount();
+
+    // With sessionId — paperclip appears. Phase 1.5 additive wiring.
+    render(
+      <ChatInput
+        value=""
+        onChange={() => {}}
+        onSubmit={() => {}}
+        isStreaming={false}
+        sessionId="00000000-0000-0000-0000-000000000000"
+      />,
+    );
+    expect(screen.getByLabelText('Attach file')).toBeInTheDocument();
+  });
 });

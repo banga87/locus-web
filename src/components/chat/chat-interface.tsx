@@ -154,6 +154,7 @@ export function ChatInterface({
             onSubmit={handleSend}
             onStop={() => stop()}
             isStreaming={isStreaming}
+            sessionId={sessionId}
           />
         </div>
       </div>

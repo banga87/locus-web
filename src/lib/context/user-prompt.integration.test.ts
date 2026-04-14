@@ -170,7 +170,12 @@ describe('buildUserPromptPayload (integration with live DB)', () => {
     const payload = await buildUserPromptPayload(
       {
         companyId,
-        sessionId: 'irrelevant-session-for-skill-matching',
+        // A valid nil UUID. The attachment branch now hits the real
+        // session_attachments table; the column type is uuid, so an
+        // arbitrary placeholder string would throw a 22P02. This
+        // nil-uuid has no attachments — the branch short-circuits to
+        // empty, which is what the skill-matching assertions need.
+        sessionId: '00000000-0000-0000-0000-000000000000',
         agentSkillIds,
         userMessage: 'please draft a landing page for our new product',
       },
@@ -193,7 +198,11 @@ describe('buildUserPromptPayload (integration with live DB)', () => {
     const payload = await buildUserPromptPayload(
       {
         companyId,
-        sessionId: 'n/a',
+        // See note above about the nil-uuid. This test exercises the
+        // "empty agent pool" short-circuit, so the session id doesn't
+        // matter to what we're asserting — but it must parse as a
+        // uuid now that the repo runs a real Drizzle query.
+        sessionId: '00000000-0000-0000-0000-000000000000',
         agentSkillIds: [],
         userMessage: 'please draft a landing page for our new product',
       },
@@ -221,11 +230,16 @@ describe('buildUserPromptPayload (integration with live DB)', () => {
     }
   });
 
-  it('returns no extracted attachments until Task 8 ships', async () => {
-    // Smoke test the stub — the builder relies on this method
-    // returning `[]` for the attachment branch to short-circuit.
+  it('returns [] for a session with no extracted attachments (Task 8 wired)', async () => {
+    // Post-Task 8 this now hits the real `session_attachments` table.
+    // The fixture's session id is a bare non-UUID string from the
+    // caller's test — Drizzle will return no rows. This exercises the
+    // "no attachments" short-circuit path that the builder uses to
+    // skip the ingestion-filing co-injection.
     const repo = createDbUserPromptRepo();
-    const attachments = await repo.getExtractedAttachments('any-session');
+    const attachments = await repo.getExtractedAttachments(
+      '00000000-0000-0000-0000-000000000000',
+    );
     expect(attachments).toEqual([]);
   });
 

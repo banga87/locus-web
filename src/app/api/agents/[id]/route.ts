@@ -43,6 +43,7 @@ const patchSchema = z
     baselineDocIds: z.array(z.string().uuid()).optional(),
     skillIds: z.array(z.string().uuid()).optional(),
     systemPromptSnippet: z.string().max(4000).optional(),
+    capabilities: z.array(z.enum(['web'])).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'At least one field required.');
 
@@ -92,6 +93,12 @@ function readAgentFrontmatter(content: string): Partial<AgentWizardInput> & {
       typeof parsed.system_prompt_snippet === 'string'
         ? parsed.system_prompt_snippet
         : undefined,
+    capabilities: (() => {
+      const caps = toStringArray(parsed.capabilities);
+      if (!caps) return undefined;
+      // Filter to known labels — mirrors the wizard schema's enum.
+      return caps.filter((c): c is 'web' => c === 'web');
+    })(),
   };
 }
 
@@ -141,6 +148,7 @@ export const GET = (_req: Request, { params }: RouteCtx) =>
       baselineDocIds: frontmatter.baselineDocIds ?? [],
       skillIds: frontmatter.skillIds ?? [],
       systemPromptSnippet: frontmatter.systemPromptSnippet ?? '',
+      capabilities: frontmatter.capabilities ?? [],
     });
   });
 
@@ -251,6 +259,7 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
       skillIds: patch.skillIds ?? stored.skillIds ?? [],
       systemPromptSnippet:
         patch.systemPromptSnippet ?? stored.systemPromptSnippet ?? '',
+      capabilities: patch.capabilities ?? stored.capabilities ?? [],
     };
 
     const built = buildAgentDefinitionDoc(merged);

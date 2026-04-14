@@ -24,6 +24,10 @@ export const ALLOWED_MODELS = [
   'claude-haiku-4-5-20251001',
 ] as const;
 
+// Known capability labels (v1):
+//   - 'web' — grants web_search + web_fetch tool visibility.
+// Route-layer policy (see `src/app/api/agent/chat/grantedCapabilities.ts`)
+// gates tool availability based on this array.
 export const agentWizardInputSchema = z.object({
   title: z.string().min(1).max(200),
   slug: z.string().regex(/^[a-z0-9-]+$/).min(1).max(128),
@@ -32,6 +36,7 @@ export const agentWizardInputSchema = z.object({
   baselineDocIds: z.array(z.string().uuid()),
   skillIds: z.array(z.string().uuid()),
   systemPromptSnippet: z.string().max(4000),
+  capabilities: z.array(z.enum(['web'])).default([]),
 });
 
 export type AgentWizardInput = z.infer<typeof agentWizardInputSchema>;

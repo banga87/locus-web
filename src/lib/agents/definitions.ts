@@ -38,6 +38,9 @@ export interface BuiltAgentDoc {
 export function buildAgentDefinitionDoc(
   input: AgentWizardInput,
 ): BuiltAgentDoc {
+  // Frontmatter key ordering mirrors the wizard form order; `capabilities`
+  // tails the list and is consumed by the chat route's
+  // `deriveGrantedCapabilities` to gate tool visibility (e.g. web_search).
   const frontmatter: Record<string, unknown> = {
     type: 'agent-definition',
     title: input.title,
@@ -47,6 +50,7 @@ export function buildAgentDefinitionDoc(
     baseline_docs: input.baselineDocIds,
     skills: input.skillIds,
     system_prompt_snippet: input.systemPromptSnippet,
+    capabilities: input.capabilities,
   };
   const yamlStr = yaml.dump(frontmatter, { lineWidth: 120 }).trimEnd();
   const content = `---\n${yamlStr}\n---\n`;

@@ -138,9 +138,15 @@ CREATE INDEX IF NOT EXISTS "session_attachments_status_idx"
 -- Uses the `get_user_company_id()` helper from migration 0003. The
 -- plan in docs suggested an inline subquery, but the codebase-wide
 -- pattern is the helper — deviating would fragment the policy surface
--- and make auditing harder. Both tables use the same single FOR ALL
--- company-isolation policy; the service role bypasses RLS so server
--- writes still work.
+-- and make auditing harder.
+--
+-- `skill_manifests` is a service-managed cache: writes only ever
+-- happen through the Drizzle service-role client (which bypasses RLS).
+-- The auth-scoped client is narrowed to SELECT-only as defense-in-depth
+-- so a leaked anon/auth JWT cannot mutate the manifest cache.
+--
+-- `session_attachments` keeps FOR ALL because user-driven inserts
+-- (uploads, pasted text) flow through the auth-scoped client.
 --
 -- Idempotent: DROP IF EXISTS + CREATE so re-running is safe.
 -- --------------------------------------------------------------------
@@ -148,7 +154,7 @@ CREATE INDEX IF NOT EXISTS "session_attachments_status_idx"
 ALTER TABLE "skill_manifests" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "company_isolation" ON "skill_manifests";
 CREATE POLICY "company_isolation" ON "skill_manifests"
-  FOR ALL
+  FOR SELECT TO authenticated
   USING (company_id = get_user_company_id());
 
 ALTER TABLE "session_attachments" ENABLE ROW LEVEL SECURITY;

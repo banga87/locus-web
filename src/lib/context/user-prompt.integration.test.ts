@@ -245,15 +245,20 @@ describe('buildUserPromptPayload (integration with live DB)', () => {
     expect(attachments).toEqual([]);
   });
 
-  it('returns null for the ingestion-filing skill until Task 10 seeds it, even when a user doc titled like one exists', async () => {
-    // The built-in `ingestion-filing` skill isn't seeded until Task 10.
-    // Until then the repo returns `null` unconditionally — crucially,
-    // it must NOT match a user-authored skill doc whose title happens
-    // to contain "ingestion" / "filing". An earlier draft used a
-    // `title ILIKE '%ingestion filing%'` filter; this test seeds a
-    // plausible false-positive and asserts the slug guard keeps it
-    // out of the injected context. Once Task 10 lands this test
-    // should be tightened to assert the seeded body comes through.
+  it('ignores user-authored docs titled like the built-in filing skill (slug guard, Task 10)', async () => {
+    // The repo looks up the built-in ingestion-filing skill by the
+    // stable slug `ingestion-filing` — NOT by title. This test seeds a
+    // user-authored skill-type doc whose title contains "ingestion" /
+    // "filing" but whose slug is distinct. An earlier draft of the
+    // repo used `title ILIKE '%ingestion filing%'` and would have
+    // silently injected e.g. "Canada Ingestion Filing SOPs" on every
+    // attachment turn; the slug guard is what closes that door.
+    //
+    // This fixture deliberately skips `seedBuiltins`, so the repo
+    // should return `null` — there is no doc with slug
+    // `ingestion-filing` in this company. A separate integration test
+    // at `scripts/__tests__/seed-builtins.integration.test.ts`
+    // exercises the seeded-body-comes-through half of the contract.
     const [decoy] = await db
       .insert(documents)
       .values({

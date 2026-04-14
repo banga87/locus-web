@@ -316,18 +316,17 @@ export function stripFrontmatter(raw: string): string {
 
 /**
  * Build a Drizzle-backed UserPromptRepo. Safe to call per request —
- * the returned object is a thin closure. Two of the four methods are
- * stubs pending downstream tasks:
+ * the returned object is a thin closure. All four methods are wired:
  *
- *   - `getExtractedAttachments` — Task 8 wires up
- *     `session_attachments` reads. Returns `[]` until then.
- *   - `getIngestionFilingSkill` — Task 10 seeds the built-in
- *     `ingestion-filing` skill doc. Returns `null` until the seed is
- *     present in the company's brain.
+ *   - `getManifest` + `getSkillBodies` — Task 6 (skill manifest).
+ *   - `getExtractedAttachments` — Task 8 (session_attachments reads).
+ *   - `getIngestionFilingSkill` — Task 10 (seeded built-in skill doc
+ *     looked up by stable slug `ingestion-filing`).
  *
- * The skill-matching half (getManifest + getSkillBodies) is fully
- * wired; the Phase 1.5 plan explicitly orders Task 6 ahead of Tasks
- * 8 + 10 so the UserPromptSubmit handler lands in one pass.
+ * All methods return `null` / `[]` on expected-miss paths (no manifest
+ * yet, no attachments this session, seed not yet applied on a legacy
+ * company) — the builder in `./user-prompt.ts` degrades gracefully on
+ * every branch.
  */
 export function createDbUserPromptRepo(): UserPromptRepo {
   return {
@@ -391,21 +390,39 @@ export function createDbUserPromptRepo(): UserPromptRepo {
     },
 
     async getIngestionFilingSkill(companyId) {
-      // TODO(Task 10): query the built-in ingestion-filing skill by
-      // stable slug (seeded per company — e.g.
-      // `eq(documents.slug, 'ingestion-filing')` plus the usual
-      // company + type + deletedAt guards). Returning `null` until
-      // Task 10 ships keeps us safe from accidentally matching a
-      // user's own skill-type doc that happens to contain
-      // "ingestion" or "filing" in its title (an earlier draft used
-      // `ilike(title, '%ingestion filing%')` and would have silently
-      // injected e.g. "Canada Ingestion Filing SOPs" on every
-      // attachment turn).
+      // Look up the built-in ingestion-filing skill by its stable slug
+      // (`ingestion-filing`), which `scripts/seed-builtins.ts` commits
+      // to as the idempotency key. Matching on (companyId, type, slug)
+      // is exact — a user's own skill doc whose title contains
+      // "ingestion" or "filing" cannot collide, because the slug is
+      // reserved. An earlier draft used `ilike(title, '%ingestion
+      // filing%')` and would have silently injected e.g. "Canada
+      // Ingestion Filing SOPs" on every attachment turn; the slug
+      // guard is what closes that door.
       //
-      // The builder already tolerates `null` gracefully — attachment
-      // blocks still land, just without the filing companion block.
-      void companyId;
-      return null;
+      // Degrades to `null` when the seed hasn't landed yet (e.g. a
+      // company that predates the Task 10 backfill, or a test company
+      // that skipped `seedBuiltins`). The builder handles `null`
+      // gracefully — attachment blocks still land, just without the
+      // filing companion block.
+      const [row] = await db
+        .select({
+          id: documents.id,
+          content: documents.content,
+        })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.companyId, companyId),
+            eq(documents.type, 'skill'),
+            eq(documents.slug, 'ingestion-filing'),
+            isNull(documents.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      if (!row) return null;
+      return { id: row.id, body: stripFrontmatter(row.content) };
     },
   };
 }

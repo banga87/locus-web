@@ -3,10 +3,13 @@
 // On submit we do four things in a single transaction: create the company,
 // attach the user to it, create their first brain, and seed that brain
 // with the Universal Base Pack. Then we try to regenerate the navigation
-// manifest (no-op for now — Task 11 wires it) and bounce the user to /.
+// manifest and seed the Phase 1.5 built-ins (ingestion-filing skill +
+// default agent-scaffolding) before bouncing the user to /.
 //
-// Anything that fails mid-flow rolls the whole thing back, so a user
-// never ends up half-set-up.
+// Anything that fails mid-flow rolls the transactional portion back; the
+// Phase 1.5 built-in seed runs best-effort — a failure there is logged
+// but doesn't invalidate the created company, because
+// `scripts/seed-builtins.ts --company <id>` can recover it later.
 
 import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
@@ -17,6 +20,7 @@ import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
 import { seedBrainFromUniversalPack } from '@/lib/templates/seed';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
+import { seedBuiltins } from '../../../../scripts/seed-builtins';
 import { Button } from '@/components/ui/button';
 
 // ----- Server Action -----------------------------------------------------
@@ -128,6 +132,20 @@ async function completeSetup(formData: FormData) {
   if (companyId && brainId) {
     await seedBrainFromUniversalPack(brainId, companyId);
     await tryRegenerateManifest(brainId);
+
+    // Phase 1.5 Task 10: seed the built-in ingestion-filing skill +
+    // default agent-scaffolding. Idempotent (so a retried setup after a
+    // partial failure is safe). Best-effort: a seeding failure here
+    // does not invalidate the created company — a support/backfill
+    // run via `scripts/seed-builtins.ts --company <id>` recovers it.
+    try {
+      await seedBuiltins(companyId);
+    } catch (err) {
+      console.warn(
+        `[setup] seedBuiltins failed for company ${companyId}:`,
+        err,
+      );
+    }
   }
 
   redirect('/');

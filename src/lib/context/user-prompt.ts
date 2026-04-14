@@ -261,7 +261,7 @@ function renderPointer(att: {
   const kb = Math.round(att.sizeBytes / 1024);
   const label = att.filename ?? att.id;
   return [
-    `[Attachment: ${label} \u2014 ${kb}KB extracted]`,
+    `[Attachment: ${label} — ${kb}KB extracted]`,
     `This document is too large to inline. Ask the user: "Would you like me to (a) file the full extracted text as a source document so it's searchable from now on, or (b) work through it section by section?"`,
   ].join('\n');
 }

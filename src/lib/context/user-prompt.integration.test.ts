@@ -229,13 +229,40 @@ describe('buildUserPromptPayload (integration with live DB)', () => {
     expect(attachments).toEqual([]);
   });
 
-  it('returns null for the ingestion-filing skill until Task 10 seeds it', async () => {
-    // The company in this fixture has no `ingestion-filing` skill
-    // seeded, so the ILIKE filter finds nothing. Once Task 10 lands
-    // this test should be tightened to assert the seeded body comes
-    // through.
-    const repo = createDbUserPromptRepo();
-    const filing = await repo.getIngestionFilingSkill(companyId);
-    expect(filing).toBeNull();
+  it('returns null for the ingestion-filing skill until Task 10 seeds it, even when a user doc titled like one exists', async () => {
+    // The built-in `ingestion-filing` skill isn't seeded until Task 10.
+    // Until then the repo returns `null` unconditionally — crucially,
+    // it must NOT match a user-authored skill doc whose title happens
+    // to contain "ingestion" / "filing". An earlier draft used a
+    // `title ILIKE '%ingestion filing%'` filter; this test seeds a
+    // plausible false-positive and asserts the slug guard keeps it
+    // out of the injected context. Once Task 10 lands this test
+    // should be tightened to assert the seeded body comes through.
+    const [decoy] = await db
+      .insert(documents)
+      .values({
+        companyId,
+        brainId,
+        categoryId,
+        title: 'Canada Ingestion Filing SOPs',
+        slug: `canada-ingestion-filing-sops-${suffix}`,
+        path: `up-cat-${suffix}/canada-ingestion-filing-sops-${suffix}`,
+        content: `---
+type: skill
+title: Canada Ingestion Filing SOPs
+---
+
+User-authored content that must NOT be injected as the built-in filing skill.`,
+        type: 'skill',
+        version: 1,
+      })
+      .returning({ id: documents.id });
+    try {
+      const repo = createDbUserPromptRepo();
+      const filing = await repo.getIngestionFilingSkill(companyId);
+      expect(filing).toBeNull();
+    } finally {
+      await db.delete(documents).where(eq(documents.id, decoy.id));
+    }
   });
 });

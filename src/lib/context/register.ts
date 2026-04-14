@@ -51,6 +51,11 @@ export function registerContextHandlers(): void {
   if (registered) return;
   registered = true;
 
+  // Factories are instantiated per call: they're thin closures over the
+  // module-level db client, so allocation cost is negligible. Do NOT
+  // memoise them module-level — that breaks the test-only cache-reset
+  // helpers by creating lifetime coupling between hot-reloads and repo
+  // state.
   registerHook(
     'SessionStart',
     async (event: HookEvent): Promise<HookDecision> => {

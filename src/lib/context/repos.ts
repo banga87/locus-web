@@ -30,7 +30,7 @@
 //     Redis via the Vercel Marketplace) when the autonomous loop
 //     starts running on separate workers.
 
-import { and, eq, ilike, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import yaml from 'js-yaml';
 
 import { db } from '@/db';
@@ -386,35 +386,21 @@ export function createDbUserPromptRepo(): UserPromptRepo {
     },
 
     async getIngestionFilingSkill(companyId) {
-      // Task 10 will seed a built-in skill doc with a stable slug
-      // ('ingestion-filing') — once that's in place, filter by
-      // `slug = 'ingestion-filing'` for a precise match. Until then
-      // we fall back to a title ILIKE so a manually-authored doc can
-      // satisfy the contract during development; returns `null` when
-      // no doc matches, and the builder skips the filing block
-      // gracefully.
+      // TODO(Task 10): query the built-in ingestion-filing skill by
+      // stable slug (seeded per company — e.g.
+      // `eq(documents.slug, 'ingestion-filing')` plus the usual
+      // company + type + deletedAt guards). Returning `null` until
+      // Task 10 ships keeps us safe from accidentally matching a
+      // user's own skill-type doc that happens to contain
+      // "ingestion" or "filing" in its title (an earlier draft used
+      // `ilike(title, '%ingestion filing%')` and would have silently
+      // injected e.g. "Canada Ingestion Filing SOPs" on every
+      // attachment turn).
       //
-      // TODO(Task 10): tighten the filter to `eq(documents.slug,
-      // 'ingestion-filing')` once the seed guarantees that slug.
-      const rows = await db
-        .select({
-          id: documents.id,
-          content: documents.content,
-        })
-        .from(documents)
-        .where(
-          and(
-            eq(documents.companyId, companyId),
-            eq(documents.type, 'skill'),
-            ilike(documents.title, '%ingestion filing%'),
-            isNull(documents.deletedAt),
-          ),
-        )
-        .limit(1);
-
-      const row = rows[0];
-      if (!row) return null;
-      return { id: row.id, body: stripFrontmatter(row.content) };
+      // The builder already tolerates `null` gracefully — attachment
+      // blocks still land, just without the filing companion block.
+      void companyId;
+      return null;
     },
   };
 }

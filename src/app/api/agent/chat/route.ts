@@ -47,6 +47,7 @@ import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { buildToolSet } from '@/lib/agent/tool-bridge';
 import type { AgentContext } from '@/lib/agent/types';
 import { getBrainForCompany } from '@/lib/brain/queries';
+import { registerContextHandlers } from '@/lib/context/register';
 import { registerLocusTools } from '@/lib/tools';
 import { recordUsage } from '@/lib/usage/record';
 import { flushEvents } from '@/lib/audit/logger';
@@ -67,6 +68,14 @@ export async function POST(req: Request) {
   // Phase 0 tools register lazily — make sure they're in the registry
   // before `buildToolSet()` enumerates. Idempotent.
   registerLocusTools();
+  // Phase 1.5 context-injection handlers (SessionStart etc). Idempotent
+  // — the module-level `registered` guard makes subsequent calls a
+  // no-op. Call it here instead of a shared boot module because the
+  // agent harness must stay platform-agnostic (see AGENTS.md); this
+  // route already imports `@/db` via `sessionManager` and friends, so
+  // the Drizzle-backed context repo's imports don't widen the
+  // harness-boundary surface.
+  registerContextHandlers();
 
   let body: ChatRequestBody;
   try {

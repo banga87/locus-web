@@ -204,3 +204,64 @@ describe('agent/tool-bridge — buildToolSet', () => {
     expect(Object.keys(set).sort()).toEqual([...ALWAYS_PRESENT].sort());
   });
 });
+
+describe('buildToolSet — capability filter', () => {
+  // Use a capability-declaring test tool, not the real web tools — this
+  // test doesn't rely on registerLocusTools() and keeps mock shape tight.
+  const webTool: LocusTool = {
+    name: 'test_web_tool',
+    description: 'Test tool that declares web capability.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+    capabilities: ['web'],
+    isReadOnly: () => true,
+    call: vi.fn(async () => ({
+      success: true,
+      data: {},
+      metadata: { responseTokens: 0, executionMs: 0, documentsAccessed: [] },
+    })),
+  };
+
+  it('includes a tool with no capabilities declared regardless of granted capabilities', () => {
+    registerTool(buildEchoTool({ name: 'unrestricted' }));
+    const ctx: ToolContext = { ...TEST_CTX, grantedCapabilities: [] };
+    const set = buildToolSet(ctx);
+    expect(set).toHaveProperty('unrestricted');
+  });
+
+  it('excludes a web-capability tool when the ctx has no web capability', () => {
+    registerTool(webTool);
+    const ctx: ToolContext = { ...TEST_CTX, grantedCapabilities: [] };
+    const set = buildToolSet(ctx);
+    expect(set).not.toHaveProperty('test_web_tool');
+  });
+
+  it('includes a web-capability tool when the ctx grants web', () => {
+    registerTool(webTool);
+    const ctx: ToolContext = { ...TEST_CTX, grantedCapabilities: ['web'] };
+    const set = buildToolSet(ctx);
+    expect(set).toHaveProperty('test_web_tool');
+  });
+
+  it('excludes a tool requiring multiple caps when only one is granted', () => {
+    const multiCap: LocusTool = {
+      ...webTool,
+      name: 'multi_cap_tool',
+      capabilities: ['web', 'write'],
+    };
+    registerTool(multiCap);
+    const ctx: ToolContext = { ...TEST_CTX, grantedCapabilities: ['web'] };
+    const set = buildToolSet(ctx);
+    expect(set).not.toHaveProperty('multi_cap_tool');
+  });
+
+  it('still includes the unconditional propose tools even when grantedCapabilities is empty', () => {
+    const ctx: ToolContext = { ...TEST_CTX, grantedCapabilities: [] };
+    const set = buildToolSet(ctx);
+    expect(set).toHaveProperty('propose_document_create');
+    expect(set).toHaveProperty('propose_document_update');
+  });
+});

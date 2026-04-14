@@ -59,6 +59,18 @@ export function bridgeLocusTool(
 }
 
 /**
+ * A LocusTool is allowed if its capability list is empty/absent OR every
+ * required capability is in the caller's granted set. Propose tools pass
+ * because they declare none. Web tools (capabilities: ['web']) pass only
+ * when ctx.grantedCapabilities includes 'web'.
+ */
+function toolAllowed(tool: LocusTool, ctx: ToolContext): boolean {
+  const required = tool.capabilities ?? [];
+  if (required.length === 0) return true;
+  return required.every((c) => ctx.grantedCapabilities.includes(c));
+}
+
+/**
  * Build the full tool set for a turn: every registered Locus brain tool
  * (4 today: search/get/diff/history) merged with the two user-gated
  * propose_document_* tools and any external tools supplied by the
@@ -84,6 +96,7 @@ export function buildToolSet(
   const brainTools = getAllTools();
   const bridged: Record<string, Tool> = {};
   for (const t of brainTools) {
+    if (!toolAllowed(t, ctx)) continue;
     bridged[t.name] = bridgeLocusTool(t, ctx);
   }
   // Propose tools are AI SDK `tool()` calls (not `dynamicTool`) because

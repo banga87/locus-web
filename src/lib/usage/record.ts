@@ -16,6 +16,7 @@
 
 import { db } from '@/db';
 import { usageRecords } from '@/db/schema';
+import { MARKUP } from './markup';
 
 interface RecordUsageParams {
   companyId: string;
@@ -30,9 +31,6 @@ interface RecordUsageParams {
   /** Cached subset of inputTokens. Charged at the cached rate. */
   cachedInputTokens?: number;
 }
-
-/** Markup over provider cost. ADR-003: 30% across the board for MVP. */
-const MARKUP = 0.3;
 
 /**
  * Per-model rates in USD per 1K tokens. Update when:
@@ -52,6 +50,12 @@ const PROVIDER_COST_PER_1K_TOKENS: Record<
     input: 0.003,
     cachedInput: 0.0003,
     output: 0.015,
+  },
+  'anthropic/claude-haiku-4-5-20251001': {
+    // Rates from docs/superpowers/notes/2026-04-14-rate-lookups.md (confirmed 2026-04-15)
+    input: 0.001,
+    cachedInput: 0.0001,
+    output: 0.005,
   },
 };
 

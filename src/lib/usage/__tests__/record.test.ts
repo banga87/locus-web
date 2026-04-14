@@ -122,3 +122,25 @@ describe('usage/record — cost math', () => {
     expect(row.providerCostUsd).toBeCloseTo(0.00006, 6);
   });
 });
+
+describe('usage/record — Haiku 4.5 rates', () => {
+  it('prices Haiku input + output correctly with 30% markup', async () => {
+    await recordUsage({
+      companyId: 'c1',
+      sessionId: null,
+      userId: null,
+      modelId: 'anthropic/claude-haiku-4-5-20251001',
+      inputTokens: 1000,
+      outputTokens: 500,
+      totalTokens: 1500,
+    });
+
+    const row = insertCalls[insertCalls.length - 1]!;
+    // Haiku rates: input 0.001, output 0.005 per 1K
+    const expectedProvider = (1000 / 1000) * 0.001 + (500 / 1000) * 0.005;
+    expect(row.providerCostUsd).toBeCloseTo(expectedProvider, 6);
+    expect(row.customerCostUsd).toBeCloseTo(expectedProvider * 1.3, 6);
+    expect(row.provider).toBe('anthropic');
+    expect(row.model).toBe('claude-haiku-4-5-20251001');
+  });
+});

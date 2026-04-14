@@ -39,25 +39,27 @@ const patchSchema = z
     // client-side approve handler. On a successful PATCH we mark the
     // attachment as `committed` against this document. Optional — non-
     // ingestion updates omit this.
-    //
-    // `frontmatterPatch` is accepted for forward compatibility with
-    // the proposal-card submitUpdate path; the current PATCH doesn't
-    // merge it into frontmatter yet (Phase 2 work). Kept in the
-    // schema so Zod doesn't strip it and the client doesn't 400.
     attachmentId: z.string().uuid().optional(),
-    frontmatterPatch: z.record(z.string(), z.unknown()).optional(),
-    // isCore is intentionally absent from schema — stripped by Zod via
-    // strict parsing below (default zod strips unknown keys).
+    // NOTE: `frontmatterPatch` is deliberately NOT in this schema. A
+    // previous draft accepted it for forward compatibility with the
+    // propose_document_update tool, but the server never applied it —
+    // the user saw a "Filed." checkmark while their frontmatter changes
+    // were discarded. The `.strict()` call below now rejects any
+    // client sending `frontmatterPatch` with a 400 so the UX gap is
+    // loud, not silent. Phase 2 will ship real frontmatter-merge
+    // handling. See `src/components/chat/proposal-card.tsx::
+    // submitUpdate` for the paired client-side guard.
+    // isCore is intentionally absent — it is stripped from the body
+    // *before* zod parsing (see handler below) so strict mode never
+    // rejects a legitimate request carrying the (ignored) flag.
   })
+  .strict()
   .refine(
     (v) => {
-      // "At least one field required" — ignore attachmentId +
-      // frontmatterPatch for the refinement: they're metadata, not
-      // content changes. An empty PATCH with only these would be a
-      // no-op update.
-      const keys = Object.keys(v).filter(
-        (k) => k !== 'attachmentId' && k !== 'frontmatterPatch',
-      );
+      // "At least one field required" — ignore attachmentId for the
+      // refinement: it's metadata, not a content change. An empty
+      // PATCH with only attachmentId would be a no-op update.
+      const keys = Object.keys(v).filter((k) => k !== 'attachmentId');
       return keys.length > 0;
     },
     'At least one field required.',

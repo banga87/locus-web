@@ -313,11 +313,20 @@ export async function verifySessionOwnership(
  * file then becomes a thin wiring layer — no DB detail leaks out of
  * the ingestion library.
  *
+ * Company-scoped on purpose: explicit defence-in-depth that matches
+ * the contract of the other read helpers in this module
+ * (`getAttachment`, `listAttachmentsForSession`). The caller (the
+ * DB-backed UserPromptRepo) already receives `companyId` in the
+ * input context, so threading it through here is trivial — and it
+ * means a bug upstream that leaks a `sessionId` across tenants still
+ * can't pull attachments from the wrong company.
+ *
  * Order: `created_at DESC` so the newest attachment inlines first
  * (the budget allocator in user-prompt.ts drops the oldest when the
  * budget runs out).
  */
 export async function getExtractedAttachmentsForSession(
+  companyId: string,
   sessionId: string,
 ): Promise<
   Array<{
@@ -337,6 +346,7 @@ export async function getExtractedAttachmentsForSession(
     .from(sessionAttachments)
     .where(
       and(
+        eq(sessionAttachments.companyId, companyId),
         eq(sessionAttachments.sessionId, sessionId),
         eq(sessionAttachments.status, 'extracted'),
         // Only rows with non-null extracted_text are injection-eligible.

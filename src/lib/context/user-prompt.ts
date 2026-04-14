@@ -91,9 +91,15 @@ export interface UserPromptRepo {
    * Extracted attachments for this session — the rows with
    * `status = 'extracted'`, `extracted_text IS NOT NULL`. Task 8
    * ships the attachments pipeline; the DB-backed implementation in
-   * `./repos.ts` stubs this to `[]` until then.
+   * `./repos.ts` filters on `companyId = ? AND sessionId = ?` so a
+   * bug upstream where a `sessionId` leaked cross-tenant can't pull
+   * rows from the wrong company. Mirrors the company-scope contract
+   * on every other read helper in `src/lib/ingestion/attachments.ts`.
    */
-  getExtractedAttachments(sessionId: string): Promise<
+  getExtractedAttachments(
+    companyId: string,
+    sessionId: string,
+  ): Promise<
     Array<{
       id: string;
       filename: string | null;
@@ -150,7 +156,10 @@ export async function buildUserPromptPayload(
   // but over the remaining budget, it falls through to pointer form
   // (the LLM gets the metadata + the user-choice question, which is
   // more useful than a half-inlined body).
-  const attachments = await repo.getExtractedAttachments(input.sessionId);
+  const attachments = await repo.getExtractedAttachments(
+    input.companyId,
+    input.sessionId,
+  );
   let attachmentBudgetLeft = ATTACHMENT_INLINE_BUDGET_BYTES;
   for (const att of attachments) {
     const inlineEligible =

@@ -121,6 +121,10 @@ export async function extractPdf(buf: Buffer): Promise<ExtractResult> {
  *     mime whitelist should have rejected earlier, but belt-and-braces.
  */
 export async function extractDocx(buf: Buffer): Promise<ExtractResult> {
+  // mammoth's async internals use standard Promise + async/await — no
+  // Promise.try dependency, so we don't need the polyfill call that
+  // extractPdf uses. Keep this in mind if mammoth is ever swapped for
+  // a pdf.js-style parser.
   try {
     const result = await mammoth.extractRawText({ buffer: buf });
     return {

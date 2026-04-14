@@ -372,24 +372,22 @@ export function createDbUserPromptRepo(): UserPromptRepo {
       }));
     },
 
-    async getExtractedAttachments(sessionId) {
+    async getExtractedAttachments(companyId, sessionId) {
       // Task 8: wired to the live session_attachments table via the
-      // ingestion library. Scoping is two-layered:
+      // ingestion library. Scoping is defence-in-depth:
       //   1. The API route upstream (/api/agent/chat) establishes the
-      //      session ownership via the Supabase auth cookie → we only
+      //      session ownership via the Supabase auth cookie — we only
       //      reach this code once the session's user_id matches
-      //      auth.uid(). Company isolation flows from there — a
-      //      session belongs to exactly one company, so every
-      //      attachment under that session is implicitly company-
-      //      scoped.
+      //      auth.uid(), so the caller's company is implicit.
       //   2. Migration 0009's `company_and_session_owner_isolation`
       //      policy on `session_attachments` spells the session-owner
       //      check out at the DB layer for auth-scoped clients. This
       //      repo uses the service-role `db` connection (bypasses
-      //      RLS), so the scoping relies on (1) — which is why the
-      //      session id is threaded through ctx rather than being
-      //      inferred from `auth.uid()` here.
-      return getExtractedAttachmentsForSession(sessionId);
+      //      RLS), so we ALSO filter by `companyId = ? AND sessionId
+      //      = ?` explicitly below — transitive scoping via (1) is
+      //      too easy to break silently if a future refactor leaks a
+      //      sessionId across tenants.
+      return getExtractedAttachmentsForSession(companyId, sessionId);
     },
 
     async getIngestionFilingSkill(companyId) {

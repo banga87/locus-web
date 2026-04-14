@@ -489,7 +489,10 @@ describe('getExtractedAttachmentsForSession', () => {
       extractedText: 'shouldnt come through',
     });
 
-    const results = await getExtractedAttachmentsForSession(sessionId);
+    const results = await getExtractedAttachmentsForSession(
+      companyId,
+      sessionId,
+    );
     const ids = results.map((r) => r.id);
 
     expect(ids).toContain(extracted.id);

@@ -13,8 +13,9 @@
 //   - Approve on create forwards `attachmentId` in the POST body
 //     (Task 8 seam).
 //   - Approve on update → PATCH /api/brain/documents/[id] with
-//     body + frontmatter_patch forwarded as `content` + `frontmatterPatch`,
-//     and `attachmentId` forwarded when supplied (same Task 8 seam).
+//     body forwarded as `content`, `attachmentId` forwarded when
+//     supplied (same Task 8 seam), and `frontmatterPatch` deliberately
+//     NOT in the body (Phase 2 feature; server `.strict()` rejects it).
 //   - Discard → calls `onDiscard`, makes no network call.
 //   - HTTP error response → shows inline error without crashing.
 //   - Raw fetch rejection (network-level failure) → shows inline error
@@ -200,13 +201,19 @@ describe('ProposalCard', () => {
     expect(init.method).toBe('PATCH');
     const body = JSON.parse(init.body as string);
     // Lock in the Task 8 seam on the PATCH path as well as POST — the
-    // field is passed through today, consumed server-side once Task 8
-    // ships session_attachments commit wiring.
+    // attachmentId field is passed through today, consumed server-side
+    // by `markCommitted`.
     expect(body).toMatchObject({
       content: 'Corrected figure.',
-      frontmatterPatch: { status: 'active' },
       attachmentId: 'att-patch-1',
     });
+    // `frontmatterPatch` is deliberately NOT forwarded until Phase 2
+    // ships server-side merge handling. The server's PATCH zod schema
+    // uses `.strict()`, so sending it today would 400. The rendered
+    // proposal preview still shows what the agent proposed, but the
+    // approve path drops it before hitting the wire. See
+    // `proposal-card.tsx::submitUpdate` for the paired guard.
+    expect(body).not.toHaveProperty('frontmatterPatch');
   });
 
   it('surfaces inline error when the PATCH endpoint returns non-2xx', async () => {

@@ -232,12 +232,14 @@ describe('buildUserPromptPayload (integration with live DB)', () => {
 
   it('returns [] for a session with no extracted attachments (Task 8 wired)', async () => {
     // Post-Task 8 this now hits the real `session_attachments` table.
-    // The fixture's session id is a bare non-UUID string from the
-    // caller's test — Drizzle will return no rows. This exercises the
-    // "no attachments" short-circuit path that the builder uses to
-    // skip the ingestion-filing co-injection.
+    // The nil-uuid session has no rows, and the query filters on
+    // `companyId = ? AND sessionId = ?` so even a sessionId collision
+    // across tenants wouldn't surface rows into the wrong company's
+    // turn. This exercises the "no attachments" short-circuit path
+    // that the builder uses to skip the ingestion-filing co-injection.
     const repo = createDbUserPromptRepo();
     const attachments = await repo.getExtractedAttachments(
+      companyId,
       '00000000-0000-0000-0000-000000000000',
     );
     expect(attachments).toEqual([]);

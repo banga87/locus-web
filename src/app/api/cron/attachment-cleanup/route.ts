@@ -15,9 +15,17 @@
 // route (the route is not exposed to the public — add it to
 // `vercel.json` crons with the secret configured in project env).
 //
-// TODO(post-Task-8): implement the storage purge loop. The
-// `discarded → purged` transition is a straight hard-delete (the row
-// carries no audit value once the storage blob is gone).
+// TODO(Phase 2 — storage orphan cleanup): implement the storage purge
+// loop. Two orphan classes to reconcile here:
+//   1. `session_attachments` rows at `status = 'discarded'` older than
+//      7 days → hard-delete the row and its Storage blob. The row
+//      carries no audit value once the blob is gone.
+//   2. Storage objects under `attachments/{company}/{session}/…` with
+//      no matching DB row (aborted uploads that never finalised into a
+//      session_attachments insert) → delete the object. Cross-check
+//      against `session_attachments.id` before purge so a racing
+//      insert isn't clobbered.
+// Flagged as Important by the Task 8 reviewer; out of Phase 1.5 scope.
 
 import { timingSafeEqual } from 'node:crypto';
 

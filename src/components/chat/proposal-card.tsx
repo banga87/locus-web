@@ -302,15 +302,20 @@ async function submitUpdate(
 ): Promise<Response> {
   // PATCH only carries the fields the user can change. The propose
   // tool's `body_patch` maps straight to `content` on the CRUD
-  // endpoint; frontmatter_patch is wired through unchanged (the
-  // endpoint currently ignores it — Phase 2 will lift it into
-  // individual column updates).
+  // endpoint.
+  //
+  // TODO(Phase 2): forward `proposal.frontmatter_patch` once the
+  // server-side PATCH schema grows real frontmatter-merge handling.
+  // Today we deliberately do NOT include it in the body — the server
+  // rejects unknown keys with a 400 via the route's `.strict()` zod
+  // schema, so sending an unhandled field would fail the whole update.
+  // The rendered `UpdatePreview` still shows the proposed frontmatter
+  // changes so the user knows what was proposed; they just won't be
+  // applied yet. See `src/app/api/brain/documents/[id]/route.ts`
+  // for the paired server-side guard.
   const body: Record<string, unknown> = {};
   if (typeof proposal.body_patch === 'string') {
     body.content = proposal.body_patch;
-  }
-  if (proposal.frontmatter_patch) {
-    body.frontmatterPatch = proposal.frontmatter_patch;
   }
   // Forwards to `/api/brain/documents/[id]` PATCH. See the paired
   // note in `submitCreate` for the server-side contract.

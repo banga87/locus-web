@@ -18,6 +18,7 @@ import {
   uuid,
   text,
   integer,
+  jsonb,
   timestamp,
   pgEnum,
   index,
@@ -25,6 +26,7 @@ import {
 import { companies } from './companies';
 import { brains } from './brains';
 import { users } from './users';
+import { documents } from './documents';
 
 export const sessionStatusEnum = pgEnum('session_status', [
   'active',
@@ -47,6 +49,24 @@ export const sessions = pgTable(
       .references(() => users.id),
 
     status: sessionStatusEnum('status').notNull().default('active'),
+
+    // Phase 1.5 — user-built agent binding. NULL means "default
+    // Platform Agent." ON DELETE SET NULL so sessions survive when an
+    // agent-definition document is deleted; the session then falls back
+    // to the default agent on its next turn.
+    agentDefinitionId: uuid('agent_definition_id').references(
+      () => documents.id,
+      { onDelete: 'set null' },
+    ),
+
+    // Phase 1.5 — SessionStart-injected scaffolding cache. `SessionStart`
+    // materialises the company's agent-scaffolding doc into a
+    // ContextBlock payload and stashes it here so subsequent turns in
+    // the same session skip the rebuild. `scaffoldingCacheVersion`
+    // mirrors the `version` frontmatter field on the scaffolding doc
+    // — a mismatch invalidates the cache.
+    scaffoldingCache: jsonb('scaffolding_cache'),
+    scaffoldingCacheVersion: integer('scaffolding_cache_version'),
 
     // Denormalised counters. Updated atomically with each `session_turns`
     // insert via a transaction in `sessionManager.persistTurn`.

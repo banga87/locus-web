@@ -15,6 +15,7 @@ import { withAuth, requireCompany } from '@/lib/api/handler';
 import { error, success } from '@/lib/api/response';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
+import { extractDocumentTypeFromContent } from '@/lib/brain/save';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -138,6 +139,15 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
     const nextVersion = existing.version + 1;
     const nextContent = patch.content ?? existing.content;
 
+    // Phase 1.5: re-derive the denormalised `type` column from
+    // frontmatter whenever content is updated. If the patch leaves
+    // content alone, leave the existing `type` alone — no point
+    // re-parsing unchanged content.
+    const typeUpdate =
+      patch.content !== undefined
+        ? { type: extractDocumentTypeFromContent(patch.content) }
+        : {};
+
     const changedKeys = Object.keys(patch);
     const summary = `updated: ${changedKeys.join(', ')}`;
 
@@ -152,6 +162,7 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
         ...(patch.ownerId !== undefined ? { ownerId: patch.ownerId } : {}),
         ...(patch.categoryId !== undefined ? { categoryId: patch.categoryId } : {}),
         ...(newPath !== undefined ? { path: newPath } : {}),
+        ...typeUpdate,
         version: nextVersion,
         updatedAt: new Date(),
       })

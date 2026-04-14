@@ -15,3 +15,5 @@ export * from './usage-records';
 export * from './sessions';
 export * from './session-turns';
 export * from './mcp-connections';
+export * from './skill-manifests';
+export * from './session-attachments';

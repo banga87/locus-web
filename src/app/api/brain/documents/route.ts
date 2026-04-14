@@ -18,6 +18,7 @@ import { decodeCursor, encodeCursor } from '@/lib/api/pagination';
 import { created, error, paginated } from '@/lib/api/response';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
+import { extractDocumentTypeFromContent } from '@/lib/brain/save';
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 
@@ -127,6 +128,11 @@ export const POST = (req: Request) =>
 
     const path = `${category.slug}/${input.slug}`;
 
+    // Phase 1.5: mirror the frontmatter `type` field into the
+    // denormalised column so manifest rebuilds + agent-scaffolding
+    // lookups can hit the index instead of parsing content.
+    const documentType = extractDocumentTypeFromContent(input.content);
+
     try {
       const [doc] = await db
         .insert(documents)
@@ -143,6 +149,7 @@ export const POST = (req: Request) =>
           confidenceLevel: input.confidenceLevel ?? 'medium',
           isCore: false,
           ownerId: ctx.userId,
+          type: documentType,
           version: 1,
         })
         .returning();

@@ -29,6 +29,8 @@ const CUSTOM_MIGRATIONS = [
   '0003_rls_policies.sql',
   '0004_sessions.sql',
   '0005_mcp_connections.sql',
+  '0006_document_type_column.sql',
+  '0007_agents_ingestion.sql',
 ];
 
 async function main() {

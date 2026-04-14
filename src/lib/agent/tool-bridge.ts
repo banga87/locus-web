@@ -19,6 +19,7 @@
 import { dynamicTool, jsonSchema, type Tool } from 'ai';
 import type { JSONSchema7 } from '@ai-sdk/provider';
 
+import { PROPOSE_TOOL_PREFIX } from '@/lib/context/proposals';
 import { executeTool, getAllTools } from '@/lib/tools/executor';
 import {
   proposeDocumentCreateTool,
@@ -89,7 +90,13 @@ export function buildToolSet(
   // their input schemas are compile-time Zod shapes; see propose-document.ts.
   // The `as Tool` coercion squares the narrower inferred type against the
   // wider `Record<string, Tool>` return contract.
-  bridged.propose_document_create = proposeDocumentCreateTool as Tool;
-  bridged.propose_document_update = proposeDocumentUpdateTool as Tool;
+  //
+  // Registration keys use `PROPOSE_TOOL_PREFIX` so that the tool name the
+  // LLM sees here, the prefix the PostToolUse handler matches on, and
+  // the prefix the chat UI renders ProposalCard on all share one source
+  // of truth. Renaming the family is a one-line change in
+  // `src/lib/context/proposals.ts`.
+  bridged[`${PROPOSE_TOOL_PREFIX}create`] = proposeDocumentCreateTool as Tool;
+  bridged[`${PROPOSE_TOOL_PREFIX}update`] = proposeDocumentUpdateTool as Tool;
   return { ...bridged, ...externalTools };
 }

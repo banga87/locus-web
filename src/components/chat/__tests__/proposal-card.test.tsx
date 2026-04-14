@@ -10,10 +10,15 @@
 //   - Update proposal renders target_doc_id + rationale.
 //   - Approve on create → GET /api/brain/categories, then POST
 //     /api/brain/documents with the resolved categoryId.
+//   - Approve on create forwards `attachmentId` in the POST body
+//     (Task 8 seam).
 //   - Approve on update → PATCH /api/brain/documents/[id] with
-//     body + frontmatter_patch forwarded as `content` + `frontmatterPatch`.
+//     body + frontmatter_patch forwarded as `content` + `frontmatterPatch`,
+//     and `attachmentId` forwarded when supplied (same Task 8 seam).
 //   - Discard → calls `onDiscard`, makes no network call.
-//   - Error HTTP response → shows inline error without crashing.
+//   - HTTP error response → shows inline error without crashing.
+//   - Raw fetch rejection (network-level failure) → shows inline error
+//     without crashing (exercises the `catch` in `handleApprove`).
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -171,14 +176,18 @@ describe('ProposalCard', () => {
   // Approve — update
   // -------------------------------------------------------------------------
 
-  it('clicking Approve on an update proposal PATCHes the target doc', async () => {
+  it('clicking Approve on an update proposal PATCHes the target doc and forwards attachmentId', async () => {
     const onApprove = vi.fn();
     fetchSpy.mockResolvedValueOnce(
       mockJsonResponse({ id: UPDATE_PROPOSAL.target_doc_id }),
     );
 
     render(
-      <ProposalCard proposal={UPDATE_PROPOSAL} onApprove={onApprove} />,
+      <ProposalCard
+        proposal={UPDATE_PROPOSAL}
+        attachmentId="att-patch-1"
+        onApprove={onApprove}
+      />,
     );
     fireEvent.click(screen.getByRole('button', { name: /approve/i }));
 
@@ -190,9 +199,13 @@ describe('ProposalCard', () => {
     );
     expect(init.method).toBe('PATCH');
     const body = JSON.parse(init.body as string);
+    // Lock in the Task 8 seam on the PATCH path as well as POST — the
+    // field is passed through today, consumed server-side once Task 8
+    // ships session_attachments commit wiring.
     expect(body).toMatchObject({
       content: 'Corrected figure.',
       frontmatterPatch: { status: 'active' },
+      attachmentId: 'att-patch-1',
     });
   });
 
@@ -213,6 +226,22 @@ describe('ProposalCard', () => {
     expect(screen.getByRole('alert').textContent).toMatch(
       /Document not found/,
     );
+  });
+
+  it('surfaces inline error when the fetch rejects with a network-level failure', async () => {
+    // Exercises the `catch` block in `handleApprove` — distinct from
+    // the non-2xx HTTP path above. A raw rejection (DNS failure,
+    // offline, CORS preflight reject) must not crash the card: the
+    // user sees the underlying message inline so they know to retry.
+    fetchSpy.mockRejectedValueOnce(new Error('network down'));
+
+    render(<ProposalCard proposal={UPDATE_PROPOSAL} />);
+    fireEvent.click(screen.getByRole('button', { name: /approve/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('alert').textContent).toMatch(/network down/);
   });
 
   // -------------------------------------------------------------------------

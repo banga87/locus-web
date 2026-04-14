@@ -29,6 +29,7 @@
 
 import { Loader2Icon, CheckIcon, AlertTriangleIcon } from 'lucide-react';
 
+import { PROPOSE_TOOL_PREFIX } from '@/lib/context/proposals';
 import { cn } from '@/lib/utils';
 
 import { ProposalCard, type Proposal } from './proposal-card';
@@ -58,11 +59,24 @@ function extractProposal(result: unknown): Proposal | null {
   const r = result as { isProposal?: unknown; proposal?: unknown };
   if (r.isProposal !== true) return null;
   if (!r.proposal || typeof r.proposal !== 'object') return null;
-  const p = r.proposal as { kind?: unknown };
+  const p = r.proposal as {
+    kind?: unknown;
+    title?: unknown;
+    target_doc_id?: unknown;
+  };
   if (p.kind !== 'create' && p.kind !== 'update') return null;
-  // At this point the payload shape matches the `Proposal` discriminator.
-  // The narrower per-kind fields are validated by the server on approval
-  // (the create/update routes re-parse via zod) so we don't re-check here.
+  // Shallow per-kind field check. The server re-parses the full payload
+  // via zod on approval, but a malformed create (valid kind, missing
+  // title) would otherwise render a blank card. Return null so the
+  // renderer falls back to the default tool-call pill instead of
+  // showing empty cells.
+  if (p.kind === 'create') {
+    if (typeof p.title !== 'string' || p.title.length === 0) return null;
+  } else {
+    if (typeof p.target_doc_id !== 'string' || p.target_doc_id.length === 0) {
+      return null;
+    }
+  }
   return r.proposal as Proposal;
 }
 
@@ -78,7 +92,7 @@ export function ToolCallIndicator({
   // The state check is intentionally loose (`complete` OR the payload
   // is present) so a proposal always surfaces even if the AI SDK
   // reports a non-standard state for a side-effect-free tool.
-  if (toolName.startsWith('propose_document_')) {
+  if (toolName.startsWith(PROPOSE_TOOL_PREFIX)) {
     const proposal = extractProposal(result);
     if (proposal) {
       return <ProposalCard proposal={proposal} />;

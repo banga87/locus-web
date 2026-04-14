@@ -257,6 +257,9 @@ async function submitCreate(
   // GET /api/brain/categories returns the list for the caller's brain;
   // we pick the matching slug or throw a "category not found" error
   // the outer handler surfaces inline.
+  //
+  // GET /api/brain/categories is re-fetched per approve click. Acceptable
+  // while proposals are rare; revisit caching when Task 8 ships bulk ingestion.
   const catResponse = await fetch('/api/brain/categories', {
     credentials: 'include',
   });

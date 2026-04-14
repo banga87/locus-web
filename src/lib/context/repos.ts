@@ -40,11 +40,17 @@ import type { ScaffoldingRepo } from './scaffolding';
 
 // ---- Scaffolding cache ----------------------------------------------------
 //
-// Tiny LRU keyed by (companyId, version). Version is always the
-// frontmatter `version:` value as of the last read, not the database
-// row's auto-incremented `version` column — because the auto-increment
-// bumps on every save, the effect is identical but it saves us a
-// second SELECT for the canonical number.
+// Cache key is (companyId, version) where `version` prefers the
+// frontmatter `version:` field (user-visible — the wizard increments
+// it on save) and falls back to the DB row's auto-incremented
+// `version` column when the frontmatter omits it. Both bump on save,
+// so any change invalidates the cache entry deterministically: a new
+// save produces a new key, and the stale entry lingers until eviction.
+//
+// Eviction is insertion-order bounded at `SCAFFOLDING_CACHE_MAX` —
+// not strictly LRU, though with version-keyed entries insertion order
+// is effectively recency anyway. A touch-on-read nudges hit keys to
+// the back of the iteration order so idle entries get dropped first.
 
 interface CachedScaffolding {
   id: string;

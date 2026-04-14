@@ -118,8 +118,16 @@ interface RunAgentTurnResult {
  *   - An empty `blocks` array also produces an empty string, matching
  *     the "missing scaffolding doc" degradation path in
  *     `buildScaffoldingPayload`.
+ *
+ * @internal This is exported for contract testing only — see
+ * `src/lib/context/rendering-contract.test.ts`, which verifies the
+ * duck-typed shape here stays in lock-step with `InjectedContext` /
+ * `ContextBlock`. Do NOT import this from production code; use the
+ * hook-bus `inject` decision instead. Exporting it does not relax the
+ * harness boundary — the context module still has no import dependency
+ * on the harness; the contract test is the only consumer.
  */
-function renderInjectedContext(payload: unknown): string {
+export function renderInjectedContext(payload: unknown): string {
   if (!payload || typeof payload !== 'object') return '';
   const blocks = (payload as { blocks?: unknown }).blocks;
   if (!Array.isArray(blocks) || blocks.length === 0) return '';
@@ -234,9 +242,12 @@ export async function runAgentTurn(
   // right before the latest user turn so the LLM sees the context as
   // part of the current exchange without polluting the cached system
   // prompt.
-  const lastUserMessage = [...params.messages]
-    .reverse()
-    .find((m) => m.role === 'user');
+  //
+  // One index scan serves both the hook payload (latest user message)
+  // and the splice position below — avoid a second O(n) pass.
+  const lastUserIdx = findLastUserIndex(params.messages);
+  const lastUserMessage =
+    lastUserIdx === -1 ? undefined : params.messages[lastUserIdx];
   const promptDecision = await runHook({
     name: 'UserPromptSubmit',
     ctx: params.ctx,
@@ -249,11 +260,15 @@ export async function runAgentTurn(
   if (promptDecision.decision === 'inject') {
     const rendered = renderInjectedContext(promptDecision.payload);
     if (rendered) {
-      // Splice as a system-role message immediately before the latest
-      // user turn. Keeping the prior conversation intact means prompt
-      // caching still hits for the earlier turns; only the per-turn
-      // context ahead of the new user message is fresh.
-      const lastUserIdx = findLastUserIndex(params.messages);
+      // Per-turn context (skills, attachments) is spliced before the latest
+      // user turn. This deliberately does NOT benefit from Anthropic's prompt
+      // cache — per-turn content changes every turn by definition. The cache
+      // boundary lives at the system prompt: session-stable content (scaffolding,
+      // baseline docs via SessionStart) is concatenated onto `systemPrompt`
+      // above, where cache_control markers will land in Task 9's final wiring.
+      // Do NOT move this splice into the system prompt — that would make every
+      // turn re-send the entire per-turn stack and invalidate the session-stable
+      // cache hit.
       const insertAt = lastUserIdx === -1 ? params.messages.length : lastUserIdx;
       const systemMsg: ModelMessage = {
         role: 'system',

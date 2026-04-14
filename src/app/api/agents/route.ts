@@ -124,46 +124,69 @@ export const POST = (req: Request) =>
     const built = buildAgentDefinitionDoc(input);
     const path = `${AGENT_PATH_PREFIX}${input.slug}`;
 
-    const [doc] = await db
-      .insert(documents)
-      .values({
+    // Belt-and-braces: the select-first check above leaves a race
+    // window where a concurrent insert can sneak in. No
+    // `(brain_id, slug, type)` unique index exists yet, so this
+    // catch is defensive — if a future migration adds the index,
+    // Postgres 23505 (unique_violation) will surface here and we
+    // map it to the same 409 the select-first path returns. Until
+    // then the wrap costs nothing.
+    try {
+      const [doc] = await db
+        .insert(documents)
+        .values({
+          companyId,
+          brainId: brain.id,
+          categoryId: null,
+          title: input.title,
+          slug: input.slug,
+          path,
+          content: built.content,
+          summary: null,
+          status: 'active',
+          confidenceLevel: 'medium',
+          isCore: false,
+          ownerId: ctx.userId,
+          type: 'agent-definition',
+          version: 1,
+        })
+        .returning();
+
+      await db.insert(documentVersions).values({
         companyId,
-        brainId: brain.id,
-        categoryId: null,
-        title: input.title,
-        slug: input.slug,
-        path,
+        documentId: doc.id,
+        versionNumber: 1,
         content: built.content,
-        summary: null,
-        status: 'active',
-        confidenceLevel: 'medium',
-        isCore: false,
-        ownerId: ctx.userId,
-        type: 'agent-definition',
-        version: 1,
-      })
-      .returning();
+        changeSummary: 'created',
+        changedBy: ctx.userId,
+        changedByType: 'human',
+        metadataSnapshot: {
+          title: doc.title,
+          status: doc.status,
+          confidenceLevel: doc.confidenceLevel,
+        },
+      });
 
-    await db.insert(documentVersions).values({
-      companyId,
-      documentId: doc.id,
-      versionNumber: 1,
-      content: built.content,
-      changeSummary: 'created',
-      changedBy: ctx.userId,
-      changedByType: 'human',
-      metadataSnapshot: {
-        title: doc.title,
-        status: doc.status,
-        confidenceLevel: doc.confidenceLevel,
-      },
-    });
+      // Agent-definitions are not skills — skip the skill-manifest
+      // rebuild (see Task 4 scope note in the plan). Still fire the
+      // brain-manifest regeneration so the new doc shows up in brain
+      // navigation + lookups.
+      await tryRegenerateManifest(brain.id);
 
-    // Agent-definitions are not skills — skip the skill-manifest
-    // rebuild (see Task 4 scope note in the plan). Still fire the
-    // brain-manifest regeneration so the new doc shows up in brain
-    // navigation + lookups.
-    await tryRegenerateManifest(brain.id);
-
-    return created(doc);
+      return created(doc);
+    } catch (e) {
+      if (
+        e !== null &&
+        typeof e === 'object' &&
+        'code' in e &&
+        (e as { code?: unknown }).code === '23505'
+      ) {
+        return error(
+          'slug_conflict',
+          'An agent with that slug already exists.',
+          409,
+        );
+      }
+      throw e;
+    }
   });

@@ -18,9 +18,23 @@ vi.mock('@/lib/api/auth', () => ({
 }));
 
 // ---- Manifest regen mock -------------------------------------------------
+//
+// Exposed as a module-scoped spy so individual tests can assert the
+// brain-manifest regen fires on create/update/delete. The skill-manifest
+// path (`maybeScheduleSkillManifestRebuild`) should never run here —
+// agent-definitions aren't skills — so we mock `@/lib/brain/save` to
+// expose a spy on it and assert it stays zero-calls.
 
+const tryRegenerateManifest = vi.fn(async (_brainId: string) => {});
 vi.mock('@/lib/brain/manifest-regen', () => ({
-  tryRegenerateManifest: vi.fn(async () => {}),
+  tryRegenerateManifest: (...a: [string]) => tryRegenerateManifest(...a),
+}));
+
+const maybeScheduleSkillManifestRebuild = vi.fn();
+vi.mock('@/lib/brain/save', () => ({
+  maybeScheduleSkillManifestRebuild: (...a: unknown[]) =>
+    maybeScheduleSkillManifestRebuild(...a),
+  extractDocumentTypeFromContent: () => 'agent-definition',
 }));
 
 // ---- Brain lookup mock ---------------------------------------------------
@@ -101,6 +115,8 @@ function ctxOf(role: Role, companyId: string | null = 'co-1') {
 beforeEach(() => {
   requireAuth.mockReset();
   requireRole.mockReset();
+  tryRegenerateManifest.mockClear();
+  maybeScheduleSkillManifestRebuild.mockClear();
   nextResults = [];
 });
 
@@ -261,6 +277,11 @@ describe('POST /api/agents', () => {
     expect(body.data.type).toBe('agent-definition');
     expect(body.data.slug).toBe('marketing-copywriter');
     expect(body.data.path).toBe('agents/marketing-copywriter');
+    // Manifest regen fires for the owning brain; skill-manifest does
+    // NOT — agent-definitions aren't skills.
+    expect(tryRegenerateManifest).toHaveBeenCalledTimes(1);
+    expect(tryRegenerateManifest).toHaveBeenCalledWith('brain-1');
+    expect(maybeScheduleSkillManifestRebuild).not.toHaveBeenCalled();
   });
 });
 
@@ -366,6 +387,37 @@ describe('PATCH /api/agents/[id]', () => {
     const body = await res.json();
     expect(body.data.title).toBe('New title');
     expect(body.data.version).toBe(2);
+    // Manifest regen fires exactly once, for this brain only.
+    expect(tryRegenerateManifest).toHaveBeenCalledTimes(1);
+    expect(tryRegenerateManifest).toHaveBeenCalledWith('brain-1');
+    expect(maybeScheduleSkillManifestRebuild).not.toHaveBeenCalled();
+  });
+
+  it('500 corrupt_agent when stored frontmatter has no model and patch does not supply one', async () => {
+    requireAuth.mockResolvedValue(ctxOf('editor'));
+    requireRole.mockImplementation(() => {});
+    // Frontmatter with `model` field stripped — simulates a stored doc
+    // corrupted or produced by an older buggy write path.
+    const corruptContent = `---
+type: agent-definition
+title: Marketing Copywriter
+slug: marketing-copywriter
+tool_allowlist: null
+baseline_docs: []
+skills: []
+system_prompt_snippet: You are a copywriter.
+---
+`;
+    nextResults.push([{ ...sampleAgent, content: corruptContent }]);
+    const res = await itemPATCH(
+      makeReq('http://x', 'PATCH', { title: 'New title' }),
+      { params },
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error.code).toBe('corrupt_agent');
+    // No manifest regen — we bail before the write.
+    expect(tryRegenerateManifest).not.toHaveBeenCalled();
   });
 });
 
@@ -416,5 +468,10 @@ describe('DELETE /api/agents/[id]', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data).toEqual({ id: 'd-1' });
+    // Manifest regen fires on soft-delete so the brain manifest drops
+    // the entry; skill-manifest path is still silent.
+    expect(tryRegenerateManifest).toHaveBeenCalledTimes(1);
+    expect(tryRegenerateManifest).toHaveBeenCalledWith('brain-1');
+    expect(maybeScheduleSkillManifestRebuild).not.toHaveBeenCalled();
   });
 });

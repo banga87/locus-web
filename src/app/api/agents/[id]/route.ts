@@ -59,11 +59,11 @@ function readAgentFrontmatter(content: string): Partial<AgentWizardInput> & {
   type?: string;
 } {
   if (!content.startsWith('---\n')) return {};
+  // `buildAgentDefinitionDoc` always emits `\n---\n` (trailing newline
+  // after the close fence), so we don't need an EOF fallback.
   const closeIdx = content.indexOf('\n---\n', 4);
-  const closeIdxEof =
-    closeIdx === -1 && content.endsWith('\n---') ? content.length - 4 : closeIdx;
-  if (closeIdxEof === -1) return {};
-  const block = content.slice(4, closeIdxEof);
+  if (closeIdx === -1) return {};
+  const block = content.slice(4, closeIdx);
 
   const parsed = yaml.load(block) as Record<string, unknown> | null;
   if (!parsed || typeof parsed !== 'object') return {};
@@ -193,7 +193,10 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
     // unreachable in practice because POST validates a full input.
     const stored = readAgentFrontmatter(existing.content);
 
-    // Slug conflict check — only when the slug actually changes.
+    // Slug conflict check — only when the slug actually changes. There
+    // is a race window between this select and the update below where a
+    // concurrent insert could land on the same slug; we accept that for
+    // MVP (same trade-off as the POST path, see route.ts:102-103).
     if (patch.slug !== undefined && patch.slug !== existing.slug) {
       const [collision] = await db
         .select({ id: documents.id })
@@ -216,10 +219,29 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
       }
     }
 
+    // If both the patch and stored frontmatter lack `model`, we'd have
+    // silently defaulted — masking data corruption in the stored doc.
+    // Fail loudly instead so the missing field is visible.
+    const storedModel = stored.model;
+    const effectiveModel = patch.model ?? storedModel;
+    if (
+      typeof effectiveModel !== 'string' ||
+      !(ALLOWED_MODELS as readonly string[]).includes(effectiveModel)
+    ) {
+      console.warn(
+        `[agents] PATCH on ${id}: stored agent has invalid/missing model; cannot safely rewrite frontmatter`,
+      );
+      return error(
+        'corrupt_agent',
+        'Stored agent-definition is missing or has an invalid model field.',
+        500,
+      );
+    }
+
     const merged: AgentWizardInput = {
       title: patch.title ?? stored.title ?? existing.title,
       slug: patch.slug ?? stored.slug ?? existing.slug,
-      model: patch.model ?? stored.model ?? 'claude-sonnet-4-6',
+      model: effectiveModel,
       toolAllowlist:
         patch.toolAllowlist === null
           ? undefined

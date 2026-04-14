@@ -37,6 +37,8 @@ export interface AgentContext {
   companyId: string;
   /** Session this turn belongs to. `null` only for one-off invocations (rare). */
   sessionId: string | null;
+  /** Null for the default Platform Agent; set to a document id for user-built agents. */
+  agentDefinitionId?: string | null;
   /**
    * Cancellation. The route layer wires `Request.signal` to this; the
    * harness propagates it to `streamText`. Aborts cause a clean

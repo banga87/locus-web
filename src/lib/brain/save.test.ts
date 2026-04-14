@@ -94,6 +94,47 @@ describe('parseFrontmatterRaw', () => {
     expect(fm.type).toBe('pricing-model');
     expect(fm.custom_field).toBe('foo');
   });
+
+  // The parser is a deliberately tolerant line-scan, not a real YAML
+  // engine — these tests pin its degenerate-input behaviour so a future
+  // rewrite can't silently change the contract.
+
+  it('returns {} when the frontmatter body is YAML `null`', () => {
+    // A bare `null` line has no colon and is skipped by the line-scan,
+    // so the result is the empty object — NOT a thrown parse error.
+    expect(parseFrontmatterRaw('---\nnull\n---\n')).toEqual({});
+  });
+
+  it('returns {} when the frontmatter body is a YAML array', () => {
+    // Sequence items (`- item`) have no colon; the line-scan skips
+    // them and returns the empty object rather than failing.
+    expect(parseFrontmatterRaw('---\n- item\n---\n')).toEqual({});
+  });
+
+  it('still extracts well-formed keys from malformed/mixed-indent blocks', () => {
+    // A second line with bad indentation but no colon is silently
+    // skipped — the well-formed `type: skill` line still resolves.
+    // This is the contract the route handlers depend on: invalid
+    // frontmatter degrades gracefully instead of nuking the type.
+    const raw = '---\ntype: skill\n  bad indent\n---\n';
+    expect(parseFrontmatterRaw(raw)).toEqual({ type: 'skill' });
+  });
+
+  it('keeps colons in the value (only the first colon is the separator)', () => {
+    // URLs and other colon-bearing values must survive intact —
+    // `indexOf` is used (not `split(':')`) so only the first colon
+    // separates key and value.
+    const raw = '---\nurl: http://x\n---\n';
+    expect(parseFrontmatterRaw(raw)).toEqual({ url: 'http://x' });
+  });
+
+  it('parses a frontmatter block ending in `---` with no trailing newline', () => {
+    // Locks in the EOF fallback branch: a document that ends
+    // immediately after the closing `---` (no LF) must still parse.
+    expect(parseFrontmatterRaw('---\ntype: skill\n---')).toEqual({
+      type: 'skill',
+    });
+  });
 });
 
 describe('extractDocumentTypeFromContent', () => {

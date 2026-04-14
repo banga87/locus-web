@@ -57,7 +57,6 @@ export function parseFrontmatterRaw(
 }
 
 function parseScalar(raw: string): string | number | boolean | null {
-  if (raw === '') return '';
   if (raw === 'null') return null;
   if (raw === 'true') return true;
   if (raw === 'false') return false;

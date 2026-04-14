@@ -14,12 +14,17 @@
 // ALTER TYPE churn when the state machine grows. The enum-like helpers
 // below give TypeScript call sites the same type safety an enum would.
 //
-// RLS: see `src/db/migrations/0007_agents_ingestion.sql`. Single
-// company-isolation policy using `get_user_company_id()`. The session
-// owner's boundary is enforced by the parent `sessions` policy
-// transitively (attachments that reference a session the caller can't
-// see aren't reachable anyway, but the company_id column gives us a
-// direct index for the status-cleanup cron).
+// RLS: defined in `src/db/migrations/0007_agents_ingestion.sql` and
+// tightened in `src/db/migrations/0009_session_attachments_owner_scope.sql`.
+// The active policy (`company_and_session_owner_isolation`) enforces
+// BOTH company isolation via `get_user_company_id()` AND the session
+// owner via an explicit `session_id IN (SELECT id FROM sessions WHERE
+// user_id = auth.uid())` subquery. Postgres RLS does NOT follow
+// foreign keys, so the session-owner check has to be spelled out
+// here — relying on the parent `sessions` policy transitively would
+// leave attachments visible cross-user within the same company. The
+// `company_id` column also gives the status-cleanup cron a direct
+// index without having to join `sessions`.
 
 import {
   pgTable,

@@ -48,6 +48,19 @@ vi.mock('@/db', () => ({
 vi.mock('@/db/schema', () => ({
   categories: {},
   companies: {},
+  // Task 9: the chat route now reads `sessions.agent_definition_id`
+  // to populate `AgentContext.agentDefinitionId`. The mock below
+  // hands `db.select()` a fake schema handle — Drizzle's `eq()` /
+  // `and()` run against it symbolically, so truthy property
+  // placeholders are all the chain needs. The shared `dbSelectMock`
+  // returns the same stub row for both the companies lookup and the
+  // sessions lookup; callers assert on the `ctx.agentDefinitionId`
+  // projection downstream.
+  sessions: {
+    id: 'sessions.id',
+    companyId: 'sessions.company_id',
+    agentDefinitionId: 'sessions.agent_definition_id',
+  },
 }));
 
 const recordUsageMock = vi.fn(async (_: unknown) => {});
@@ -290,6 +303,143 @@ describe('POST /api/agent/chat — happy path', () => {
         cachedInputTokens: 150,
       }),
     );
+  });
+});
+
+describe('POST /api/agent/chat — agentDefinitionId threading (Task 9)', () => {
+  // The route runs two `.select().from().where().limit()` chains:
+  //   1. Company name  (by companyId)
+  //   2. Session's agent-definition id  (by sessionId + companyId)
+  // Both resolve through the same `dbSelectMock`, so these tests use
+  // `mockResolvedValueOnce` in sequence to control each query's result.
+  beforeEach(() => {
+    requireAuthMock.mockResolvedValue(TEST_AUTH);
+    getBrainForCompanyMock.mockResolvedValue(TEST_BRAIN);
+  });
+
+  it('threads the session row agent_definition_id onto AgentContext', async () => {
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]); // companies
+    dbSelectMock.mockResolvedValueOnce([
+      { agentDefinitionId: 'agent-def-123' },
+    ]); // sessions
+
+    const result = {
+      toUIMessageStreamResponse: vi.fn(() => new Response('ok')),
+    };
+    runAgentTurnMock.mockResolvedValueOnce({ result });
+
+    await POST(
+      buildRequest(
+        buildBody(
+          [
+            {
+              id: 'msg-1',
+              role: 'user',
+              parts: [{ type: 'text', text: 'hi' }],
+            },
+          ],
+          'sess-with-agent',
+        ),
+      ),
+    );
+
+    const params = runAgentTurnMock.mock.calls[0]?.[0];
+    expect(params.ctx.agentDefinitionId).toBe('agent-def-123');
+    expect(params.ctx.sessionId).toBe('sess-with-agent');
+  });
+
+  it('resolves agentDefinitionId to null when the session row has no agent bound', async () => {
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]);
+    // Column is nullable; Drizzle returns `null` when the value is NULL.
+    dbSelectMock.mockResolvedValueOnce([{ agentDefinitionId: null }]);
+
+    const result = {
+      toUIMessageStreamResponse: vi.fn(() => new Response('ok')),
+    };
+    runAgentTurnMock.mockResolvedValueOnce({ result });
+
+    await POST(
+      buildRequest(
+        buildBody(
+          [
+            {
+              id: 'msg-1',
+              role: 'user',
+              parts: [{ type: 'text', text: 'hi' }],
+            },
+          ],
+          'sess-no-agent',
+        ),
+      ),
+    );
+
+    const params = runAgentTurnMock.mock.calls[0]?.[0];
+    expect(params.ctx.agentDefinitionId).toBeNull();
+  });
+
+  it('resolves agentDefinitionId to null when there is no sessionId (fresh chat)', async () => {
+    // No session → no second query. Only the company name lookup runs.
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]);
+
+    const result = {
+      toUIMessageStreamResponse: vi.fn(() => new Response('ok')),
+    };
+    runAgentTurnMock.mockResolvedValueOnce({ result });
+
+    await POST(
+      buildRequest(
+        buildBody(
+          [
+            {
+              id: 'msg-1',
+              role: 'user',
+              parts: [{ type: 'text', text: 'hi' }],
+            },
+          ],
+          null,
+        ),
+      ),
+    );
+
+    const params = runAgentTurnMock.mock.calls[0]?.[0];
+    expect(params.ctx.agentDefinitionId).toBeNull();
+    expect(params.ctx.sessionId).toBeNull();
+    // Only the companies query fired — the sessions lookup is gated on
+    // `body.sessionId` being truthy, so a new chat (sessionId: null)
+    // short-circuits past it.
+    expect(dbSelectMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves agentDefinitionId to null when the session row is missing (cross-tenant id)', async () => {
+    // The company+session WHERE clause yields zero rows — treat as
+    // default Platform Agent rather than blowing up. The session turn
+    // will still run (this matches today's behaviour for the messages
+    // side: `sessionManager.getContext` returns [] for an unknown id).
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]);
+    dbSelectMock.mockResolvedValueOnce([]); // no session row
+
+    const result = {
+      toUIMessageStreamResponse: vi.fn(() => new Response('ok')),
+    };
+    runAgentTurnMock.mockResolvedValueOnce({ result });
+
+    await POST(
+      buildRequest(
+        buildBody(
+          [
+            {
+              id: 'msg-1',
+              role: 'user',
+              parts: [{ type: 'text', text: 'hi' }],
+            },
+          ],
+          'not-my-session',
+        ),
+      ),
+    );
+
+    const params = runAgentTurnMock.mock.calls[0]?.[0];
+    expect(params.ctx.agentDefinitionId).toBeNull();
   });
 });
 

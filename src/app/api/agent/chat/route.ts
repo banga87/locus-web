@@ -29,7 +29,7 @@
 // `maxDuration = 120` covers a multi-step agent turn with tool use.
 
 import { waitUntil } from '@vercel/functions';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -39,7 +39,7 @@ import {
 } from 'ai';
 
 import { db } from '@/db';
-import { categories } from '@/db/schema';
+import { categories, sessions } from '@/db/schema';
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
 import { runAgentTurn, DEFAULT_MODEL } from '@/lib/agent/run';
@@ -124,6 +124,40 @@ export async function POST(req: Request) {
     .where(eq(companies.id, auth.companyId))
     .limit(1);
 
+  // Phase 1.5 Task 9 — resolve the session's active agent-definition id
+  // so the SessionStart + UserPromptSubmit handlers can load the right
+  // scaffolding, baseline docs, persona snippet, and skill candidate
+  // pool. Scoped by `companyId` as defence-in-depth: even if a caller
+  // passes a `sessionId` that belongs to a different tenant (RLS blocks
+  // this on the Supabase auth-scoped client, but `db` here is the
+  // service-role connection), the AND-clause guarantees we never pull
+  // an agent-definition across tenant boundaries. A `null` column
+  // value means the session is using the default Platform Agent —
+  // SessionStart then injects scaffolding only, with no baselines or
+  // persona snippet; UserPromptSubmit skips skill matching entirely
+  // (empty candidate pool short-circuits the manifest fetch).
+  //
+  // Follow-up: sessions are currently created with `agent_definition_
+  // id = NULL` everywhere (see POST /api/agent/sessions). The UI to
+  // assign an agent to a new session lives on the Phase 1.5 wizard
+  // roadmap; wiring that POST body through is a separate task (see
+  // plan §Task 9 notes). Until then every chat request resolves to
+  // NULL here, which matches the pre-1.5 behaviour bit for bit.
+  let agentDefinitionId: string | null = null;
+  if (body.sessionId) {
+    const [sessionRow] = await db
+      .select({ agentDefinitionId: sessions.agentDefinitionId })
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.id, body.sessionId),
+          eq(sessions.companyId, auth.companyId),
+        ),
+      )
+      .limit(1);
+    agentDefinitionId = sessionRow?.agentDefinitionId ?? null;
+  }
+
   const ctx: AgentContext = {
     actor: {
       type: 'platform_agent',
@@ -134,6 +168,7 @@ export async function POST(req: Request) {
     brainId: brain.id,
     companyId: auth.companyId,
     sessionId: body.sessionId,
+    agentDefinitionId,
     abortSignal: req.signal,
   };
 

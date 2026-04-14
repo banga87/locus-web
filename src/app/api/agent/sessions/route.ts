@@ -25,6 +25,9 @@ const listQuerySchema = z.object({
   status: z.enum(['active', 'completed']).optional(),
 });
 
+// TODO(phase-1.5-wizard): accept agentDefinitionId to bind a new session to a
+// user-built agent. Until wired, every session runs as the default Platform Agent.
+// See: src/app/api/agent/chat/route.ts — lookup reads sessions.agent_definition_id.
 const createSchema = z.object({
   firstMessage: z.string().trim().max(500).optional(),
 });

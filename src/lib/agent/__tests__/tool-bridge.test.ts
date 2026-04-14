@@ -156,13 +156,26 @@ describe('agent/tool-bridge — bridgeLocusTool', () => {
 });
 
 describe('agent/tool-bridge — buildToolSet', () => {
+  // Every built tool set carries these two side-effect-free propose
+  // tools unconditionally. Task 7 wired them directly into
+  // `buildToolSet` so every agent (current + future) gets the user-
+  // gated write surface without per-agent configuration. See
+  // `src/lib/tools/propose-document.ts` for why they're safe to
+  // register globally.
+  const ALWAYS_PRESENT = [
+    'propose_document_create',
+    'propose_document_update',
+  ] as const;
+
   it('returns a tool for every registered LocusTool keyed by tool name', () => {
     registerTool(buildEchoTool({ name: 'tool_a' }));
     registerTool(buildEchoTool({ name: 'tool_b' }));
     registerTool(buildEchoTool({ name: 'tool_c' }));
 
     const set = buildToolSet(TEST_CTX);
-    expect(Object.keys(set).sort()).toEqual(['tool_a', 'tool_b', 'tool_c']);
+    expect(Object.keys(set).sort()).toEqual(
+      [...ALWAYS_PRESENT, 'tool_a', 'tool_b', 'tool_c'].sort(),
+    );
   });
 
   it('merges external tools alongside brain tools', () => {
@@ -175,15 +188,17 @@ describe('agent/tool-bridge — buildToolSet', () => {
     );
 
     const set = buildToolSet(TEST_CTX, { mcp_external: externalTool });
-    expect(Object.keys(set).sort()).toEqual([
-      'mcp_external',
-      'tool_a',
-      'tool_b',
-    ]);
+    expect(Object.keys(set).sort()).toEqual(
+      [...ALWAYS_PRESENT, 'mcp_external', 'tool_a', 'tool_b'].sort(),
+    );
   });
 
-  it('returns an empty set when no tools are registered and no external tools passed', () => {
+  it('always includes the user-gated propose tools even with an empty registry', () => {
+    // Locked-in contract: the propose tools are side-effect-free and
+    // live on every agent, so an empty LocusTool registry must still
+    // produce the two approval-card tools. Replaces the former
+    // "empty set" assertion.
     const set = buildToolSet(TEST_CTX);
-    expect(set).toEqual({});
+    expect(Object.keys(set).sort()).toEqual([...ALWAYS_PRESENT].sort());
   });
 });

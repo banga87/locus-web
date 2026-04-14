@@ -31,6 +31,7 @@
 import { registerHook } from '@/lib/agent/hooks';
 import type { HookDecision, HookEvent } from '@/lib/agent/types';
 
+import { proposalPostToolUseHandler } from './proposals';
 import {
   createDbAgentSkillsRepo,
   createDbScaffoldingRepo,
@@ -178,10 +179,27 @@ export function registerContextHandlers(): void {
     },
   );
 
-  // Phase 1.5 Task 7 adds: registerHook('PreToolUse', ...) for the
-  //   brain-write proposals flow (reads / writes go to different
-  //   toolsets in the MCP registry so this is still one injector
-  //   per event).
+  // Phase 1.5 Task 7: PostToolUse handler for user-gated write
+  // proposals. The handler itself is a documented no-op today (the
+  // propose-tool result already surfaces to the UI via the tool-
+  // result stream) — but registering it now gives Phase 2 audit /
+  // telemetry a clean extension point. The try/catch mirror matches
+  // the SessionStart + UserPromptSubmit handlers above: best-effort,
+  // a throw here must never fail the turn.
+  registerHook(
+    'PostToolUse',
+    async (event: HookEvent): Promise<HookDecision> => {
+      try {
+        return await proposalPostToolUseHandler(event);
+      } catch (err) {
+        console.warn(
+          '[context/register] PostToolUse proposals handler failed; allowing turn to continue',
+          err,
+        );
+        return { decision: 'allow' };
+      }
+    },
+  );
 }
 
 /**

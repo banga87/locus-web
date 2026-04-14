@@ -167,6 +167,11 @@ function ToolPart({
         toolName={toolName}
         args={part.input}
         state={indicatorState}
+        // Forward the raw output so the indicator can detect
+        // propose-tool proposals (isProposal: true) and render a
+        // ProposalCard instead of the default tool pill. Every other
+        // tool ignores this field.
+        result={part.output}
         errorText={errorText}
       />
     </div>

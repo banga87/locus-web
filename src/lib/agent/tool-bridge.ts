@@ -20,6 +20,10 @@ import { dynamicTool, jsonSchema, type Tool } from 'ai';
 import type { JSONSchema7 } from '@ai-sdk/provider';
 
 import { executeTool, getAllTools } from '@/lib/tools/executor';
+import {
+  proposeDocumentCreateTool,
+  proposeDocumentUpdateTool,
+} from '@/lib/tools/propose-document';
 import type { LocusTool, ToolContext } from '@/lib/tools/types';
 
 /**
@@ -55,13 +59,22 @@ export function bridgeLocusTool(
 
 /**
  * Build the full tool set for a turn: every registered Locus brain tool
- * (4 today: search/get/diff/history) merged with any external tools
- * supplied by the caller. Task 3 supplies MCP OUT tools via the
- * `externalTools` arg; until then it defaults to `{}`.
+ * (4 today: search/get/diff/history) merged with the two user-gated
+ * propose_document_* tools and any external tools supplied by the
+ * caller. Task 3 supplies MCP OUT tools via the `externalTools` arg;
+ * until then it defaults to `{}`.
  *
  * Tool names must be unique across the merged set. If an external tool
  * collides with a brain tool name, the external tool wins (spread order).
  * Caller is responsible for namespacing MCP tools to avoid collisions.
+ *
+ * The two propose tools — `propose_document_create` +
+ * `propose_document_update` — are registered unconditionally for every
+ * agent. They're side-effect-free: their `execute` functions only
+ * validate input and return `{ proposal, isProposal: true }` for the
+ * UI to render an Approve/Discard card. No DB writes, no Brain CRUD
+ * calls — the user performs the actual write on approval. See
+ * `src/lib/tools/propose-document.ts` for the full contract.
  */
 export function buildToolSet(
   ctx: ToolContext,
@@ -72,5 +85,11 @@ export function buildToolSet(
   for (const t of brainTools) {
     bridged[t.name] = bridgeLocusTool(t, ctx);
   }
+  // Propose tools are AI SDK `tool()` calls (not `dynamicTool`) because
+  // their input schemas are compile-time Zod shapes; see propose-document.ts.
+  // The `as Tool` coercion squares the narrower inferred type against the
+  // wider `Record<string, Tool>` return contract.
+  bridged.propose_document_create = proposeDocumentCreateTool as Tool;
+  bridged.propose_document_update = proposeDocumentUpdateTool as Tool;
   return { ...bridged, ...externalTools };
 }

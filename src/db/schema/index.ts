@@ -17,3 +17,7 @@ export * from './session-turns';
 export * from './mcp-connections';
 export * from './skill-manifests';
 export * from './session-attachments';
+export * from './oauth-clients';
+export * from './oauth-sessions';
+export * from './oauth-codes';
+export * from './oauth-refresh-tokens';

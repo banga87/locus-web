@@ -97,21 +97,10 @@ export async function GET(
       .where(eq(mcpConnections.companyId, ctx.companyId)),
   ]);
 
-  // Pre-flight note: confidenceLevelEnum values are 'high'|'medium'|'low'
-  // but DeriveGraphInput.docs.confidenceLevel is typed as
-  // 'verified'|'inferred'|'uncertain'|null. The derive-graph transformer
-  // only passes the value through to the GraphNode output; it does not
-  // branch on it. Cast via unknown to satisfy TS until derive-graph or
-  // the DB enum is aligned in a future migration.
   const payload = deriveGraph({
     brain,
     docs: docRows.map((d) => ({
       ...d,
-      confidenceLevel: d.confidenceLevel as unknown as
-        | 'verified'
-        | 'inferred'
-        | 'uncertain'
-        | null,
       metadata:
         (d.metadata as {
           outbound_links?: Array<{

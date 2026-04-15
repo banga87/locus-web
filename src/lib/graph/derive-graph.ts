@@ -12,7 +12,7 @@ export interface DeriveGraphInput {
     path: string;
     folderId: string | null;
     isPinned: boolean;
-    confidenceLevel: 'verified' | 'inferred' | 'uncertain' | null;
+    confidenceLevel: 'high' | 'medium' | 'low' | null;
     tokenEstimate: number | null;
     metadata: { outbound_links?: Array<{ target_slug: string; source: 'wikilink' | 'markdown_link' }> } | null;
   }>;
@@ -23,7 +23,7 @@ export interface DeriveGraphInput {
 export interface GraphNode {
   id: string; title: string; slug: string; path: string;
   folder_id: string | null; is_pinned: boolean;
-  confidence_level: 'verified' | 'inferred' | 'uncertain' | null;
+  confidence_level: 'high' | 'medium' | 'low' | null;
   token_estimate: number | null;
 }
 

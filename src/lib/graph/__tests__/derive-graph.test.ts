@@ -7,7 +7,7 @@ describe('deriveGraph', () => {
     const docs = [{
       id: 'd1', title: 'Pricing Guide', slug: 'pricing-guide',
       path: '/pricing/pricing-guide', folderId: 'f1',
-      isPinned: false, confidenceLevel: 'verified' as const,
+      isPinned: false, confidenceLevel: 'high' as const,
       tokenEstimate: 1200, metadata: { outbound_links: [] },
     }];
     const folders = [{ id: 'f1', slug: 'pricing', name: 'Pricing', parentId: null }];
@@ -19,7 +19,7 @@ describe('deriveGraph', () => {
     expect(out.nodes).toEqual([{
       id: 'd1', title: 'Pricing Guide', slug: 'pricing-guide',
       path: '/pricing/pricing-guide', folder_id: 'f1',
-      is_pinned: false, confidence_level: 'verified', token_estimate: 1200,
+      is_pinned: false, confidence_level: 'high', token_estimate: 1200,
     }]);
     expect(out.edges).toEqual([]);
     expect(out.clusters).toEqual([{

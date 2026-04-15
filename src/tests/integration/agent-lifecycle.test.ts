@@ -43,7 +43,7 @@ import { db } from '@/db';
 import {
   auditEvents,
   brains,
-  categories,
+  folders,
   companies,
   documents,
   sessions,
@@ -117,7 +117,7 @@ const suffix = `t11-lc-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let companyId: string;
 let brainId: string;
 let userId: string;
-let categoryId: string;
+let folderId: string;
 let scaffoldingDocId: string;
 let baselineDocId: string;
 let agentDefinitionDocId: string;
@@ -163,23 +163,23 @@ beforeAll(async () => {
     .returning({ id: brains.id });
   brainId = brain.id;
 
-  const [category] = await db
-    .insert(categories)
+  const [folder] = await db
+    .insert(folders)
     .values({
       companyId,
       brainId,
       slug: `t11-lc-cat-${suffix}`,
       name: 'T11 Lifecycle',
     })
-    .returning({ id: categories.id });
-  categoryId = category.id;
+    .returning({ id: folders.id });
+  folderId = folder.id;
 
   const [scaffolding] = await db
     .insert(documents)
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: `How ${suffix} Works`,
       slug: `how-${suffix}-works`,
       path: `t11-lc-cat-${suffix}/how-${suffix}-works`,
@@ -195,7 +195,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: BASELINE_TITLE,
       slug: `brand-voice-${suffix}`,
       path: `t11-lc-cat-${suffix}/brand-voice-${suffix}`,
@@ -222,7 +222,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: 'Landing Page Copywriter',
       slug: `landing-copywriter-${suffix}`,
       path: `t11-lc-cat-${suffix}/landing-copywriter-${suffix}`,

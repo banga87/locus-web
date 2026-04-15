@@ -5,16 +5,12 @@
 // think about it. The body is a Tiptap editor so the initial draft uses
 // the same WYSIWYG surface the editor does.
 //
-// Task 9: the destination picker is now a flattened view of the folder
-// tree (indented by depth with non-breaking spaces) rather than a flat
-// category list. If a `defaultFolderId` is supplied (via the sidebar's
-// per-folder "New doc" action), it pre-fills the select.
-//
-// Note on POST field name: we send `folderId` even though the API route
-// still accepts `categoryId`. That mismatch is intentional — Task 10
-// sweeps the route to rename the key, and kicking the ball down the road
-// to the route change keeps this commit focused on the UI surface.
-// Until Task 10 lands, this form will 400 at runtime.
+// Task 9: the destination picker is a flattened view of the folder
+// tree (indented by depth with non-breaking spaces). If a
+// `defaultFolderId` is supplied (via the sidebar's per-folder "New doc"
+// action), it pre-fills the select. The POST body's `folderId` matches
+// the route's current create schema (Task 10 renamed it from
+// `categoryId`).
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';

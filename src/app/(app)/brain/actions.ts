@@ -5,7 +5,7 @@
 // sidebar + document list re-render after a mutation. The lib does the
 // actual DB work and triggers manifest regeneration.
 //
-// Role policy mirrors the categories REST route — editor+ for all
+// Role policy mirrors the folders REST route — editor+ for all
 // mutations. togglePin could plausibly be relaxed to viewer, but keeping
 // editor+ matches the existing pattern and avoids a separate role gate
 // for one verb.

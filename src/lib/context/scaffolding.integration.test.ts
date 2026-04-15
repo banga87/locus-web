@@ -35,7 +35,7 @@ import { eq, sql } from 'drizzle-orm';
 import yaml from 'js-yaml';
 
 import { db } from '@/db';
-import { brains, categories, companies, documents } from '@/db/schema';
+import { brains, companies, documents, folders } from '@/db/schema';
 
 import {
   __clearScaffoldingCacheForTests,
@@ -48,7 +48,7 @@ import { buildScaffoldingPayload } from './scaffolding';
 const suffix = `scaf-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let companyId: string;
 let brainId: string;
-let categoryId: string;
+let folderId: string;
 let scaffoldingDocId: string;
 let agentDefinitionDocId: string;
 let baselineDoc1Id: string;
@@ -87,16 +87,16 @@ beforeAll(async () => {
     .returning({ id: brains.id });
   brainId = brain.id;
 
-  const [category] = await db
-    .insert(categories)
+  const [folder] = await db
+    .insert(folders)
     .values({
       companyId,
       brainId,
       slug: `scaf-cat-${suffix}`,
       name: 'Scaffolding',
     })
-    .returning({ id: categories.id });
-  categoryId = category.id;
+    .returning({ id: folders.id });
+  folderId = folder.id;
 
   // Scaffolding doc — singleton per company (partial-unique index).
   const [scaffolding] = await db
@@ -104,7 +104,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: `How ${suffix} Works`,
       slug: `how-${suffix}-works`,
       path: `scaf-cat-${suffix}/how-${suffix}-works`,
@@ -121,7 +121,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: 'Brand Voice',
       slug: `brand-voice-${suffix}`,
       path: `scaf-cat-${suffix}/brand-voice-${suffix}`,
@@ -138,7 +138,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: 'Pricing Model',
       slug: `pricing-model-${suffix}`,
       path: `scaf-cat-${suffix}/pricing-model-${suffix}`,
@@ -172,7 +172,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: 'Marketing Copywriter',
       slug: `marketing-copywriter-${suffix}`,
       path: `scaf-cat-${suffix}/marketing-copywriter-${suffix}`,

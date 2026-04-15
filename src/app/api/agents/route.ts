@@ -137,7 +137,7 @@ export const POST = (req: Request) =>
         .values({
           companyId,
           brainId: brain.id,
-          categoryId: null,
+          folderId: null,
           title: input.title,
           slug: input.slug,
           path,

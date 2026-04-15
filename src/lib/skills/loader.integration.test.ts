@@ -32,8 +32,8 @@ import { randomUUID } from 'node:crypto';
 import { db } from '@/db';
 import {
   brains,
-  categories,
   companies,
+  folders,
   documents,
   skillManifests,
 } from '@/db/schema';
@@ -49,7 +49,7 @@ import type { SkillManifest } from './manifest-compiler';
 const suffix = `loader-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let companyId: string;
 let brainId: string;
-let categoryId: string;
+let folderId: string;
 let skillDocId: string;
 
 const skillContent = `---
@@ -83,21 +83,21 @@ beforeAll(async () => {
     .returning({ id: brains.id });
   brainId = brain.id;
 
-  const [category] = await db
-    .insert(categories)
+  const [folder] = await db
+    .insert(folders)
     .values({
       companyId,
       brainId,
       slug: `skills-${suffix}`,
       name: 'Skills',
     })
-    .returning({ id: categories.id });
-  categoryId = category.id;
+    .returning({ id: folders.id });
+  folderId = folder.id;
 }, 60_000);
 
 afterAll(async () => {
   // Order matters: skill_manifests cascades off companies, but documents
-  // / categories cascade off brains. document_versions has an
+  // / folders cascade off brains. document_versions has an
   // immutability trigger; the loader test creates no version rows
   // (we INSERT directly, not via the route handler) so we can skip the
   // trigger dance — but to be safe we wrap brain delete the same way.
@@ -123,7 +123,7 @@ describe('rebuildManifest (integration)', () => {
       .values({
         companyId,
         brainId,
-        categoryId,
+        folderId,
         title: 'Draft a Landing Page',
         slug: 'draft-landing-page',
         path: `skills-${suffix}/draft-landing-page`,
@@ -213,7 +213,7 @@ describe('rebuildManifest (integration)', () => {
         id: goodId,
         companyId,
         brainId,
-        categoryId,
+        folderId,
         title: 'Good Skill',
         slug: `good-skill-${suffix}`,
         path: `skills-${suffix}/good-skill-${suffix}`,
@@ -232,7 +232,7 @@ describe('rebuildManifest (integration)', () => {
       .values({
         companyId,
         brainId,
-        categoryId,
+        folderId,
         title: 'Bad Skill',
         slug: `bad-skill-${suffix}`,
         path: `skills-${suffix}/bad-skill-${suffix}`,

@@ -39,7 +39,7 @@ import {
 } from 'ai';
 
 import { db } from '@/db';
-import { categories, sessions } from '@/db/schema';
+import { folders, sessions } from '@/db/schema';
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
 import { runAgentTurn, DEFAULT_MODEL } from '@/lib/agent/run';
@@ -107,14 +107,14 @@ export async function POST(req: Request) {
   }
 
   const brain = await getBrainForCompany(auth.companyId);
-  const cats = await db
+  const folderRows = await db
     .select({
-      slug: categories.slug,
-      name: categories.name,
-      description: categories.description,
+      slug: folders.slug,
+      name: folders.name,
+      description: folders.description,
     })
-    .from(categories)
-    .where(eq(categories.brainId, brain.id));
+    .from(folders)
+    .where(eq(folders.brainId, brain.id));
 
   // Resolve the company name for the system prompt. We already have the
   // company id from auth; one more cheap query keeps the prompt builder
@@ -216,7 +216,7 @@ export async function POST(req: Request) {
     system: buildSystemPrompt({
       brain,
       companyName: companyRow?.name ?? 'your company',
-      categories: cats,
+      folders: folderRows,
     }),
     messages: [...priorMessages, ...incomingModelMessages],
     tools: buildToolSet(

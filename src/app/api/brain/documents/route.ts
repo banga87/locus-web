@@ -11,7 +11,7 @@ import { and, desc, eq, isNull, lt, or } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { db } from '@/db';
-import { categories, documents, documentVersions } from '@/db/schema';
+import { documents, documentVersions, folders } from '@/db/schema';
 import { requireRole } from '@/lib/api/auth';
 import { withAuth, requireCompany } from '@/lib/api/handler';
 import { decodeCursor, encodeCursor } from '@/lib/api/pagination';
@@ -30,7 +30,7 @@ import {
 const SLUG_RE = /^[a-z0-9-]+$/;
 
 const listQuerySchema = z.object({
-  categoryId: z.string().uuid().optional(),
+  folderId: z.string().uuid().optional(),
   status: z.enum(['draft', 'active', 'archived']).optional(),
   isCore: z.enum(['true', 'false']).optional(),
   cursor: z.string().optional(),
@@ -41,7 +41,7 @@ const createSchema = z.object({
   title: z.string().trim().min(1).max(500),
   slug: z.string().regex(SLUG_RE, 'slug must match /^[a-z0-9-]+$/'),
   content: z.string(),
-  categoryId: z.string().uuid(),
+  folderId: z.string().uuid(),
   summary: z.string().optional(),
   status: z.enum(['draft', 'active', 'archived']).optional(),
   confidenceLevel: z.enum(['high', 'medium', 'low']).optional(),
@@ -69,8 +69,14 @@ export const GET = (req: Request) =>
 
     const brain = await getBrainForCompany(companyId);
 
-    const conds = [eq(documents.brainId, brain.id), isNull(documents.deletedAt)];
-    if (q.categoryId) conds.push(eq(documents.categoryId, q.categoryId));
+    // User-document listing: the `type IS NULL` filter keeps
+    // scaffolding/skills/agent-definitions out of the main brain view.
+    const conds = [
+      eq(documents.brainId, brain.id),
+      isNull(documents.deletedAt),
+      isNull(documents.type),
+    ];
+    if (q.folderId) conds.push(eq(documents.folderId, q.folderId));
     if (q.status) conds.push(eq(documents.status, q.status));
     if (q.isCore !== undefined) conds.push(eq(documents.isCore, q.isCore === 'true'));
 
@@ -129,14 +135,14 @@ export const POST = (req: Request) =>
 
     const brain = await getBrainForCompany(companyId);
 
-    // Category must belong to the same brain.
-    const [category] = await db
+    // Folder must belong to the same brain.
+    const [folder] = await db
       .select()
-      .from(categories)
-      .where(and(eq(categories.id, input.categoryId), eq(categories.brainId, brain.id)))
+      .from(folders)
+      .where(and(eq(folders.id, input.folderId), eq(folders.brainId, brain.id)))
       .limit(1);
-    if (!category) {
-      return error('category_not_found', 'Category does not belong to your brain.', 400);
+    if (!folder) {
+      return error('folder_not_found', 'Folder does not belong to your brain.', 400);
     }
 
     // Validate the optional attachment id before the transaction —
@@ -154,7 +160,7 @@ export const POST = (req: Request) =>
       }
     }
 
-    const path = `${category.slug}/${input.slug}`;
+    const path = `${folder.slug}/${input.slug}`;
 
     // Phase 1.5: mirror the frontmatter `type` field into the
     // denormalised column so manifest rebuilds + agent-scaffolding
@@ -167,7 +173,7 @@ export const POST = (req: Request) =>
         .values({
           companyId,
           brainId: brain.id,
-          categoryId: input.categoryId,
+          folderId: input.folderId,
           title: input.title,
           slug: input.slug,
           path,

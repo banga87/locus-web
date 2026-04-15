@@ -139,7 +139,7 @@ const sampleAgent = {
   id: 'd-1',
   companyId: 'co-1',
   brainId: 'brain-1',
-  categoryId: null,
+  folderId: null,
   title: 'Marketing Copywriter',
   slug: 'marketing-copywriter',
   path: 'agents/marketing-copywriter',

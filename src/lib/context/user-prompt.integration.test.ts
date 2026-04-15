@@ -28,7 +28,7 @@ import { eq, sql } from 'drizzle-orm';
 import yaml from 'js-yaml';
 
 import { db } from '@/db';
-import { brains, categories, companies, documents } from '@/db/schema';
+import { brains, companies, documents, folders } from '@/db/schema';
 import { rebuildManifest } from '@/lib/skills/loader';
 
 import {
@@ -42,7 +42,7 @@ import { buildUserPromptPayload } from './user-prompt';
 const suffix = `up-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let companyId: string;
 let brainId: string;
-let categoryId: string;
+let folderId: string;
 let skillDocId: string;
 let agentDefinitionDocId: string;
 
@@ -76,23 +76,23 @@ beforeAll(async () => {
     .returning({ id: brains.id });
   brainId = brain.id;
 
-  const [category] = await db
-    .insert(categories)
+  const [folder] = await db
+    .insert(folders)
     .values({
       companyId,
       brainId,
       slug: `up-cat-${suffix}`,
       name: 'User-prompt fixtures',
     })
-    .returning({ id: categories.id });
-  categoryId = category.id;
+    .returning({ id: folders.id });
+  folderId = folder.id;
 
   const [skill] = await db
     .insert(documents)
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: 'Draft a Landing Page',
       slug: `draft-landing-page-${suffix}`,
       path: `up-cat-${suffix}/draft-landing-page-${suffix}`,
@@ -124,7 +124,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: 'Marketing Copywriter',
       slug: `marketing-copywriter-${suffix}`,
       path: `up-cat-${suffix}/marketing-copywriter-${suffix}`,
@@ -264,7 +264,7 @@ describe('buildUserPromptPayload (integration with live DB)', () => {
       .values({
         companyId,
         brainId,
-        categoryId,
+        folderId,
         title: 'Canada Ingestion Filing SOPs',
         slug: `canada-ingestion-filing-sops-${suffix}`,
         path: `up-cat-${suffix}/canada-ingestion-filing-sops-${suffix}`,

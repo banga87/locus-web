@@ -1,7 +1,7 @@
 // New document page. Server Component wrapper so we can load the folder
 // tree once, synchronously, instead of fetching from the client.
 //
-// Task 9: switched from the flat `categories` list to the full nested
+// Task 9: switched from the flat folder list to the full nested
 // folder tree so the form's destination picker can render indented items
 // mirroring the sidebar. Accepts an optional `?folderId=` query param so
 // the sidebar's per-folder "New doc" action can preselect the folder.

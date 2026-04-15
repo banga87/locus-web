@@ -1,5 +1,5 @@
 // GET /api/brain/documents/[id] — fetch a single document with joined
-// owner email + category name.
+// owner email + folder name.
 // PATCH — partial update. Increments version, writes a document_versions
 // snapshot, rejects `isCore` mutations.
 // DELETE — Owner only. Soft-delete. Core documents (is_core = true) are
@@ -15,7 +15,7 @@ import yaml from 'js-yaml';
 import { z } from 'zod';
 
 import { db } from '@/db';
-import { categories, documents, documentVersions, users } from '@/db/schema';
+import { documents, documentVersions, folders, users } from '@/db/schema';
 import { requireRole } from '@/lib/api/auth';
 import { withAuth, requireCompany } from '@/lib/api/handler';
 import { error, success } from '@/lib/api/response';
@@ -40,7 +40,7 @@ const patchSchema = z
     status: z.enum(['draft', 'active', 'archived']).optional(),
     confidenceLevel: z.enum(['high', 'medium', 'low']).optional(),
     ownerId: z.string().uuid().nullable().optional(),
-    categoryId: z.string().uuid().optional(),
+    folderId: z.string().uuid().optional(),
     // Phase 1.5 Task 8: attachment id forwarded from the proposal-card
     // client-side approve handler. On a successful PATCH we mark the
     // attachment as `committed` against this document. Optional — non-
@@ -84,8 +84,8 @@ export const GET = (_req: Request, { params }: RouteCtx) =>
         id: documents.id,
         companyId: documents.companyId,
         brainId: documents.brainId,
-        categoryId: documents.categoryId,
-        categoryName: categories.name,
+        folderId: documents.folderId,
+        folderName: folders.name,
         title: documents.title,
         slug: documents.slug,
         path: documents.path,
@@ -105,7 +105,7 @@ export const GET = (_req: Request, { params }: RouteCtx) =>
         updatedAt: documents.updatedAt,
       })
       .from(documents)
-      .leftJoin(categories, eq(documents.categoryId, categories.id))
+      .leftJoin(folders, eq(documents.folderId, folders.id))
       .leftJoin(users, eq(documents.ownerId, users.id))
       .where(
         and(
@@ -173,18 +173,18 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
       }
     }
 
-    // Recompute path if category changed.
+    // Recompute path if folder changed.
     let newPath: string | undefined;
-    if (patch.categoryId && patch.categoryId !== existing.categoryId) {
-      const [cat] = await db
+    if (patch.folderId && patch.folderId !== existing.folderId) {
+      const [folder] = await db
         .select()
-        .from(categories)
-        .where(and(eq(categories.id, patch.categoryId), eq(categories.brainId, brain.id)))
+        .from(folders)
+        .where(and(eq(folders.id, patch.folderId), eq(folders.brainId, brain.id)))
         .limit(1);
-      if (!cat) {
-        return error('category_not_found', 'Category does not belong to your brain.', 400);
+      if (!folder) {
+        return error('folder_not_found', 'Folder does not belong to your brain.', 400);
       }
-      newPath = `${cat.slug}/${existing.slug}`;
+      newPath = `${folder.slug}/${existing.slug}`;
     }
 
     const nextVersion = existing.version + 1;
@@ -213,7 +213,7 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
         ...(patch.status !== undefined ? { status: patch.status } : {}),
         ...(patch.confidenceLevel !== undefined ? { confidenceLevel: patch.confidenceLevel } : {}),
         ...(patch.ownerId !== undefined ? { ownerId: patch.ownerId } : {}),
-        ...(patch.categoryId !== undefined ? { categoryId: patch.categoryId } : {}),
+        ...(patch.folderId !== undefined ? { folderId: patch.folderId } : {}),
         ...(newPath !== undefined ? { path: newPath } : {}),
         ...typeUpdate,
         version: nextVersion,

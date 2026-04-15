@@ -57,7 +57,7 @@ function mcpRequest(): Request {
 }
 
 describe('Phase 0 end-to-end', () => {
-  it('seeds 4 categories + 10 core documents + 1 current manifest', async () => {
+  it('seeds 4 folders + 10 core documents + 1 current manifest', async () => {
     const manifests = await db
       .select()
       .from(navigationManifests)

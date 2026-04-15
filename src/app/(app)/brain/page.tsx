@@ -1,19 +1,23 @@
-// Brain browser. Two-column layout: category sidebar (left, filters), docs
-// list (right). Filter comes via the `?category=<slug>` query param so the
+// Brain browser. Two-column layout: folder sidebar (left, filters), docs
+// list (right). Filter comes via the `?folder=<slug>` query param so the
 // URL is shareable/bookmarkable.
+//
+// Task 11 will replace this with the Brain home view. For now the page
+// still renders via the Task-9 `<CategorySidebar>` component (rename
+// pending) but all DB references use the post-rename schema.
 
 import { notFound } from 'next/navigation';
 import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { categories, documents } from '@/db/schema';
+import { documents, folders } from '@/db/schema';
 import { requireAuth } from '@/lib/api/auth';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { CategorySidebar } from '@/components/brain/category-sidebar';
 import { DocumentList } from '@/components/brain/document-list';
 
 interface PageProps {
-  searchParams: Promise<{ category?: string }>;
+  searchParams: Promise<{ folder?: string }>;
 }
 
 export default async function BrainPage({ searchParams }: PageProps) {
@@ -21,27 +25,33 @@ export default async function BrainPage({ searchParams }: PageProps) {
   if (!ctx.companyId) return notFound();
 
   const params = await searchParams;
-  const activeSlug = params.category ?? '';
+  const activeSlug = params.folder ?? '';
 
   const brain = await getBrainForCompany(ctx.companyId);
 
-  const catRows = await db
+  const folderRows = await db
     .select({
-      id: categories.id,
-      slug: categories.slug,
-      name: categories.name,
-      documentCount: categories.documentCount,
+      id: folders.id,
+      slug: folders.slug,
+      name: folders.name,
+      documentCount: folders.documentCount,
     })
-    .from(categories)
-    .where(eq(categories.brainId, brain.id))
-    .orderBy(asc(categories.sortOrder), asc(categories.name));
+    .from(folders)
+    .where(eq(folders.brainId, brain.id))
+    .orderBy(asc(folders.sortOrder), asc(folders.name));
 
-  const selectedCategory = activeSlug
-    ? catRows.find((c) => c.slug === activeSlug)
+  const selectedFolder = activeSlug
+    ? folderRows.find((f) => f.slug === activeSlug)
     : undefined;
 
-  const conds = [eq(documents.brainId, brain.id), isNull(documents.deletedAt)];
-  if (selectedCategory) conds.push(eq(documents.categoryId, selectedCategory.id));
+  // Filter to user-authored docs: scaffolding/skills/agent-definitions
+  // carry a non-null `type` and must not appear in the brain browser.
+  const conds = [
+    eq(documents.brainId, brain.id),
+    isNull(documents.deletedAt),
+    isNull(documents.type),
+  ];
+  if (selectedFolder) conds.push(eq(documents.folderId, selectedFolder.id));
 
   const docRows = await db
     .select({
@@ -50,23 +60,23 @@ export default async function BrainPage({ searchParams }: PageProps) {
       status: documents.status,
       confidenceLevel: documents.confidenceLevel,
       isCore: documents.isCore,
-      categoryName: categories.name,
+      categoryName: folders.name,
       updatedAt: documents.updatedAt,
     })
     .from(documents)
-    .leftJoin(categories, eq(documents.categoryId, categories.id))
+    .leftJoin(folders, eq(documents.folderId, folders.id))
     .where(and(...conds))
     .orderBy(desc(documents.isCore), desc(documents.updatedAt));
 
   const canCreate = ['owner', 'admin', 'editor'].includes(ctx.role);
 
-  const totalCount = catRows.reduce((s, c) => s + c.documentCount, 0);
-  const heading = selectedCategory ? selectedCategory.name : 'All documents';
+  const totalCount = folderRows.reduce((s, f) => s + f.documentCount, 0);
+  const heading = selectedFolder ? selectedFolder.name : 'All documents';
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8">
       <div className="flex gap-8">
-        <CategorySidebar categories={catRows} totalCount={totalCount} />
+        <CategorySidebar categories={folderRows} totalCount={totalCount} />
         <DocumentList
           documents={docRows}
           canCreate={canCreate}

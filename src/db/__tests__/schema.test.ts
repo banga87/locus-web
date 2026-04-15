@@ -18,7 +18,7 @@ import * as schema from '../schema';
 import {
   companies,
   brains,
-  categories,
+  folders,
   documents,
   auditEvents,
 } from '../schema';
@@ -36,11 +36,11 @@ const db = drizzle(client, { schema });
 // IDs shared across tests. Populated in beforeAll, cleaned in afterAll.
 let companyId: string;
 let brainId: string;
-let categoryId: string;
+let folderId: string;
 let documentId: string;
 
 // Use a unique suffix so parallel test runs and existing fixtures don't
-// collide on unique indexes (companies.slug, categories brain+slug).
+// collide on unique indexes (companies.slug, folders brain+slug).
 const suffix = `test-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
 beforeAll(async () => {
@@ -56,21 +56,21 @@ beforeAll(async () => {
     .returning({ id: brains.id });
   brainId = brain.id;
 
-  const [category] = await db
-    .insert(categories)
+  const [folder] = await db
+    .insert(folders)
     .values({
       companyId,
       brainId,
       slug: 'brand',
       name: 'Brand & Voice',
     })
-    .returning({ id: categories.id });
-  categoryId = category.id;
+    .returning({ id: folders.id });
+  folderId = folder.id;
 });
 
 afterAll(async () => {
   // Deletes cascade: documents -> document_versions, brains -> documents,
-  // brains -> categories. companies restricts, so we delete brains
+  // brains -> folders. companies restricts, so we delete brains
   // explicitly first. audit_events has no FK and is cleaned per-test.
   if (brainId) await db.delete(brains).where(eq(brains.id, brainId));
   if (companyId) {
@@ -80,13 +80,13 @@ afterAll(async () => {
 });
 
 describe('schema: FK round-trip', () => {
-  it('inserts company -> brain -> category -> document', async () => {
+  it('inserts company -> brain -> folder -> document', async () => {
     const [doc] = await db
       .insert(documents)
       .values({
         companyId,
         brainId,
-        categoryId,
+        folderId,
         title: 'Brand Voice Guide',
         slug: 'brand-voice-guide',
         path: 'brand/brand-voice-guide',
@@ -311,7 +311,7 @@ describe('schema: RLS policy presence', () => {
     for (const t of [
       'companies',
       'brains',
-      'categories',
+      'folders',
       'documents',
       'document_versions',
       'navigation_manifests',
@@ -333,7 +333,7 @@ describe('schema: RLS policy presence', () => {
     for (const t of [
       'companies',
       'brains',
-      'categories',
+      'folders',
       'documents',
       'document_versions',
       'navigation_manifests',

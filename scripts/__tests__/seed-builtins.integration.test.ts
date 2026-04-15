@@ -83,7 +83,7 @@ describe('seedBuiltins (integration)', () => {
         slug: documents.slug,
         title: documents.title,
         content: documents.content,
-        categoryId: documents.categoryId,
+        folderId: documents.folderId,
         status: documents.status,
         path: documents.path,
       })
@@ -109,9 +109,9 @@ describe('seedBuiltins (integration)', () => {
     // can re-parse `triggers:` on every subsequent compile).
     expect(skill!.content).toMatch(/^---\n/);
     expect(skill!.content).toContain('slug: ingestion-filing');
-    // Built-in docs live outside the category taxonomy under a
+    // Built-in docs live outside the folder taxonomy under a
     // `.builtins/` path prefix.
-    expect(skill!.categoryId).toBeNull();
+    expect(skill!.folderId).toBeNull();
     expect(skill!.path).toBe('.builtins/ingestion-filing');
 
     expect(scaffolding).toBeDefined();
@@ -121,7 +121,7 @@ describe('seedBuiltins (integration)', () => {
     expect(scaffolding!.content).toContain('## Voice and tone');
     expect(scaffolding!.content).toContain('## Vocabulary');
     expect(scaffolding!.content).toContain('## Conventions');
-    expect(scaffolding!.categoryId).toBeNull();
+    expect(scaffolding!.folderId).toBeNull();
     expect(scaffolding!.path).toBe('.builtins/company-scaffolding');
     // Status defaults to `active` so scaffolding loads on every
     // SessionStart without requiring a publish step.

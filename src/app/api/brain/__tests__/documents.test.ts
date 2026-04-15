@@ -77,7 +77,7 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('@/db/schema', () => ({
   documents: {},
   documentVersions: {},
-  categories: {},
+  folders: {},
   users: {},
   navigationManifests: {},
 }));
@@ -114,7 +114,7 @@ const sampleDoc = {
   id: 'd-1',
   companyId: 'co-1',
   brainId: 'brain-1',
-  categoryId: 'cat-1',
+  folderId: 'f-1',
   title: 'Doc',
   slug: 'doc',
   path: 'cat/doc',
@@ -207,7 +207,7 @@ describe('POST /api/brain/documents', () => {
       throw new ApiAuthError(403, 'insufficient_role', `Requires ${min} or higher.`);
     });
     const res = await listPOST(
-      makeReq({ title: 'x', slug: 'x', content: '', categoryId: 'cat-1' }),
+      makeReq({ title: 'x', slug: 'x', content: '', folderId: 'f-1' }),
     );
     expect(res.status).toBe(403);
   });
@@ -234,7 +234,7 @@ describe('POST /api/brain/documents', () => {
         title: 'x',
         slug: 'Bad Slug!',
         content: '',
-        categoryId: '11111111-1111-4111-8111-111111111111',
+        folderId: '11111111-1111-4111-8111-111111111111',
       }),
     );
     expect(res.status).toBe(400);
@@ -242,29 +242,29 @@ describe('POST /api/brain/documents', () => {
     expect(body.error.code).toBe('invalid_body');
   });
 
-  it('400 category_not_found when category is not in brain', async () => {
+  it('400 folder_not_found when folder is not in brain', async () => {
     requireAuth.mockResolvedValue(ctxOf('editor'));
     requireRole.mockImplementation(() => {});
-    // category lookup returns []
+    // folder lookup returns []
     nextResults.push([]);
     const res = await listPOST(
       makeReq({
         title: 'x',
         slug: 'x',
         content: '',
-        categoryId: '11111111-1111-4111-8111-111111111111',
+        folderId: '11111111-1111-4111-8111-111111111111',
       }),
     );
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error.code).toBe('category_not_found');
+    expect(body.error.code).toBe('folder_not_found');
   });
 
   it('201 created with isCore forced false and version=1', async () => {
     requireAuth.mockResolvedValue(ctxOf('editor'));
     requireRole.mockImplementation(() => {});
-    // 1st: category lookup — found
-    nextResults.push([{ id: 'cat-1', brainId: 'brain-1', slug: 'cat' }]);
+    // 1st: folder lookup — found
+    nextResults.push([{ id: 'f-1', brainId: 'brain-1', slug: 'folder' }]);
     // 2nd: insert documents returning
     nextResults.push([{ ...sampleDoc, isCore: false, version: 1 }]);
     // 3rd: insert document_versions (no returning — Proxy auto-resolves)
@@ -274,7 +274,7 @@ describe('POST /api/brain/documents', () => {
         title: 'x',
         slug: 'x',
         content: 'hello',
-        categoryId: '11111111-1111-4111-8111-111111111111',
+        folderId: '11111111-1111-4111-8111-111111111111',
         isCore: true, // smuggled — must be ignored (Zod strip)
       }),
     );
@@ -300,20 +300,20 @@ describe('GET /api/brain/documents/[id]', () => {
     expect(res.status).toBe(404);
   });
 
-  it('200 returns document with joined owner email + category name', async () => {
+  it('200 returns document with joined owner email + folder name', async () => {
     requireAuth.mockResolvedValue(ctxOf('viewer'));
     nextResults.push([
       {
         ...sampleDoc,
         ownerEmail: 'a@example.com',
-        categoryName: 'Brand',
+        folderName: 'Brand',
       },
     ]);
     const res = await itemGET(new Request('http://x'), { params });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.ownerEmail).toBe('a@example.com');
-    expect(body.data.categoryName).toBe('Brand');
+    expect(body.data.folderName).toBe('Brand');
   });
 });
 

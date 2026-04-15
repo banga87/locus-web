@@ -35,11 +35,11 @@
  *   - **No user attribution.** `ownerId` is `null` — these are system
  *     seeds, not authored by any user. Mirrors the Universal Base Pack
  *     seed pattern which leaves `ownerId` unset.
- *   - **No category.** Built-ins live outside the brain's category
+ *   - **No folder.** Built-ins live outside the brain's folder
  *     taxonomy (a founder shouldn't have to know or care that these
- *     docs exist to make the category tree make sense). `categoryId`
+ *     docs exist to make the folder tree make sense). `folderId`
  *     is null; `path` is prefixed `.builtins/` so these never collide
- *     with user content under `{category-slug}/...` or `agents/...`.
+ *     with user content under `{folder-slug}/...` or `agents/...`.
  *   - **Manifest rebuild.** After inserting the skill, we fire a
  *     manifest rebuild so the UserPromptSubmit handler can match on
  *     the new `ingestion-filing` slug on the next turn.
@@ -212,11 +212,11 @@ export async function seedBuiltins(companyId: string): Promise<void> {
     await db.insert(documents).values({
       companyId,
       brainId: brain.id,
-      // Built-ins live outside the brain's category taxonomy. Mirrors
+      // Built-ins live outside the brain's folder taxonomy. Mirrors
       // the agent-definition doc pattern (see `src/app/api/agents/
-      // route.ts`) which also uses `categoryId: null` for system-
+      // route.ts`) which also uses `folderId: null` for system-
       // authored doc types.
-      categoryId: null,
+      folderId: null,
       title: seed.title,
       slug: seed.slug,
       // `.builtins/` prefix keeps these outside the `{category}/{slug}`

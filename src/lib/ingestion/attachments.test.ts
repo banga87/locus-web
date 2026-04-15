@@ -21,9 +21,9 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   brains,
-  categories,
   companies,
   documents,
+  folders,
   sessionAttachments,
   sessions,
   users,
@@ -46,7 +46,7 @@ import {
 const suffix = `atta-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let companyId: string;
 let brainId: string;
-let categoryId: string;
+let folderId: string;
 let userId: string;
 let sessionId: string;
 let otherSessionId: string;
@@ -74,16 +74,16 @@ beforeAll(async () => {
     .returning({ id: brains.id });
   brainId = brain.id;
 
-  const [category] = await db
-    .insert(categories)
+  const [folder] = await db
+    .insert(folders)
     .values({
       companyId,
       brainId,
       slug: `atta-cat-${suffix}`,
       name: 'Attachment fixtures',
     })
-    .returning({ id: categories.id });
-  categoryId = category.id;
+    .returning({ id: folders.id });
+  folderId = folder.id;
 
   // The `users` table mirrors Supabase Auth's `auth.users.id`, so no
   // default-random. Mint a UUID ourselves — the Auth row doesn't exist
@@ -134,7 +134,7 @@ afterAll(async () => {
   // dropping the brain would violate the FK. We walk the graph in
   // leaf-first order:
   //   session_attachments → sessions → brains → (companies cascade)
-  // companies cascade the remaining categories + documents.
+  // companies cascade the remaining folders + documents.
   await db.delete(sessionAttachments).where(eq(sessionAttachments.sessionId, sessionId));
   await db.delete(sessionAttachments).where(eq(sessionAttachments.sessionId, otherSessionId));
   await db.delete(sessions).where(eq(sessions.id, sessionId));
@@ -388,7 +388,7 @@ describe('markCommitted', () => {
       .values({
         companyId,
         brainId,
-        categoryId,
+        folderId,
         title: 'Committed test doc',
         slug: `committed-test-${suffix}`,
         path: `atta-cat-${suffix}/committed-test-${suffix}`,

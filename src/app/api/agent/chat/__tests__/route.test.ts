@@ -46,7 +46,7 @@ vi.mock('@/db', () => ({
 }));
 
 vi.mock('@/db/schema', () => ({
-  categories: {},
+  folders: {},
   companies: {},
   // Task 9: the chat route now reads `sessions.agent_definition_id`
   // to populate `AgentContext.agentDefinitionId`. The mock below

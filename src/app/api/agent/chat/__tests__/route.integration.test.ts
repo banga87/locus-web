@@ -64,7 +64,7 @@ import { db } from '@/db';
 import {
   auditEvents,
   brains,
-  categories,
+  folders,
   companies,
   documents,
   sessions,
@@ -143,7 +143,7 @@ const suffix = `t9-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let companyId: string;
 let brainId: string;
 let userId: string;
-let categoryId: string;
+let folderId: string;
 let scaffoldingDocId: string;
 let baselineDocId: string;
 let skillDocId: string;
@@ -217,16 +217,16 @@ beforeAll(async () => {
     .returning({ id: brains.id });
   brainId = brain.id;
 
-  const [category] = await db
-    .insert(categories)
+  const [folder] = await db
+    .insert(folders)
     .values({
       companyId,
       brainId,
       slug: `t9-cat-${suffix}`,
       name: 'Task 9',
     })
-    .returning({ id: categories.id });
-  categoryId = category.id;
+    .returning({ id: folders.id });
+  folderId = folder.id;
 
   // 1. Scaffolding doc — singleton per company.
   const [scaffolding] = await db
@@ -234,7 +234,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: `How ${suffix} Works`,
       slug: `how-${suffix}-works`,
       path: `t9-cat-${suffix}/how-${suffix}-works`,
@@ -251,7 +251,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: 'Brand Voice',
       slug: `brand-voice-${suffix}`,
       path: `t9-cat-${suffix}/brand-voice-${suffix}`,
@@ -269,7 +269,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: 'Draft a Landing Page',
       slug: `draft-landing-page-${suffix}`,
       path: `t9-cat-${suffix}/draft-landing-page-${suffix}`,
@@ -298,7 +298,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: 'Landing Page Copywriter',
       slug: `landing-page-copywriter-${suffix}`,
       path: `t9-cat-${suffix}/landing-page-copywriter-${suffix}`,
@@ -340,7 +340,7 @@ beforeAll(async () => {
 afterAll(async () => {
   // Order matters: Phase 1 dependents with FKs into users/brains/
   // companies first, then users, then brains (cascades docs +
-  // categories), then companies. Mirrors the cleanup pattern in
+  // folders), then companies. Mirrors the cleanup pattern in
   // `src/__tests__/integration/helpers.ts` — the chat POST records
   // usage + writes audit events via waitUntil, so both tables hold
   // referencing rows by the time afterAll runs.

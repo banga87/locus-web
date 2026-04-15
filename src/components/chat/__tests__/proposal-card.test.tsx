@@ -6,10 +6,10 @@
 // the Brain CRUD endpoints.
 //
 // Coverage:
-//   - Create proposal renders title + category preview.
+//   - Create proposal renders title + folder preview.
 //   - Update proposal renders target_doc_id + rationale.
-//   - Approve on create → GET /api/brain/categories, then POST
-//     /api/brain/documents with the resolved categoryId.
+//   - Approve on create → GET /api/brain/folders, then POST
+//     /api/brain/documents with the resolved folderId.
 //   - Approve on create forwards `attachmentId` in the POST body
 //     (Task 8 seam).
 //   - Approve on update → PATCH /api/brain/documents/[id] with
@@ -32,7 +32,7 @@ import {
 
 const CREATE_PROPOSAL: CreateProposal = {
   kind: 'create',
-  category: 'sources',
+  folder: 'sources',
   type: 'knowledge',
   title: 'Q3 Brand Brief',
   frontmatter: { tags: ['source'] },
@@ -77,7 +77,7 @@ describe('ProposalCard', () => {
   // Rendering
   // -------------------------------------------------------------------------
 
-  it('renders a create proposal with title + category preview', () => {
+  it('renders a create proposal with title + folder preview', () => {
     render(<ProposalCard proposal={CREATE_PROPOSAL} />);
     expect(
       screen.getByText(/Agent proposes a new document/),
@@ -104,16 +104,16 @@ describe('ProposalCard', () => {
   // Approve — create
   // -------------------------------------------------------------------------
 
-  it('clicking Approve on a create proposal resolves the category, POSTs the doc, and fires onApprove', async () => {
+  it('clicking Approve on a create proposal resolves the folder, POSTs the doc, and fires onApprove', async () => {
     const onApprove = vi.fn();
-    // First fetch: GET /api/brain/categories → list with a match.
+    // First fetch: GET /api/brain/folders → list with a match.
     // Second fetch: POST /api/brain/documents → 2xx.
     fetchSpy
       .mockResolvedValueOnce(
         mockJsonResponse({
           data: [
-            { id: 'cat-sources-id', slug: 'sources' },
-            { id: 'cat-other-id', slug: 'other' },
+            { id: 'folder-sources-id', slug: 'sources' },
+            { id: 'folder-other-id', slug: 'other' },
           ],
         }),
       )
@@ -132,9 +132,9 @@ describe('ProposalCard', () => {
 
     await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1));
 
-    // First call — categories lookup.
+    // First call — folders lookup.
     const firstCall = fetchSpy.mock.calls[0];
-    expect(firstCall[0]).toBe('/api/brain/categories');
+    expect(firstCall[0]).toBe('/api/brain/folders');
 
     // Second call — document POST. Assert URL, method, and body shape.
     const secondCall = fetchSpy.mock.calls[1];
@@ -146,17 +146,17 @@ describe('ProposalCard', () => {
       title: 'Q3 Brand Brief',
       slug: 'q3-brand-brief',
       content: '# Brief\n\nContent.',
-      categoryId: 'cat-sources-id',
+      folderId: 'folder-sources-id',
       attachmentId: 'att-1',
     });
   });
 
-  it('shows an error when the proposed category does not exist in the brain', async () => {
+  it('shows an error when the proposed folder does not exist in the brain', async () => {
     fetchSpy.mockResolvedValueOnce(
       mockJsonResponse({
         // No `sources` slug in the list — the card must surface this
-        // instead of silently POSTing with a bogus categoryId.
-        data: [{ id: 'cat-other-id', slug: 'other' }],
+        // instead of silently POSTing with a bogus folderId.
+        data: [{ id: 'folder-other-id', slug: 'other' }],
       }),
     );
 
@@ -167,7 +167,7 @@ describe('ProposalCard', () => {
       expect(screen.getByRole('alert')).toBeInTheDocument(),
     );
     expect(screen.getByRole('alert').textContent).toMatch(
-      /Category "sources" does not exist/,
+      /Folder "sources" does not exist/,
     );
     // Only one fetch — the POST never fires.
     expect(fetchSpy).toHaveBeenCalledTimes(1);

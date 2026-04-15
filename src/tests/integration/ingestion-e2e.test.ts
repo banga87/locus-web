@@ -64,7 +64,7 @@ import { db } from '@/db';
 import {
   auditEvents,
   brains,
-  categories,
+  folders,
   companies,
   documents,
   sessionAttachments,
@@ -163,7 +163,7 @@ const suffix = `t11-ing-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let companyId: string;
 let brainId: string;
 let userId: string;
-let categoryId: string;
+let folderId: string;
 let sessionId: string;
 
 beforeAll(async () => {
@@ -194,23 +194,23 @@ beforeAll(async () => {
     .returning({ id: brains.id });
   brainId = brain.id;
 
-  const [category] = await db
-    .insert(categories)
+  const [folder] = await db
+    .insert(folders)
     .values({
       companyId,
       brainId,
       slug: `t11-ing-cat-${suffix}`,
       name: 'T11 Ing',
     })
-    .returning({ id: categories.id });
-  categoryId = category.id;
+    .returning({ id: folders.id });
+  folderId = folder.id;
 
   // A scaffolding doc so SessionStart doesn't warn-log an empty
   // payload. Minimal content — the test doesn't assert on its body.
   await db.insert(documents).values({
     companyId,
     brainId,
-    categoryId,
+    folderId,
     title: 'Scaffolding',
     slug: `scaffolding-${suffix}`,
     path: `t11-ing-cat-${suffix}/scaffolding-${suffix}`,
@@ -235,7 +235,7 @@ beforeAll(async () => {
     .values({
       companyId,
       brainId,
-      categoryId,
+      folderId,
       title: 'Ingestion Agent',
       slug: `ingestion-agent-${suffix}`,
       path: `t11-ing-cat-${suffix}/ingestion-agent-${suffix}`,
@@ -403,7 +403,7 @@ describe('Ingestion end-to-end (integration, Task 11 Step 2)', () => {
                     type: 'tool-input-delta',
                     id: 'tool-1',
                     delta: JSON.stringify({
-                      category: 'sources',
+                      folder: 'sources',
                       type: 'knowledge',
                       title: `Brand Brief ${suffix}`,
                       frontmatter: { tags: ['source', 'ingested'] },
@@ -417,7 +417,7 @@ describe('Ingestion end-to-end (integration, Task 11 Step 2)', () => {
                     toolCallId: 'tool-1',
                     toolName: 'propose_document_create',
                     input: {
-                      category: 'sources',
+                      folder: 'sources',
                       type: 'knowledge',
                       title: `Brand Brief ${suffix}`,
                       frontmatter: { tags: ['source', 'ingested'] },
@@ -488,7 +488,7 @@ describe('Ingestion end-to-end (integration, Task 11 Step 2)', () => {
             title: `Brand Brief ${suffix}`,
             slug: `brand-brief-${suffix}`,
             content: 'Filed from upload.',
-            categoryId,
+            folderId,
             attachmentId,
           }),
         }),

@@ -28,17 +28,17 @@
 // transitions the attachment to `committed` and sets
 // `committed_doc_id` on success. See `/api/brain/documents/route.ts`.
 //
-// Slug + category resolution: the POST endpoint requires a `slug`
-// (kebab-case) and a `categoryId` (UUID). The agent-generated
-// proposal carries a `category` slug and a `title` — so we
+// Slug + folder resolution: the POST endpoint requires a `slug`
+// (kebab-case) and a `folderId` (UUID). The agent-generated
+// proposal carries a `folder` slug and a `title` — so we
 //   1. derive a document slug from the title (lowercase, hyphen-
 //      separated, alphanumerics only),
-//   2. GET /api/brain/categories and match the proposed `category`
+//   2. GET /api/brain/folders and match the proposed `folder`
 //      slug to its id.
-// If the category doesn't exist in the brain, we surface the error
-// inline so the user can either rename the category or edit the
-// category list manually before retrying. This is deliberately a
-// v0 flow — a nicer UX (suggest nearby categories, allow inline
+// If the folder doesn't exist in the brain, we surface the error
+// inline so the user can either rename the folder or edit the
+// folder list manually before retrying. This is deliberately a
+// v0 flow — a nicer UX (suggest nearby folders, allow inline
 // creation) is a Phase 2 follow-up.
 
 import { useState } from 'react';
@@ -57,7 +57,7 @@ import { cn } from '@/lib/utils';
 /** Create-variant payload — mirrors the `proposeDocumentCreateTool` output. */
 export interface CreateProposal {
   kind: 'create';
-  category: string;
+  folder: string;
   type: string;
   title: string;
   frontmatter: Record<string, unknown>;
@@ -206,8 +206,8 @@ function CreatePreview({ proposal }: { proposal: CreateProposal }) {
     <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
       <dt className="text-muted-foreground">Title</dt>
       <dd className="font-medium text-foreground">{proposal.title}</dd>
-      <dt className="text-muted-foreground">Category</dt>
-      <dd className="font-mono text-foreground">{proposal.category}</dd>
+      <dt className="text-muted-foreground">Folder</dt>
+      <dd className="font-mono text-foreground">{proposal.folder}</dd>
       <dt className="text-muted-foreground">Type</dt>
       <dd className="font-mono text-foreground">{proposal.type}</dd>
     </dl>
@@ -253,28 +253,28 @@ async function submitCreate(
   proposal: CreateProposal,
   attachmentId?: string,
 ): Promise<Response> {
-  // Resolve the category slug → categoryId the CRUD endpoint expects.
-  // GET /api/brain/categories returns the list for the caller's brain;
-  // we pick the matching slug or throw a "category not found" error
+  // Resolve the folder slug → folderId the CRUD endpoint expects.
+  // GET /api/brain/folders returns the list for the caller's brain;
+  // we pick the matching slug or throw a "folder not found" error
   // the outer handler surfaces inline.
   //
-  // GET /api/brain/categories is re-fetched per approve click. Acceptable
+  // GET /api/brain/folders is re-fetched per approve click. Acceptable
   // while proposals are rare; revisit caching when Task 8 ships bulk ingestion.
-  const catResponse = await fetch('/api/brain/categories', {
+  const folderResponse = await fetch('/api/brain/folders', {
     credentials: 'include',
   });
-  if (!catResponse.ok) {
-    throw new Error('Could not load categories.');
+  if (!folderResponse.ok) {
+    throw new Error('Could not load folders.');
   }
-  // Response shape: { data: Category[] } per `success()` in response.ts.
-  const catPayload = (await catResponse.json()) as {
+  // Response shape: { data: Folder[] } per `success()` in response.ts.
+  const folderPayload = (await folderResponse.json()) as {
     data?: Array<{ id: string; slug: string }>;
   };
-  const categories = catPayload.data ?? [];
-  const match = categories.find((c) => c.slug === proposal.category);
+  const folders = folderPayload.data ?? [];
+  const match = folders.find((f) => f.slug === proposal.folder);
   if (!match) {
     throw new Error(
-      `Category "${proposal.category}" does not exist in your brain. Create it first, then retry.`,
+      `Folder "${proposal.folder}" does not exist in your brain. Create it first, then retry.`,
     );
   }
 
@@ -286,7 +286,7 @@ async function submitCreate(
       title: proposal.title,
       slug: slugify(proposal.title),
       content: proposal.body_markdown,
-      categoryId: match.id,
+      folderId: match.id,
       // Forwards to `/api/brain/documents` POST. When present the
       // server calls `markCommitted(attachmentId, newDocId)` after
       // insert. A mismatched company is a 400 — caught inline by the

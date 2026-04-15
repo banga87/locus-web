@@ -1,12 +1,14 @@
-// PATCH /api/brain/categories/[id] — rename, re-describe, reorder.
+// PATCH /api/brain/folders/[id] — rename, re-describe, reorder.
 //   slug cannot change — document paths depend on it.
-// DELETE — Owner only. Documents in the category have categoryId set to null.
+// DELETE — Owner only. Rejects the delete if the folder still contains
+// sub-folders or (non-soft-deleted) documents; the caller must move or remove
+// children first.
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { db } from '@/db';
-import { categories, documents } from '@/db/schema';
+import { documents, folders } from '@/db/schema';
 import { requireRole } from '@/lib/api/auth';
 import { withAuth, requireCompany } from '@/lib/api/handler';
 import { error, success } from '@/lib/api/response';
@@ -52,20 +54,20 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
 
     const [existing] = await db
       .select()
-      .from(categories)
-      .where(and(eq(categories.id, id), eq(categories.brainId, brain.id)))
+      .from(folders)
+      .where(and(eq(folders.id, id), eq(folders.brainId, brain.id)))
       .limit(1);
-    if (!existing) return error('not_found', 'Category not found.', 404);
+    if (!existing) return error('not_found', 'Folder not found.', 404);
 
     const [row] = await db
-      .update(categories)
+      .update(folders)
       .set({
         ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.description !== undefined ? { description: patch.description } : {}),
         ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}),
         updatedAt: new Date(),
       })
-      .where(eq(categories.id, id))
+      .where(eq(folders.id, id))
       .returning();
 
     await tryRegenerateManifest(brain.id);
@@ -82,21 +84,42 @@ export const DELETE = (_req: Request, { params }: RouteCtx) =>
     const brain = await getBrainForCompany(companyId);
 
     const [existing] = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(and(eq(categories.id, id), eq(categories.brainId, brain.id)))
+      .select({ id: folders.id })
+      .from(folders)
+      .where(and(eq(folders.id, id), eq(folders.brainId, brain.id)))
       .limit(1);
-    if (!existing) return error('not_found', 'Category not found.', 404);
+    if (!existing) return error('not_found', 'Folder not found.', 404);
 
-    // Orphan documents in the category, then delete the category. The FK
-    // already has ON DELETE SET NULL, but we make it explicit for clarity
-    // and to be resilient to future FK changes.
-    await db
-      .update(documents)
-      .set({ categoryId: null, updatedAt: new Date() })
-      .where(eq(documents.categoryId, id));
+    // Refuse to delete a folder that still has children — the caller must
+    // move or delete them first. Check sub-folders before documents so the
+    // error message points at the closest problem.
+    const [childFolder] = await db
+      .select({ id: folders.id })
+      .from(folders)
+      .where(eq(folders.parentId, id))
+      .limit(1);
+    if (childFolder) {
+      return error(
+        'folder_has_children',
+        'Folder contains sub-folders. Move or delete them first.',
+        409,
+      );
+    }
 
-    await db.delete(categories).where(eq(categories.id, id));
+    const [childDoc] = await db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(and(eq(documents.folderId, id), isNull(documents.deletedAt)))
+      .limit(1);
+    if (childDoc) {
+      return error(
+        'folder_has_documents',
+        'Folder contains documents. Move or delete them first.',
+        409,
+      );
+    }
+
+    await db.delete(folders).where(eq(folders.id, id));
 
     await tryRegenerateManifest(brain.id);
 

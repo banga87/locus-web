@@ -46,7 +46,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.delete(oauthCodes);
+  await db.delete(oauthCodes).where(eq(oauthCodes.userId, userId));
   await db.delete(oauthClients).where(inArray(oauthClients.clientId, [clientId]));
   await db.delete(users).where(eq(users.id, userId));
   await db.delete(companies).where(eq(companies.id, companyId));

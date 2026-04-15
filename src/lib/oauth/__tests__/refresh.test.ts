@@ -51,7 +51,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.delete(oauthRefreshTokens);
+  await db
+    .delete(oauthRefreshTokens)
+    .where(eq(oauthRefreshTokens.userId, userId));
   await db.delete(oauthClients).where(inArray(oauthClients.clientId, [clientId]));
   await db.delete(users).where(eq(users.id, userId));
   await db.delete(companies).where(eq(companies.id, companyId));
@@ -87,7 +89,7 @@ describe('oauth refresh token repo', () => {
     expect(newRow.revokedAt).toBeNull();
 
     // Clean up so subsequent tests start with no active rows for this user.
-    await db.delete(oauthRefreshTokens);
+    await db.delete(oauthRefreshTokens).where(eq(oauthRefreshTokens.userId, userId));
   });
 
   it('returns unknown for a bogus refresh token', async () => {
@@ -106,7 +108,7 @@ describe('oauth refresh token repo', () => {
     });
     const r = await rotateRefreshToken({ refreshToken: token });
     expect(r).toEqual({ ok: false, reason: 'expired' });
-    await db.delete(oauthRefreshTokens);
+    await db.delete(oauthRefreshTokens).where(eq(oauthRefreshTokens.userId, userId));
   });
 
   it('replay of a revoked token chain-revokes all active siblings', async () => {
@@ -141,7 +143,7 @@ describe('oauth refresh token repo', () => {
       );
     expect(active).toHaveLength(0);
 
-    await db.delete(oauthRefreshTokens);
+    await db.delete(oauthRefreshTokens).where(eq(oauthRefreshTokens.userId, userId));
   });
 
   it('revokeChain sets revokedAt on all active rows for the (user, client) pair', async () => {
@@ -175,6 +177,6 @@ describe('oauth refresh token repo', () => {
       );
     expect(after).toHaveLength(0);
 
-    await db.delete(oauthRefreshTokens);
+    await db.delete(oauthRefreshTokens).where(eq(oauthRefreshTokens.userId, userId));
   });
 });

@@ -37,9 +37,13 @@ async function main() {
       const existing = (doc.metadata ?? {}) as Record<string, unknown>;
       const nextMetadata = { ...existing, outbound_links: links };
 
+      // Cast via JSON.parse(JSON.stringify(...)) to satisfy postgres.js's
+      // JSONValue constraint — OutboundLink objects are structurally JSON
+      // but TS doesn't know that at the call site.
+      const jsonMetadata = JSON.parse(JSON.stringify(nextMetadata));
       await sql`
         UPDATE documents
-        SET metadata = ${sql.json(nextMetadata)}
+        SET metadata = ${sql.json(jsonMetadata)}
         WHERE id = ${doc.id}
       `;
       updated++;

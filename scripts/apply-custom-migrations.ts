@@ -35,6 +35,7 @@ const CUSTOM_MIGRATIONS = [
   '0009_session_attachments_owner_scope.sql',
   '0010_attachment_storage.sql',
   '0012_audit_events_mcp_invocation_enum.sql',
+  '0013_audit_events_brain_id_column.sql',
 ];
 
 async function main() {

@@ -8,13 +8,13 @@ import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { documents } from '@/db/schema/documents';
-import { categories } from '@/db/schema/folders';
+import { folders } from '@/db/schema/folders';
 import { documentVersions } from '@/db/schema/document-versions';
 import type { LocusTool, ToolContext, ToolResult } from '../types';
 
 interface GetDiffHistoryInput {
   since: string;
-  category?: string;
+  folder?: string;
   include_content_preview?: boolean;
 }
 
@@ -46,7 +46,7 @@ export const getDiffHistoryTool: LocusTool<
     type: 'object',
     properties: {
       since: { type: 'string', format: 'date-time' },
-      category: { type: 'string', minLength: 1 },
+      folder: { type: 'string', minLength: 1 },
       include_content_preview: { type: 'boolean' },
     },
     required: ['since'],
@@ -81,17 +81,22 @@ export const getDiffHistoryTool: LocusTool<
     }
     const includePreview = input.include_content_preview === true;
 
-    // Gather documents matching the window + optional category slug. We
+    // Gather documents matching the window + optional folder slug. We
     // need both the document metadata and the latest version summary, so
     // do two queries (document list → version lookup for that id set) to
     // keep the SQL readable.
+    //
+    // `isNull(documents.type)` restricts results to user-authored
+    // documents — scaffolding/skills/agent-definitions carry a non-null
+    // `type` and should never surface in the change feed.
     const whereClauses = [
       eq(documents.brainId, context.brainId),
       isNull(documents.deletedAt),
+      isNull(documents.type),
       gt(documents.updatedAt, since),
     ];
-    if (input.category) {
-      whereClauses.push(eq(categories.slug, input.category));
+    if (input.folder) {
+      whereClauses.push(eq(folders.slug, input.folder));
     }
 
     const docs = await db
@@ -100,11 +105,11 @@ export const getDiffHistoryTool: LocusTool<
         path: documents.path,
         updatedAt: documents.updatedAt,
         content: documents.content,
-        categorySlug: categories.slug,
+        folderSlug: folders.slug,
         createdAt: documents.createdAt,
       })
       .from(documents)
-      .leftJoin(categories, eq(categories.id, documents.categoryId))
+      .leftJoin(folders, eq(folders.id, documents.folderId))
       .where(and(...whereClauses));
 
     const docIds = docs.map((d) => d.id);
@@ -182,7 +187,7 @@ export const getDiffHistoryTool: LocusTool<
         details: {
           eventType: 'document.diff_history',
           since: input.since,
-          category: input.category ?? null,
+          folder: input.folder ?? null,
           change_count: changes.length,
         },
       },

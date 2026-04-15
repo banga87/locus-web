@@ -42,15 +42,15 @@ import { z } from 'zod';
 // ---------------------------------------------------------------------------
 
 /**
- * Input schema for `propose_document_create`. Category/type are free-form
+ * Input schema for `propose_document_create`. Folder/type are free-form
  * strings (not enums) so that custom company taxonomies don't need a
- * code change to use them — validation of "is this a real category"
+ * code change to use them — validation of "is this a real folder"
  * happens on the server when the approval POSTs to the Brain CRUD
  * endpoint. Frontmatter is an open record so agents can propose
  * whatever YAML shape the filing skill calls for.
  */
 const createSchema = z.object({
-  category: z.string().min(1),
+  folder: z.string().min(1),
   type: z.string().min(1),
   title: z.string().min(1),
   frontmatter: z.record(z.string(), z.unknown()),

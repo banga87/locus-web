@@ -39,7 +39,7 @@ beforeAll(async () => {
     {
       companyId: fixtures.companyId,
       brainId: fixtures.brainId,
-      categoryId: fixtures.categoryBrandId,
+      folderId: fixtures.folderBrandId,
       title: 'Brand Voice Guide',
       slug: `brand-voice-${fixtures.suffix}`,
       path: `brand/brand-voice-${fixtures.suffix}`,

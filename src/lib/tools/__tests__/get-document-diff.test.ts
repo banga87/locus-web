@@ -32,7 +32,7 @@ beforeAll(async () => {
     .values({
       companyId: fixtures.companyId,
       brainId: fixtures.brainId,
-      categoryId: fixtures.categoryBrandId,
+      folderId: fixtures.folderBrandId,
       title: 'Versioned Doc',
       slug: `versioned-${fixtures.suffix}`,
       path: `brand/versioned-${fixtures.suffix}`,

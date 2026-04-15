@@ -26,13 +26,13 @@ let fixtures: Fixtures;
 beforeAll(async () => {
   fixtures = await setupFixtures('search');
 
-  // Seed documents across two categories. Each doc sets status='active' so
+  // Seed documents across two folders. Each doc sets status='active' so
   // the `status != 'archived'` filter does not exclude them.
   await db.insert(documents).values([
     {
       companyId: fixtures.companyId,
       brainId: fixtures.brainId,
-      categoryId: fixtures.categoryBrandId,
+      folderId: fixtures.folderBrandId,
       title: 'Brand Voice Guide',
       slug: `brand-voice-${fixtures.suffix}`,
       path: `brand/brand-voice-${fixtures.suffix}`,
@@ -43,7 +43,7 @@ beforeAll(async () => {
     {
       companyId: fixtures.companyId,
       brainId: fixtures.brainId,
-      categoryId: fixtures.categoryPricingId,
+      folderId: fixtures.folderPricingId,
       title: 'Pricing Playbook',
       slug: `pricing-playbook-${fixtures.suffix}`,
       path: `pricing/pricing-playbook-${fixtures.suffix}`,
@@ -54,7 +54,7 @@ beforeAll(async () => {
     {
       companyId: fixtures.companyId,
       brainId: fixtures.brainId,
-      categoryId: fixtures.categoryBrandId,
+      folderId: fixtures.folderBrandId,
       title: 'Archived Brand Notes',
       slug: `archived-brand-${fixtures.suffix}`,
       path: `brand/archived-brand-${fixtures.suffix}`,
@@ -100,20 +100,20 @@ describe('search_documents', () => {
     expect(data.results[0].snippet.length).toBeGreaterThan(0);
   });
 
-  it('filters by category slug', async () => {
+  it('filters by folder slug', async () => {
     const result = await executeTool(
       'search_documents',
-      { query: 'pricing', category: 'pricing' },
+      { query: 'pricing', folder: 'pricing' },
       fixtures.context,
     );
 
     expect(result.success).toBe(true);
     const data = result.data as {
-      results: Array<{ path: string; category: string | null }>;
+      results: Array<{ path: string; folder: string | null }>;
     };
     expect(data.results.length).toBeGreaterThanOrEqual(1);
     for (const row of data.results) {
-      expect(row.category).toBe('pricing');
+      expect(row.folder).toBe('pricing');
     }
   });
 

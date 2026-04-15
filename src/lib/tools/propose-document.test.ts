@@ -36,7 +36,7 @@ describe('propose_document_create', () => {
     // object with `kind: 'create'`.
     const result = await proposeDocumentCreateTool.execute!(
       {
-        category: 'sources',
+        folder: 'sources',
         type: 'knowledge',
         title: 'Q3 Brand Brief (source)',
         frontmatter: { tags: ['source', 'brand'] },
@@ -49,7 +49,7 @@ describe('propose_document_create', () => {
       proposal: {
         kind: 'create',
         title: 'Q3 Brand Brief (source)',
-        category: 'sources',
+        folder: 'sources',
         type: 'knowledge',
         frontmatter: { tags: ['source', 'brand'] },
         body_markdown: 'Brief content.',
@@ -66,7 +66,7 @@ describe('propose_document_create', () => {
     await expect(
       proposeDocumentCreateTool.execute!(
         {
-          category: 'sources',
+          folder: 'sources',
           type: 'knowledge',
           title: '',
           frontmatter: {},

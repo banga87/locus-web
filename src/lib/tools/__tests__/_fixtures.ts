@@ -9,7 +9,7 @@ import { eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { brains } from '@/db/schema/brains';
-import { categories } from '@/db/schema/folders';
+import { folders } from '@/db/schema/folders';
 import { companies } from '@/db/schema/companies';
 import { users } from '@/db/schema/users';
 
@@ -18,8 +18,8 @@ import type { ToolContext } from '../types';
 export interface Fixtures {
   companyId: string;
   brainId: string;
-  categoryBrandId: string;
-  categoryPricingId: string;
+  folderBrandId: string;
+  folderPricingId: string;
   ownerUserId: string;
   ownerEmail: string;
   suffix: string;
@@ -28,7 +28,7 @@ export interface Fixtures {
 }
 
 /**
- * Build company + brain + a couple of categories + one owner user. Caller
+ * Build company + brain + a couple of folders + one owner user. Caller
  * is responsible for inserting documents + calling `teardownFixtures`.
  */
 export async function setupFixtures(label: string): Promise<Fixtures> {
@@ -45,24 +45,24 @@ export async function setupFixtures(label: string): Promise<Fixtures> {
     .returning({ id: brains.id });
 
   const [brandCat] = await db
-    .insert(categories)
+    .insert(folders)
     .values({
       companyId: company.id,
       brainId: brain.id,
       slug: 'brand',
       name: 'Brand & Voice',
     })
-    .returning({ id: categories.id });
+    .returning({ id: folders.id });
 
   const [pricingCat] = await db
-    .insert(categories)
+    .insert(folders)
     .values({
       companyId: company.id,
       brainId: brain.id,
       slug: 'pricing',
       name: 'Pricing',
     })
-    .returning({ id: categories.id });
+    .returning({ id: folders.id });
 
   // Owner user. Uses a generated UUID for the id — Supabase Auth would
   // normally own this, but we bypass RLS in tests via the direct
@@ -94,8 +94,8 @@ export async function setupFixtures(label: string): Promise<Fixtures> {
   return {
     companyId: company.id,
     brainId: brain.id,
-    categoryBrandId: brandCat.id,
-    categoryPricingId: pricingCat.id,
+    folderBrandId: brandCat.id,
+    folderPricingId: pricingCat.id,
     ownerUserId: ownerId,
     ownerEmail,
     suffix,
@@ -106,7 +106,7 @@ export async function setupFixtures(label: string): Promise<Fixtures> {
 
 /**
  * Cascade-delete everything the fixture set owns. `brains` cascades to
- * documents + document_versions + categories; users delete manually;
+ * documents + document_versions + folders; users delete manually;
  * companies delete after the above since companyId is restricted.
  *
  * `document_versions` is normally append-only (immutability trigger from

@@ -38,7 +38,7 @@ beforeAll(async () => {
     .values({
       companyId: fixtures.companyId,
       brainId: fixtures.brainId,
-      categoryId: fixtures.categoryBrandId,
+      folderId: fixtures.folderBrandId,
       title: 'Brand Doc',
       slug: `brand-${fixtures.suffix}`,
       path: `brand/brand-${fixtures.suffix}`,
@@ -68,7 +68,7 @@ beforeAll(async () => {
     .values({
       companyId: fixtures.companyId,
       brainId: fixtures.brainId,
-      categoryId: fixtures.categoryPricingId,
+      folderId: fixtures.folderPricingId,
       title: 'Pricing Doc',
       slug: `pricing-${fixtures.suffix}`,
       path: `pricing/pricing-${fixtures.suffix}`,
@@ -95,7 +95,7 @@ beforeAll(async () => {
   await db.insert(documents).values({
     companyId: fixtures.companyId,
     brainId: fixtures.brainId,
-    categoryId: fixtures.categoryBrandId,
+    folderId: fixtures.folderBrandId,
     title: 'Stale Doc',
     slug: `stale-${fixtures.suffix}`,
     path: `brand/stale-${fixtures.suffix}`,
@@ -149,10 +149,10 @@ describe('get_diff_history', () => {
     expect(brandEntry?.preview).toBeUndefined();
   });
 
-  it('filters by category slug', async () => {
+  it('filters by folder slug', async () => {
     const result = await executeTool(
       'get_diff_history',
-      { since: BOUNDARY.toISOString(), category: 'pricing' },
+      { since: BOUNDARY.toISOString(), folder: 'pricing' },
       fixtures.context,
     );
 

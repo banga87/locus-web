@@ -35,7 +35,7 @@ beforeAll(async () => {
     .values({
       companyId: fixtures.companyId,
       brainId: fixtures.brainId,
-      categoryId: fixtures.categoryBrandId,
+      folderId: fixtures.folderBrandId,
       ownerId: fixtures.ownerUserId,
       title: 'Brand Voice Guide',
       slug: `brand-voice-${fixtures.suffix}`,
@@ -54,7 +54,7 @@ beforeAll(async () => {
     .values({
       companyId: fixtures.companyId,
       brainId: fixtures.brainId,
-      categoryId: fixtures.categoryBrandId,
+      folderId: fixtures.folderBrandId,
       title: 'Multi-Section Doc',
       slug: `sectioned-${fixtures.suffix}`,
       path: `${SECTIONED_PATH_BASE}-${fixtures.suffix}`,

@@ -3,14 +3,15 @@
 // Single-column sidebar shell. Replaces the old two-sidebar layout with
 // the Fraunces/Forest design from mockups/ui-exploration/fraunces-forest.html.
 //
-// Scope for Task 5: visual scaffold only. The Brain section renders a
-// "Loading tree…" placeholder — Task 6 swaps it for <BrainTree /> which
-// will use `usePathname()` to drive the `[data-active="true"]` node.
+// The Brain section delegates to <BrainTree>, which is a client component
+// that uses `usePathname()` to drive the `[data-active="true"]` node and
+// holds per-folder expand/collapse state locally.
 
 import Link from 'next/link';
 
 import type { ManifestFolder } from '@/lib/brain/manifest';
 
+import { BrainTree } from './brain-tree';
 import { WorkspaceRow } from './workspace-row';
 
 interface NewSidebarProps {
@@ -80,16 +81,7 @@ export function NewSidebar({
           <span className="count">{docCount} DOCS</span>
         </div>
 
-        {/* BrainTree stub — replaced in Task 6 */}
-        <div
-          style={{
-            padding: '8px 20px',
-            color: 'var(--ink-3)',
-            fontSize: 12,
-          }}
-        >
-          Loading tree…
-        </div>
+        <BrainTree tree={tree} />
 
         {pinned.length > 0 && (
           <>

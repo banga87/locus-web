@@ -1,0 +1,161 @@
+// BrainTree — recursive folder/document sidebar tree. Verifies:
+//  - top-level folders render, collapsed by default
+//  - click toggles expand/collapse (visibility controlled by `.group.open`)
+//  - nested folders render recursively
+//  - documents inside an open folder render as links
+//  - the document whose id matches the pathname gets data-active="true"
+//
+// `usePathname` is mocked at module scope; individual tests override the
+// return value via `vi.mocked(usePathname).mockReturnValue(...)` when they
+// need a specific path.
+
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { usePathname } from 'next/navigation';
+
+import { BrainTree } from '@/components/shell/brain-tree';
+import type { ManifestFolder } from '@/lib/brain/manifest';
+
+vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
+}));
+
+const tree: ManifestFolder[] = [
+  {
+    id: 'f1',
+    slug: 'brand',
+    name: 'Brand & Identity',
+    description: null,
+    folders: [],
+    documents: [
+      {
+        id: 'd1',
+        path: 'brand/mission',
+        title: 'Mission',
+        summary: null,
+        confidenceLevel: 'high',
+        status: 'active',
+        isCore: true,
+        isPinned: false,
+        updatedAt: '2026-04-01T00:00:00Z',
+      },
+    ],
+  },
+  {
+    id: 'f2',
+    slug: 'product',
+    name: 'Product',
+    description: null,
+    folders: [
+      {
+        id: 'f3',
+        slug: 'terravolt',
+        name: 'Terravolt',
+        description: null,
+        folders: [],
+        documents: [
+          {
+            id: 'd2',
+            path: 'product/terravolt/grid',
+            title: 'Energy Grid',
+            summary: null,
+            confidenceLevel: 'medium',
+            status: 'draft',
+            isCore: false,
+            isPinned: false,
+            updatedAt: '2026-04-10T00:00:00Z',
+          },
+        ],
+      },
+    ],
+    documents: [
+      {
+        id: 'd3',
+        path: 'product/overview',
+        title: 'Overview',
+        summary: null,
+        confidenceLevel: 'high',
+        status: 'active',
+        isCore: true,
+        isPinned: true,
+        updatedAt: '2026-04-15T00:00:00Z',
+      },
+    ],
+  },
+];
+
+describe('BrainTree', () => {
+  beforeEach(() => {
+    vi.mocked(usePathname).mockReturnValue('/');
+  });
+
+  it('renders top-level folders', () => {
+    render(<BrainTree tree={tree} />);
+    expect(screen.getByText('Brand & Identity')).toBeInTheDocument();
+    expect(screen.getByText('Product')).toBeInTheDocument();
+  });
+
+  it('folders start collapsed — children not visible', () => {
+    render(<BrainTree tree={tree} />);
+    // Documents DOM-render but their container `.children` is display:none
+    // via `.group:not(.open) > .children`. Assert via the `.group` class
+    // state, which tests use directly.
+    const brandGroup = screen.getByText('Brand & Identity').closest('.group');
+    expect(brandGroup).not.toBeNull();
+    expect(brandGroup!.classList.contains('open')).toBe(false);
+  });
+
+  it('expands a folder on click', () => {
+    render(<BrainTree tree={tree} />);
+    const folderButton = screen.getByRole('button', { name: /Brand & Identity/ });
+    fireEvent.click(folderButton);
+
+    const brandGroup = folderButton.closest('.group');
+    expect(brandGroup!.classList.contains('open')).toBe(true);
+    expect(folderButton.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('collapses an open folder on click', () => {
+    render(<BrainTree tree={tree} />);
+    const folderButton = screen.getByRole('button', { name: /Brand & Identity/ });
+
+    fireEvent.click(folderButton); // open
+    fireEvent.click(folderButton); // close
+
+    const brandGroup = folderButton.closest('.group');
+    expect(brandGroup!.classList.contains('open')).toBe(false);
+    expect(folderButton.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('renders nested folders recursively', () => {
+    render(<BrainTree tree={tree} />);
+    // "Terravolt" is a sub-folder inside "Product" — it renders in the DOM
+    // even when its parent is collapsed (CSS hides via `.children` display).
+    expect(screen.getByText('Terravolt')).toBeInTheDocument();
+  });
+
+  it('renders document links inside folders', () => {
+    render(<BrainTree tree={tree} />);
+    const missionLink = screen.getByRole('link', { name: /Mission/ });
+    expect(missionLink).toBeInTheDocument();
+    expect(missionLink.getAttribute('href')).toBe('/brain/d1');
+  });
+
+  it('marks the active doc with data-active="true" when pathname matches', () => {
+    vi.mocked(usePathname).mockReturnValue('/brain/d1');
+    render(<BrainTree tree={tree} />);
+    const missionLink = screen.getByRole('link', { name: /Mission/ });
+    expect(missionLink.getAttribute('data-active')).toBe('true');
+
+    // A non-matching doc should not be marked active
+    const overviewLink = screen.getByRole('link', { name: /Overview/ });
+    expect(overviewLink.getAttribute('data-active')).toBeNull();
+  });
+
+  it('treats nested sub-paths as active (e.g. /brain/d1/edit)', () => {
+    vi.mocked(usePathname).mockReturnValue('/brain/d1/edit');
+    render(<BrainTree tree={tree} />);
+    const missionLink = screen.getByRole('link', { name: /Mission/ });
+    expect(missionLink.getAttribute('data-active')).toBe('true');
+  });
+});

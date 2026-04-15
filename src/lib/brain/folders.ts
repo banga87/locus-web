@@ -20,7 +20,7 @@
 // branching. Exact wording may include trailing detail; the prefix is
 // the API.
 
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { documents, folders } from '@/db/schema';
@@ -293,30 +293,34 @@ export async function togglePin(input: {
   brainId: string;
   documentId: string;
 }): Promise<{ isPinned: boolean }> {
-  const [doc] = await db
-    .select({ isPinned: documents.isPinned, brainId: documents.brainId })
-    .from(documents)
+  // Atomic flip via `SET is_pinned = NOT is_pinned`. A prior read-then-write
+  // implementation could lose a toggle under concurrent calls (both reads
+  // see `false`, both writes set `true`). The WHERE clause folds the
+  // tenancy + brain check into the UPDATE itself — if no row matches,
+  // `.returning()` comes back empty and we raise 'document not found:'.
+  const [row] = await db
+    .update(documents)
+    .set({
+      isPinned: sql`NOT ${documents.isPinned}`,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(documents.id, input.documentId),
         eq(documents.companyId, input.companyId),
+        eq(documents.brainId, input.brainId),
       ),
     )
-    .limit(1);
-  if (!doc || doc.brainId !== input.brainId) {
+    .returning({ isPinned: documents.isPinned });
+
+  if (!row) {
     throw new Error(`document not found: ${input.documentId}`);
   }
-
-  const next = !doc.isPinned;
-  await db
-    .update(documents)
-    .set({ isPinned: next, updatedAt: new Date() })
-    .where(eq(documents.id, input.documentId));
 
   // togglePin DOES change manifest contents (`isPinned` is in
   // ManifestDocument and affects the pinned-first sort), so regenerate.
   await regenerateManifest(input.brainId);
-  return { isPinned: next };
+  return { isPinned: row.isPinned };
 }
 
 /**

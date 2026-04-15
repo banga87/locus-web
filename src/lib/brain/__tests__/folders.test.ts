@@ -527,6 +527,64 @@ describe('togglePin', () => {
       .where(eq(documents.id, doc.id));
     expect(row.isPinned).toBe(false);
   });
+
+  it('regenerates the manifest with the new pin state', async () => {
+    const { id: folderId } = await createFolder({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      parentId: null,
+      name: `Pin ${f.suffix}-pin3`,
+    });
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        companyId: f.companyId,
+        brainId: f.brainId,
+        folderId,
+        title: 'Pin3',
+        slug: `pin3-${f.suffix}`,
+        path: `pin3/pin3-${f.suffix}`,
+        content: '# z',
+        status: 'active',
+        isPinned: false,
+      })
+      .returning({ id: documents.id });
+
+    // Walk folders + subfolders looking for the doc. Keeps the assertion
+    // resilient if the tree ever gets reshuffled (nested folder, etc).
+    const findInManifest = (m: Manifest, id: string) => {
+      const stack = [...m.folders];
+      while (stack.length) {
+        const node = stack.shift()!;
+        const hit = node.documents.find((d) => d.id === id);
+        if (hit) return hit;
+        stack.push(...node.folders);
+      }
+      return undefined;
+    };
+
+    // The insert above went straight to the DB, so the current manifest
+    // hasn't seen the doc yet — force a regen via a no-op first toggle
+    // (pin → true), then verify the manifest reflects the pinned state.
+    const pinResult = await togglePin({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      documentId: doc.id,
+    });
+    expect(pinResult.isPinned).toBe(true);
+    const afterPin = await readCurrent(f.brainId);
+    expect(findInManifest(afterPin, doc.id)?.isPinned).toBe(true);
+
+    // unpin and re-check
+    const unpinResult = await togglePin({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      documentId: doc.id,
+    });
+    expect(unpinResult.isPinned).toBe(false);
+    const afterUnpin = await readCurrent(f.brainId);
+    expect(findInManifest(afterUnpin, doc.id)?.isPinned).toBe(false);
+  });
 });
 
 describe('getFolderTree', () => {

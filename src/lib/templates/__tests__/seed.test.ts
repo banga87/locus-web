@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { brains, categories, companies, documents } from '@/db/schema';
+import { brains, companies, documents, folders } from '@/db/schema';
 
 import { seedBrainFromUniversalPack } from '../seed';
 import { UNIVERSAL_PACK } from '../universal-pack';
@@ -51,18 +51,27 @@ afterAll(async () => {
 });
 
 describe('seedBrainFromUniversalPack', () => {
-  it('creates exactly four categories with the expected slugs', async () => {
+  it('creates exactly four top-level folders with the expected slugs', async () => {
     const rows = await db
-      .select({ slug: categories.slug, name: categories.name })
-      .from(categories)
-      .where(eq(categories.brainId, brainId));
+      .select({
+        slug: folders.slug,
+        name: folders.name,
+        parentId: folders.parentId,
+      })
+      .from(folders)
+      .where(eq(folders.brainId, brainId));
 
-    expect(rows.length).toBe(UNIVERSAL_PACK.categories.length);
+    expect(rows.length).toBe(UNIVERSAL_PACK.folders.length);
     expect(rows.length).toBe(4);
+
+    // All universal-pack folders are top-level.
+    for (const row of rows) {
+      expect(row.parentId).toBeNull();
+    }
 
     const slugs = rows.map((r) => r.slug).sort();
     expect(slugs).toEqual(
-      [...UNIVERSAL_PACK.categories].map((c) => c.slug).sort(),
+      [...UNIVERSAL_PACK.folders].map((f) => f.slug).sort(),
     );
   });
 
@@ -72,7 +81,7 @@ describe('seedBrainFromUniversalPack', () => {
         slug: documents.slug,
         status: documents.status,
         isCore: documents.isCore,
-        categoryId: documents.categoryId,
+        folderId: documents.folderId,
         content: documents.content,
         title: documents.title,
       })
@@ -85,7 +94,7 @@ describe('seedBrainFromUniversalPack', () => {
     for (const row of rows) {
       expect(row.status).toBe('draft');
       expect(row.isCore).toBe(true);
-      expect(row.categoryId).not.toBeNull();
+      expect(row.folderId).not.toBeNull();
     }
   });
 
@@ -106,22 +115,22 @@ describe('seedBrainFromUniversalPack', () => {
     }
   });
 
-  it('links each document to the correct category by slug', async () => {
-    const catRows = await db
-      .select({ id: categories.id, slug: categories.slug })
-      .from(categories)
-      .where(eq(categories.brainId, brainId));
-    const slugById = new Map(catRows.map((c) => [c.id, c.slug]));
+  it('links each document to the correct folder by slug', async () => {
+    const folderRows = await db
+      .select({ id: folders.id, slug: folders.slug })
+      .from(folders)
+      .where(eq(folders.brainId, brainId));
+    const slugById = new Map(folderRows.map((f) => [f.id, f.slug]));
 
     const docRows = await db
-      .select({ slug: documents.slug, categoryId: documents.categoryId })
+      .select({ slug: documents.slug, folderId: documents.folderId })
       .from(documents)
       .where(eq(documents.brainId, brainId));
 
     for (const row of docRows) {
       const tmpl = UNIVERSAL_PACK.documents.find((d) => d.slug === row.slug);
       expect(tmpl, `unknown seeded doc ${row.slug}`).toBeDefined();
-      expect(slugById.get(row.categoryId!)).toBe(tmpl!.category);
+      expect(slugById.get(row.folderId!)).toBe(tmpl!.folder);
     }
   });
 });

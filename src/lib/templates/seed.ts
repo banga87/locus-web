@@ -1,6 +1,6 @@
-// Seed a fresh brain with the Universal Base Pack: four categories, ten
-// core documents. Called from the setup wizard right after creating the
-// company + brain, inside the same transaction boundary.
+// Seed a fresh brain with the Universal Base Pack: four top-level folders,
+// ten core documents. Called from the setup wizard right after creating
+// the company + brain, inside the same transaction boundary.
 //
 // Safety: wrapped in a Drizzle transaction so a mid-seed failure doesn't
 // leave a half-populated brain. The immutability trigger on
@@ -8,7 +8,7 @@
 // seeding, only the authoritative `documents` rows.
 
 import { db } from '@/db';
-import { categories, documents } from '@/db/schema';
+import { documents, folders } from '@/db/schema';
 import { regenerateManifest } from '@/lib/brain/manifest';
 
 import { UNIVERSAL_PACK } from './universal-pack';
@@ -18,32 +18,33 @@ export async function seedBrainFromUniversalPack(
   companyId: string,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    // Insert categories first and keep slug -> id in memory so we can
-    // resolve each document's categoryId without a second round-trip.
-    const categoryMap = new Map<string, string>();
+    // Insert folders first and keep slug -> id in memory so we can
+    // resolve each document's folderId without a second round-trip.
+    const folderMap = new Map<string, string>();
 
-    for (const cat of UNIVERSAL_PACK.categories) {
+    for (const folder of UNIVERSAL_PACK.folders) {
       const [created] = await tx
-        .insert(categories)
+        .insert(folders)
         .values({
           brainId,
           companyId,
-          slug: cat.slug,
-          name: cat.name,
-          description: cat.description,
-          sortOrder: cat.sortOrder,
+          parentId: folder.parentId,
+          slug: folder.slug,
+          name: folder.name,
+          description: folder.description,
+          sortOrder: folder.sortOrder,
         })
-        .returning({ id: categories.id });
-      categoryMap.set(cat.slug, created.id);
+        .returning({ id: folders.id });
+      folderMap.set(folder.slug, created.id);
     }
 
     for (const tmpl of UNIVERSAL_PACK.documents) {
-      const categoryId = categoryMap.get(tmpl.category);
-      if (!categoryId) {
-        // Defensive: a template document referencing a category we didn't
+      const folderId = folderMap.get(tmpl.folder);
+      if (!folderId) {
+        // Defensive: a template document referencing a folder we didn't
         // define would be a bug in universal-pack.ts, not bad input.
         throw new Error(
-          `Universal Pack document "${tmpl.slug}" references unknown category "${tmpl.category}".`,
+          `Universal Pack document "${tmpl.slug}" references unknown folder "${tmpl.folder}".`,
         );
       }
 
@@ -60,10 +61,10 @@ export async function seedBrainFromUniversalPack(
       await tx.insert(documents).values({
         brainId,
         companyId,
-        categoryId,
+        folderId,
         title: tmpl.title,
         slug: tmpl.slug,
-        path: `${tmpl.category}/${tmpl.slug}`,
+        path: `${tmpl.folder}/${tmpl.slug}`,
         content: body,
         summary: tmpl.summary,
         status: 'draft',

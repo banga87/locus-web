@@ -1,9 +1,9 @@
 // Universal Base Pack — the seed content every new brain ships with.
 //
-// Four categories, ten core documents. These are deliberately generic:
-// every company has a brand, a product, a sales motion, and internal
-// operations — the pack gives the founder somewhere to start writing
-// instead of facing an empty brain on day one.
+// Four top-level folders (parentId: null), ten core documents. These are
+// deliberately generic: every company has a brand, a product, a sales
+// motion, and internal operations — the pack gives the founder somewhere
+// to start writing instead of facing an empty brain on day one.
 //
 // Each document is stored as Markdown with H2 headings per section and an
 // HTML-comment prompt beneath each heading. The prompts are intentionally
@@ -24,29 +24,35 @@ export interface TemplateSection {
 export interface DocumentTemplate {
   slug: string;
   title: string;
-  category: string;
+  // The slug of the folder this document lives in. Matched to a
+  // FolderTemplate at seed time.
+  folder: string;
   summary: string;
   sections: TemplateSection[];
   isCore: true;
 }
 
-export interface CategoryTemplate {
+export interface FolderTemplate {
   slug: string;
   name: string;
   description: string;
   sortOrder: number;
+  // All universal-pack folders are top-level; we make that explicit so
+  // the seed path doesn't have to special-case `undefined`.
+  parentId: null;
 }
 
 export const UNIVERSAL_PACK = {
   id: 'universal',
   name: 'Universal Base Pack',
-  categories: [
+  folders: [
     {
       slug: 'brand-identity',
       name: 'Brand & Identity',
       description:
         'Who you are and how you show up. Voice, positioning, and visual identity — the things every customer-facing asset has to be consistent with.',
       sortOrder: 10,
+      parentId: null,
     },
     {
       slug: 'product-service',
@@ -54,6 +60,7 @@ export const UNIVERSAL_PACK = {
       description:
         'What you sell and how it works. The source of truth agents reach for when describing what your product does, who it\'s for, and where it\'s going.',
       sortOrder: 20,
+      parentId: null,
     },
     {
       slug: 'sales-revenue',
@@ -61,6 +68,7 @@ export const UNIVERSAL_PACK = {
       description:
         'How you turn interest into revenue. Pricing, ideal customer, and the patterns that separate buyers from browsers.',
       sortOrder: 30,
+      parentId: null,
     },
     {
       slug: 'company-operations',
@@ -68,8 +76,9 @@ export const UNIVERSAL_PACK = {
       description:
         'How the company itself runs. Origin, team, and the tooling stack that holds it together — context agents need to give useful answers to internal questions.',
       sortOrder: 40,
+      parentId: null,
     },
-  ] satisfies CategoryTemplate[],
+  ] satisfies FolderTemplate[],
 
   documents: [
     // ------------------------------------------------------------------
@@ -78,7 +87,7 @@ export const UNIVERSAL_PACK = {
     {
       slug: 'brand-voice-tone',
       title: 'Brand Voice & Tone',
-      category: 'brand-identity',
+      folder: 'brand-identity',
       summary:
         'How the brand sounds in writing and speech. Used by every agent that drafts customer-facing copy.',
       sections: [
@@ -103,7 +112,7 @@ export const UNIVERSAL_PACK = {
     {
       slug: 'mission-positioning',
       title: 'Mission & Positioning',
-      category: 'brand-identity',
+      folder: 'brand-identity',
       summary:
         'Why the company exists and how it\'s different. The document every pitch, landing page, and investor update traces back to.',
       sections: [
@@ -128,7 +137,7 @@ export const UNIVERSAL_PACK = {
     {
       slug: 'visual-identity',
       title: 'Visual Identity',
-      category: 'brand-identity',
+      folder: 'brand-identity',
       summary:
         'Logo, color, and typography rules. The reference for anything rendered — slides, web, social, print.',
       sections: [
@@ -157,7 +166,7 @@ export const UNIVERSAL_PACK = {
     {
       slug: 'product-overview',
       title: 'Product Overview',
-      category: 'product-service',
+      folder: 'product-service',
       summary:
         'What the product is, in plain language. The first document any new teammate or agent should read to understand what you sell.',
       sections: [
@@ -182,7 +191,7 @@ export const UNIVERSAL_PACK = {
     {
       slug: 'feature-catalog',
       title: 'Feature Catalog',
-      category: 'product-service',
+      folder: 'product-service',
       summary:
         'An inventory of what the product does today and what\'s coming. Source of truth for "does Locus support X?" questions.',
       sections: [
@@ -211,7 +220,7 @@ export const UNIVERSAL_PACK = {
     {
       slug: 'pricing-model',
       title: 'Pricing Model',
-      category: 'sales-revenue',
+      folder: 'sales-revenue',
       summary:
         'How you charge and why. The document every quote, contract, and pricing-page change is reconciled against.',
       sections: [
@@ -236,7 +245,7 @@ export const UNIVERSAL_PACK = {
     {
       slug: 'ideal-customer-profile',
       title: 'Ideal Customer Profile',
-      category: 'sales-revenue',
+      folder: 'sales-revenue',
       summary:
         'Who you\'re built for. The ICP is the single strongest filter on where to spend marketing and sales time.',
       sections: [
@@ -265,7 +274,7 @@ export const UNIVERSAL_PACK = {
     {
       slug: 'company-overview',
       title: 'Company Overview',
-      category: 'company-operations',
+      folder: 'company-operations',
       summary:
         'The short version of the company story — where it came from, where it is, and where it\'s heading.',
       sections: [
@@ -290,7 +299,7 @@ export const UNIVERSAL_PACK = {
     {
       slug: 'team-roles',
       title: 'Team & Roles',
-      category: 'company-operations',
+      folder: 'company-operations',
       summary:
         'Who does what, how decisions get made, and how the team works together day to day.',
       sections: [
@@ -315,7 +324,7 @@ export const UNIVERSAL_PACK = {
     {
       slug: 'tooling-stack',
       title: 'Tooling Stack',
-      category: 'company-operations',
+      folder: 'company-operations',
       summary:
         'The software the company runs on. Customer-facing, internal, and the glue between them.',
       sections: [

@@ -65,6 +65,7 @@ export interface AuditEvent {
   ipAddress?: string;
   sessionId?: string;
   tokenId?: string;
+  brainId?: string;
 
   // Populated by the logger at call time. Not part of the public call
   // surface — callers should not set this.

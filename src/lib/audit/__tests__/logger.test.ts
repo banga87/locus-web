@@ -201,6 +201,49 @@ describe('audit/logger — buffer mechanics (mocked writer)', () => {
   });
 });
 
+describe('logEvent — brainId', () => {
+  beforeEach(() => {
+    __resetForTests();
+  });
+
+  it('persists brainId when supplied', async () => {
+    const captured: any[] = [];
+    __setWriter(async (rows) => { captured.push(...rows); });
+
+    logEvent({
+      companyId: '11111111-1111-1111-1111-111111111111',
+      brainId: '22222222-2222-2222-2222-222222222222',
+      category: 'document_access',
+      eventType: 'document.read',
+      actorType: 'agent_token',
+      actorId: 'tok-1',
+    });
+
+    await flushEvents();
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0].brainId).toBe('22222222-2222-2222-2222-222222222222');
+  });
+
+  it('leaves brainId as null when omitted', async () => {
+    const captured: any[] = [];
+    __setWriter(async (rows) => { captured.push(...rows); });
+
+    logEvent({
+      companyId: '11111111-1111-1111-1111-111111111111',
+      category: 'authentication',
+      eventType: 'auth.login',
+      actorType: 'human',
+      actorId: 'user-1',
+    });
+
+    await flushEvents();
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0].brainId).toBeNull();
+  });
+});
+
 describe('audit/logger — live DB round-trip', () => {
   // This suite hits the real `audit_events` table via Drizzle. It asserts
   // on row-count delta (not absolute state) because the immutability

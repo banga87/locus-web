@@ -22,6 +22,7 @@ export type ActorType =
  */
 export type TargetType =
   | 'document'
+  | 'folder'
   | 'proposal'
   | 'session'
   | 'connection'

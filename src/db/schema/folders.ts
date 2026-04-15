@@ -77,7 +77,3 @@ export const folders = pgTable(
       .where(sql`"parent_id" IS NOT NULL`),
   ]
 );
-
-// Temporary alias so unconverted consumers keep compiling during the refactor.
-// Removed in Task 11 once the last import is migrated.
-export const categories = folders;

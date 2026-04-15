@@ -118,8 +118,41 @@
 .tiptap blockquote {
   @apply border-l-4 border-border pl-4 text-muted-foreground my-3;
 }
-.tiptap [data-type="callout"] {
-  @apply border border-border rounded-md p-4 my-3 bg-muted/30;
+/* Pull-quote styling applied to Tiptap Callout output (editor surface) and
+   the same data-type markup when it makes it through the read-mode
+   DocumentRenderer (which wraps output in `.prose`). NB: our read-mode
+   renderer runs markdown through `marked`, which will NOT preserve the
+   `data-type="callout"` attribute unless the doc already stores raw HTML.
+   This is a known gap — the fix is to teach DocumentRenderer to emit the
+   callout wrapper for a specific markdown convention (e.g. a custom block
+   or a `> [!note]` admonition). Scheduled for a follow-up task. */
+.tiptap [data-type="callout"],
+.prose [data-type="callout"] {
+  margin: 36px 0;
+  padding: 22px 0;
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.35;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  background: transparent;
+  border-radius: 0;
+}
+.tiptap [data-type="callout"]::before,
+.prose [data-type="callout"]::before {
+  content: "Agent note —";
+  display: block;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 8px;
 }
 .tiptap code {
   @apply rounded bg-muted px-1 py-0.5 font-mono text-sm;

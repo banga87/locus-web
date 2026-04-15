@@ -1,35 +1,25 @@
-// Read-only document view. Shows the full markdown, metadata strip, and an
-// Edit CTA for Editor+ roles. "View History" is a stub link — the versions
-// feature lands in a later task.
+// Read-only document view. Renders a brain document in the editorial
+// "article" layout (topbar crumbs, eyebrow/title/deck, meta strip, body).
+// Editor+ roles get an Edit action in the topbar; "View History" is a stub
+// pending the versions feature in a later task.
 
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { and, eq, isNull } from 'drizzle-orm';
-import { PencilIcon, HistoryIcon } from 'lucide-react';
+import { PencilIcon } from 'lucide-react';
 
 import { db } from '@/db';
-import { categories, documents, users } from '@/db/schema';
+import { documents, folders, users } from '@/db/schema';
 import { requireAuth } from '@/lib/api/auth';
 import { getBrainForCompany } from '@/lib/brain/queries';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { DocumentRenderer } from '@/components/brain/document-renderer';
-import { cn } from '@/lib/utils';
+import { ArticleView } from '@/components/brain/article-view';
+import { ThemeToggle } from '@/components/shell/theme-toggle';
 import { formatDistance } from '@/lib/format/time';
+import { getFreshness } from '@/lib/brain/freshness';
 
 interface PageProps {
   params: Promise<{ documentId: string }>;
-}
-
-function confidenceClass(c: 'high' | 'medium' | 'low'): string {
-  switch (c) {
-    case 'high':
-      return 'bg-green-600 text-white';
-    case 'medium':
-      return 'bg-amber-500 text-white';
-    case 'low':
-      return 'bg-red-500 text-white';
-  }
 }
 
 export default async function DocumentViewPage({ params }: PageProps) {
@@ -44,17 +34,18 @@ export default async function DocumentViewPage({ params }: PageProps) {
       id: documents.id,
       title: documents.title,
       content: documents.content,
+      summary: documents.summary,
       status: documents.status,
       confidenceLevel: documents.confidenceLevel,
       isCore: documents.isCore,
-      categoryName: categories.name,
-      categorySlug: categories.slug,
+      folderName: folders.name,
+      folderSlug: folders.slug,
       ownerName: users.fullName,
       ownerEmail: users.email,
       updatedAt: documents.updatedAt,
     })
     .from(documents)
-    .leftJoin(categories, eq(documents.categoryId, categories.id))
+    .leftJoin(folders, eq(documents.folderId, folders.id))
     .leftJoin(users, eq(documents.ownerId, users.id))
     .where(
       and(
@@ -69,68 +60,68 @@ export default async function DocumentViewPage({ params }: PageProps) {
 
   const canEdit = ['owner', 'admin', 'editor'].includes(ctx.role);
 
+  // Eyebrow — folder name plus a Core marker when the doc anchors the brain.
+  const eyebrow = row.folderName
+    ? row.isCore
+      ? `${row.folderName} · Core`
+      : row.folderName
+    : row.isCore
+      ? 'Core'
+      : '';
+
+  // Breadcrumb — one folder hop plus current title. Full parent-chain walk
+  // is deferred; a later task can recurse through folders.parentId.
+  const breadcrumb: Array<{ label: string; href?: string }> = [
+    { label: 'Brain', href: '/brain' },
+  ];
+  if (row.folderName) {
+    breadcrumb.push({
+      label: row.folderName,
+      href: `/brain#${row.folderSlug ?? ''}`,
+    });
+  }
+  breadcrumb.push({ label: row.title });
+
+  // updatedAt is a Date from the timestamp column; freshness wants an ISO
+  // string, formatDistance accepts either — keep the Date for the latter.
+  const updatedAtIso = row.updatedAt.toISOString();
+  const freshness = getFreshness(updatedAtIso, row.confidenceLevel, new Date());
+
+  // users.fullName is nullable; fall back to email, then to a placeholder.
+  const author = row.ownerName ?? row.ownerEmail ?? 'Unknown';
+
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-8">
-      {row.categoryName && (
-        <nav className="mb-3 text-sm text-muted-foreground">
-          <Link
-            href={`/brain?category=${row.categorySlug ?? ''}`}
-            className="hover:underline"
-          >
-            {row.categoryName}
-          </Link>
-          <span className="mx-2">→</span>
-          <span>{row.title}</span>
-        </nav>
-      )}
-
-      <header className="mb-6 border-b border-border pb-4">
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{row.title}</h1>
-
-          <div className="flex items-center gap-2">
-            {canEdit && (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/brain/${row.id}/edit`}>
-                  <PencilIcon className="size-3.5" />
-                  Edit
-                </Link>
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="#">
-                <HistoryIcon className="size-3.5" />
-                History
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span
-            className={cn(
-              'inline-flex items-center rounded-full px-2 py-0.5 font-medium',
-              confidenceClass(row.confidenceLevel),
-            )}
-          >
-            {row.confidenceLevel}
-          </span>
-          <span className="inline-flex items-center rounded-full bg-zinc-200 px-2 py-0.5 font-medium text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
-            {row.status}
-          </span>
-          {row.isCore && (
-            <Badge variant="outline" className="text-[10px] uppercase">
-              Core
-            </Badge>
-          )}
-          {row.ownerName && <span>Owner: {row.ownerName}</span>}
-          <span className="ml-auto">
-            Last updated {formatDistance(row.updatedAt)}
-          </span>
-        </div>
-      </header>
-
+    <ArticleView
+      eyebrow={eyebrow}
+      title={row.title}
+      deck={row.summary}
+      breadcrumb={breadcrumb}
+      meta={{
+        status: row.status,
+        confidence: row.confidenceLevel,
+        updatedAt: formatDistance(row.updatedAt),
+        updatedFreshness: freshness,
+        author,
+      }}
+      actions={
+        canEdit ? (
+          <>
+            <Link
+              href={`/brain/${row.id}/edit`}
+              className="icon-btn"
+              title="Edit"
+              aria-label="Edit document"
+            >
+              <PencilIcon className="size-4" />
+            </Link>
+            <ThemeToggle />
+          </>
+        ) : (
+          <ThemeToggle />
+        )
+      }
+    >
       <DocumentRenderer markdown={row.content} />
-    </div>
+    </ArticleView>
   );
 }

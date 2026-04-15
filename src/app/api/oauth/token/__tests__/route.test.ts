@@ -2,10 +2,11 @@
 // jose's webapi realm check fails under jsdom (see src/lib/oauth/jwt.test.ts
 // for the gory details) — pin this file to node.
 //
-// POST /api/oauth/token — authorization_code grant (Task 18).
-// Refresh-token grant tests are added in the next commit (Task 19).
+// POST /api/oauth/token — covers both grant types dispatched by the route:
+//   - authorization_code (Task 18)
+//   - refresh_token (Task 19)
 // Uses the live DB; seeds a company + user + client, wipes oauth_codes and
-// oauth_refresh_tokens scoped to this user at the end.
+// oauth_refresh_tokens at the end.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHash, randomBytes } from 'crypto';
@@ -20,6 +21,7 @@ import {
   users,
 } from '@/db/schema';
 import { generateCode } from '@/lib/oauth/codes';
+import { issueRefreshToken } from '@/lib/oauth/refresh';
 import { POST } from '../route';
 
 let clientId: string;
@@ -63,7 +65,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Scope cleanup to our seeded user/client so parallel test files using
-  // the same tables don't get their in-flight rows wiped out from under them.
+  // the same tables (e.g. src/lib/oauth/__tests__/refresh.test.ts) don't
+  // get their in-flight rows wiped out from under them.
   await db.delete(oauthCodes).where(eq(oauthCodes.userId, userId));
   await db.delete(oauthRefreshTokens).where(eq(oauthRefreshTokens.userId, userId));
   await db.delete(oauthClients).where(inArray(oauthClients.clientId, [clientId]));
@@ -259,6 +262,131 @@ describe('POST /api/oauth/token — authorization_code grant', () => {
     );
     expect(second.status).toBe(400);
     expect(await second.json()).toEqual({ error: 'invalid_grant' });
+  });
+});
+
+// --- refresh_token grant (Task 19) -------------------------------------
+
+describe('POST /api/oauth/token — refresh_token grant', () => {
+  it('happy rotation: returns new access_token + new refresh_token', async () => {
+    const { refreshToken } = await issueRefreshToken({
+      clientId,
+      userId,
+      companyId,
+    });
+    const res = await POST(
+      formRequest({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: clientId,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+
+    const body = (await res.json()) as {
+      access_token: string;
+      token_type: string;
+      expires_in: number;
+      refresh_token: string;
+    };
+    expect(body.token_type).toBe('Bearer');
+    expect(body.expires_in).toBe(3600);
+    expect(body.refresh_token).not.toBe(refreshToken);
+
+    const claims = decodeJwt(body.access_token);
+    expect(claims.sub).toBe(userId);
+    expect(claims.cid).toBe(companyId);
+    expect(claims.cli).toBe(clientId);
+    expect(claims.scopes).toEqual(['read']);
+
+    await db.delete(oauthRefreshTokens).where(eq(oauthRefreshTokens.userId, userId));
+  });
+
+  it('rejects reuse of the original refresh token with invalid_grant (chain-kill)', async () => {
+    const { refreshToken: t0 } = await issueRefreshToken({
+      clientId,
+      userId,
+      companyId,
+    });
+    // First rotation succeeds and revokes t0.
+    const first = await POST(
+      formRequest({
+        grant_type: 'refresh_token',
+        refresh_token: t0,
+        client_id: clientId,
+      }),
+    );
+    expect(first.status).toBe(200);
+    const { refresh_token: t1 } = (await first.json()) as {
+      refresh_token: string;
+    };
+
+    // Replay of t0 → chain-kill, invalid_grant.
+    const replay = await POST(
+      formRequest({
+        grant_type: 'refresh_token',
+        refresh_token: t0,
+        client_id: clientId,
+      }),
+    );
+    expect(replay.status).toBe(400);
+    expect(await replay.json()).toEqual({ error: 'invalid_grant' });
+
+    // After chain-kill, t1 is also revoked → invalid_grant.
+    const newerTry = await POST(
+      formRequest({
+        grant_type: 'refresh_token',
+        refresh_token: t1,
+        client_id: clientId,
+      }),
+    );
+    expect(newerTry.status).toBe(400);
+    expect(await newerTry.json()).toEqual({ error: 'invalid_grant' });
+
+    await db.delete(oauthRefreshTokens).where(eq(oauthRefreshTokens.userId, userId));
+  });
+
+  it('rejects unknown refresh_token with invalid_grant', async () => {
+    const res = await POST(
+      formRequest({
+        grant_type: 'refresh_token',
+        refresh_token: 'not-a-real-token',
+        client_id: clientId,
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_grant' });
+  });
+
+  it('rejects expired refresh_token with invalid_grant', async () => {
+    const token = 'expired-' + Date.now() + '-' + randomBytes(8).toString('hex');
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    await db.insert(oauthRefreshTokens).values({
+      tokenHash,
+      clientId,
+      userId,
+      companyId,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    const res = await POST(
+      formRequest({
+        grant_type: 'refresh_token',
+        refresh_token: token,
+        client_id: clientId,
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_grant' });
+    await db.delete(oauthRefreshTokens).where(eq(oauthRefreshTokens.userId, userId));
+  });
+
+  it('rejects missing refresh_token with invalid_request', async () => {
+    const res = await POST(
+      formRequest({ grant_type: 'refresh_token', client_id: clientId }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_request' });
   });
 });
 

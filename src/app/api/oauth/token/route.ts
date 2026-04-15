@@ -1,12 +1,12 @@
 // POST /api/oauth/token — OAuth 2.1 token endpoint.
 //
-// Currently handles a single grant type:
+// Accepts two grant types on a single route, dispatched by the
+// `grant_type` form field:
 //   - authorization_code: exchanges a PKCE-bound code for an access +
 //     refresh token pair.
-//
-// Refresh-token rotation lands in the next commit; until then, any
-// grant_type other than authorization_code falls through to
-// `unsupported_grant_type`.
+//   - refresh_token: rotates a refresh token; the presented token is
+//     revoked and a new one is issued. Replay of a revoked token
+//     chain-revokes the whole family inside `rotateRefreshToken`.
 //
 // Public clients only (PKCE) — no client authentication, no
 // Authorization header. Per RFC 6749, the body is
@@ -14,7 +14,7 @@
 
 import { NextResponse } from 'next/server';
 import { consumeCode } from '@/lib/oauth/codes';
-import { issueRefreshToken } from '@/lib/oauth/refresh';
+import { rotateRefreshToken, issueRefreshToken } from '@/lib/oauth/refresh';
 import { signAccessToken } from '@/lib/oauth/jwt';
 
 export const runtime = 'nodejs';
@@ -41,6 +41,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const grantType = form.get('grant_type');
   if (grantType === 'authorization_code') return handleCode(form);
+  if (grantType === 'refresh_token') return handleRefresh(form);
   return jsonError('unsupported_grant_type');
 }
 
@@ -87,5 +88,29 @@ async function handleCode(form: FormData): Promise<Response> {
     token_type: 'Bearer',
     expires_in: ACCESS_TOKEN_TTL_SECONDS,
     refresh_token: refreshToken,
+  });
+}
+
+async function handleRefresh(form: FormData): Promise<Response> {
+  const refreshToken = form.get('refresh_token');
+  if (typeof refreshToken !== 'string') return jsonError('invalid_request');
+
+  const result = await rotateRefreshToken({ refreshToken });
+  // Any failure mode — unknown / expired / revoked_chain_killed — maps
+  // to invalid_grant. The chain-revoke side effect for replays is
+  // already applied inside rotateRefreshToken.
+  if (!result.ok) return jsonError('invalid_grant');
+
+  const accessToken = await signAccessToken({
+    userId: result.userId,
+    companyId: result.companyId,
+    clientId: result.clientId,
+    scopes: DEFAULT_SCOPES,
+  });
+  return successResponse({
+    access_token: accessToken,
+    token_type: 'Bearer',
+    expires_in: ACCESS_TOKEN_TTL_SECONDS,
+    refresh_token: result.newRefreshToken,
   });
 }

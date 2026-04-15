@@ -54,19 +54,18 @@ export interface Manifest {
   folders: ManifestFolder[];
 }
 
-export async function regenerateManifest(brainId: string): Promise<void> {
-  // Resolve companyId — navigation_manifests.company_id is NOT NULL. The
-  // brain row is the source of truth; callers pass only brainId.
-  const [brain] = await db
-    .select({ companyId: brains.companyId })
-    .from(brains)
-    .where(eq(brains.id, brainId))
-    .limit(1);
-
-  if (!brain) {
-    throw new Error(`regenerateManifest: brain ${brainId} not found`);
-  }
-
+/**
+ * Build the nested folder/document tree for a brain in the manifest's
+ * canonical shape (`ManifestFolder[]`). Factored out so callers that need
+ * the same shape without writing a `navigation_manifests` row — sidebar
+ * data fetchers, the folders CRUD lib's `getFolderTree` — can reuse it.
+ *
+ * Includes only live (`deletedAt IS NULL`) knowledge-typed (`type IS NULL`)
+ * documents, matching the agent-facing manifest contract.
+ */
+export async function buildFolderTree(
+  brainId: string,
+): Promise<ManifestFolder[]> {
   // 1. Fetch all folders for the brain in deterministic order (sortOrder
   //    then name for tie-break).
   const folderRows = await db
@@ -148,6 +147,24 @@ export async function regenerateManifest(brainId: string): Promise<void> {
           : String(d.updatedAt),
     });
   }
+
+  return roots;
+}
+
+export async function regenerateManifest(brainId: string): Promise<void> {
+  // Resolve companyId — navigation_manifests.company_id is NOT NULL. The
+  // brain row is the source of truth; callers pass only brainId.
+  const [brain] = await db
+    .select({ companyId: brains.companyId })
+    .from(brains)
+    .where(eq(brains.id, brainId))
+    .limit(1);
+
+  if (!brain) {
+    throw new Error(`regenerateManifest: brain ${brainId} not found`);
+  }
+
+  const roots = await buildFolderTree(brainId);
 
   const manifest: Manifest = {
     generatedAt: new Date().toISOString(),

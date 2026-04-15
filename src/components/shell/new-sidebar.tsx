@@ -8,8 +8,10 @@
 // holds per-folder expand/collapse state locally.
 
 import Link from 'next/link';
+import { useState } from 'react';
 
 import type { ManifestFolder } from '@/lib/brain/manifest';
+import { CreateFolderDialog } from '@/components/brain/folder-dialogs';
 
 import { BrainTree } from './brain-tree';
 import { WorkspaceRow } from './workspace-row';
@@ -36,6 +38,11 @@ export function NewSidebar({
   pinned,
 }: NewSidebarProps) {
   const docCount = countDocs(tree);
+  // Top-level "New folder" dialog. Sibling to BrainTree's own dialog state —
+  // keeping them separate avoids threading an imperative handle through
+  // (the plan's "dead simple" path). Two CreateFolderDialog instances share
+  // no state; only one can be open at a time in practice.
+  const [createOpen, setCreateOpen] = useState(false);
   const userInitials = (user.fullName ?? user.email)
     .split(/\s+/)
     .map((s) => s[0])
@@ -78,10 +85,30 @@ export function NewSidebar({
       <div className="side-body">
         <div className="section-label">
           <span className="label">Brain</span>
-          <span className="count">{docCount} DOCS</span>
+          <span className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              aria-label="New top-level folder"
+              className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <PlusIcon />
+            </button>
+            <span className="count">{docCount} DOCS</span>
+          </span>
         </div>
 
         <BrainTree tree={tree} />
+        {/* Conditionally mount so each open starts with fresh input state
+            (the dialog itself relies on unmount to reset). */}
+        {createOpen && (
+          <CreateFolderDialog
+            open
+            onOpenChange={setCreateOpen}
+            parentId={null}
+            parentName={null}
+          />
+        )}
 
         {pinned.length > 0 && (
           <>
@@ -219,6 +246,22 @@ function McpIcon() {
     >
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M8 2v4M16 2v4M3 10h18" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
     </svg>
   );
 }

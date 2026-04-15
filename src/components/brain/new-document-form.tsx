@@ -1,11 +1,22 @@
 'use client';
 
-// New document form. Minimal fields: title, category, body. Slug is derived
-// client-side from the title so the user doesn't have to think about it.
-// The body is a Tiptap editor so the initial draft uses the same WYSIWYG
-// surface the editor does.
+// New document form. Minimal fields: title, destination folder, body.
+// Slug is derived client-side from the title so the user doesn't have to
+// think about it. The body is a Tiptap editor so the initial draft uses
+// the same WYSIWYG surface the editor does.
+//
+// Task 9: the destination picker is now a flattened view of the folder
+// tree (indented by depth with non-breaking spaces) rather than a flat
+// category list. If a `defaultFolderId` is supplied (via the sidebar's
+// per-folder "New doc" action), it pre-fills the select.
+//
+// Note on POST field name: we send `folderId` even though the API route
+// still accepts `categoryId`. That mismatch is intentional — Task 10
+// sweeps the route to rename the key, and kicking the ball down the road
+// to the route change keeps this commit focused on the UI surface.
+// Until Task 10 lands, this form will 400 at runtime.
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import TurndownService from 'turndown';
@@ -21,14 +32,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { TiptapEditor } from '@/components/editor/tiptap-editor';
-
-interface Category {
-  id: string;
-  name: string;
-}
+import {
+  flattenTree,
+  indentLabel,
+} from '@/components/brain/folder-dialogs';
+import type { ManifestFolder } from '@/lib/brain/manifest';
 
 interface Props {
-  categories: Category[];
+  folders: ManifestFolder[];
+  defaultFolderId?: string | null;
 }
 
 function slugify(title: string): string {
@@ -45,10 +57,13 @@ const turndown = new TurndownService({
   bulletListMarker: '-',
 });
 
-export function NewDocumentForm({ categories }: Props) {
+export function NewDocumentForm({ folders, defaultFolderId }: Props) {
   const router = useRouter();
+  const flat = useMemo(() => flattenTree(folders), [folders]);
   const [title, setTitle] = useState('');
-  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? '');
+  const [folderId, setFolderId] = useState(
+    defaultFolderId ?? flat[0]?.id ?? '',
+  );
   const html = useRef<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,8 +83,8 @@ export function NewDocumentForm({ categories }: Props) {
         setError('Title must contain at least one letter or number.');
         return;
       }
-      if (!categoryId) {
-        setError('Pick a category.');
+      if (!folderId) {
+        setError('Pick a folder.');
         return;
       }
 
@@ -83,7 +98,8 @@ export function NewDocumentForm({ categories }: Props) {
             title: trimmed,
             slug,
             content: markdown,
-            categoryId,
+            // See module header: Task 10 renames this key on the route.
+            folderId,
           }),
         });
         if (!res.ok) {
@@ -100,7 +116,7 @@ export function NewDocumentForm({ categories }: Props) {
         setSubmitting(false);
       }
     },
-    [title, categoryId, router],
+    [title, folderId, router],
   );
 
   return (
@@ -108,7 +124,7 @@ export function NewDocumentForm({ categories }: Props) {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">New document</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Pick a category, give it a title, and start writing. You can tweak
+          Pick a folder, give it a title, and start writing. You can tweak
           everything later.
         </p>
       </header>
@@ -125,18 +141,18 @@ export function NewDocumentForm({ categories }: Props) {
       </div>
 
       <div className="space-y-2">
-        <Label>Category</Label>
+        <Label>Folder</Label>
         <Select
-          value={categoryId}
-          onValueChange={(v) => setCategoryId(v ?? '')}
+          value={folderId}
+          onValueChange={(v) => setFolderId(v ?? '')}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Pick a category" />
+            <SelectValue placeholder="Pick a folder" />
           </SelectTrigger>
           <SelectContent>
-            {categories.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
+            {flat.map((f) => (
+              <SelectItem key={f.id} value={f.id}>
+                {indentLabel(f.name, f.depth)}
               </SelectItem>
             ))}
           </SelectContent>

@@ -18,6 +18,10 @@ import type { ManifestFolder } from '@/lib/brain/manifest';
 
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/'),
+  // Task 9: <FolderNode> dispatches to `/brain/new?folderId=...` from the
+  // context-menu "New doc" action via useRouter().push. Mock is a no-op
+  // for the rendering/expand assertions in this file.
+  useRouter: vi.fn(() => ({ push: vi.fn(), replace: vi.fn() })),
 }));
 
 const tree: ManifestFolder[] = [
@@ -107,7 +111,11 @@ describe('BrainTree', () => {
 
   it('expands a folder on click', () => {
     render(<BrainTree tree={tree} />);
-    const folderButton = screen.getByRole('button', { name: /Brand & Identity/ });
+    // Filter to the folder-row button (has aria-expanded) — the ⋮ context
+    // menu trigger also has "Brand & Identity" in its name.
+    const folderButton = screen
+      .getAllByRole('button', { name: /Brand & Identity/ })
+      .find((el) => el.hasAttribute('aria-expanded'))!;
     fireEvent.click(folderButton);
 
     const brandGroup = folderButton.closest('.group');
@@ -117,7 +125,11 @@ describe('BrainTree', () => {
 
   it('collapses an open folder on click', () => {
     render(<BrainTree tree={tree} />);
-    const folderButton = screen.getByRole('button', { name: /Brand & Identity/ });
+    // Filter to the folder-row button (has aria-expanded) — the ⋮ context
+    // menu trigger also has "Brand & Identity" in its name.
+    const folderButton = screen
+      .getAllByRole('button', { name: /Brand & Identity/ })
+      .find((el) => el.hasAttribute('aria-expanded'))!;
 
     fireEvent.click(folderButton); // open
     fireEvent.click(folderButton); // close
@@ -165,10 +177,12 @@ describe('BrainTree', () => {
     // Product and Terravolt should both have .open class — d2 lives in
     // Product → Terravolt, so both ancestors must auto-expand on mount.
     const productGroup = screen
-      .getByRole('button', { name: /Product/ })
+      .getAllByRole('button', { name: /Product/ })
+      .find((el) => el.hasAttribute('aria-expanded'))!
       .closest('.group');
     const terravoltGroup = screen
-      .getByRole('button', { name: /Terravolt/ })
+      .getAllByRole('button', { name: /Terravolt/ })
+      .find((el) => el.hasAttribute('aria-expanded'))!
       .closest('.group');
     expect(productGroup?.classList.contains('open')).toBe(true);
     expect(terravoltGroup?.classList.contains('open')).toBe(true);
@@ -178,7 +192,8 @@ describe('BrainTree', () => {
     vi.mocked(usePathname).mockReturnValue('/brain/d1'); // d1 is in Brand, not Product
     render(<BrainTree tree={tree} />);
     const productGroup = screen
-      .getByRole('button', { name: /Product/ })
+      .getAllByRole('button', { name: /Product/ })
+      .find((el) => el.hasAttribute('aria-expanded'))!
       .closest('.group');
     expect(productGroup?.classList.contains('open')).toBe(false);
   });

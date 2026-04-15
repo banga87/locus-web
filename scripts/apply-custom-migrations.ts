@@ -36,6 +36,7 @@ const CUSTOM_MIGRATIONS = [
   '0010_attachment_storage.sql',
   '0012_audit_events_mcp_invocation_enum.sql',
   '0013_audit_events_brain_id_column.sql',
+  '0014_audit_events_realtime_publication.sql',
 ];
 
 async function main() {

@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
+import { getFreshness } from '@/lib/brain/freshness';
 import type { ManifestDocument, ManifestFolder } from '@/lib/brain/manifest';
 
 interface BrainTreeProps {
@@ -104,12 +105,17 @@ function DocNode({ doc }: { doc: ManifestDocument }) {
   const href = `/brain/${doc.id}`;
   const isActive =
     pathname === href || (pathname?.startsWith(`${href}/`) ?? false);
+  // Staleness tier drives the dim/dot treatment in CSS via `data-freshness`.
+  // Computed per render — cheap (one Date parse + subtract) and avoids a
+  // stale cached value if the user idles past a tier boundary.
+  const freshness = getFreshness(doc.updatedAt, doc.confidenceLevel);
 
   return (
     <Link
       href={href}
       className="node doc leaf"
       data-active={isActive ? 'true' : undefined}
+      data-freshness={freshness}
       aria-current={isActive ? 'page' : undefined}
     >
       <span className="chev" aria-hidden="true">

@@ -182,4 +182,52 @@ describe('BrainTree', () => {
       .closest('.group');
     expect(productGroup?.classList.contains('open')).toBe(false);
   });
+
+  it('sets data-freshness on document nodes based on updatedAt + confidence', () => {
+    // Build a fixture with two docs at known ages so tier boundaries are
+    // deterministic. 200 days old + high confidence = stale (threshold 180).
+    // "Right now" + high confidence = fresh. Docs render regardless of the
+    // parent folder's open/closed state (see "renders nested folders" note
+    // above — `.children` is display:none via CSS but the nodes are in the
+    // DOM), so no click-to-expand is needed.
+    const staleFolder: ManifestFolder = {
+      id: 'f-test',
+      slug: 'test',
+      name: 'Test',
+      description: null,
+      folders: [],
+      documents: [
+        {
+          id: 'old',
+          path: 'x',
+          title: 'Old Doc',
+          summary: null,
+          confidenceLevel: 'high',
+          status: 'active',
+          isCore: false,
+          isPinned: false,
+          updatedAt: new Date(
+            Date.now() - 200 * 86_400_000,
+          ).toISOString(),
+        },
+        {
+          id: 'new',
+          path: 'y',
+          title: 'New Doc',
+          summary: null,
+          confidenceLevel: 'high',
+          status: 'active',
+          isCore: false,
+          isPinned: false,
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+    };
+
+    render(<BrainTree tree={[staleFolder]} />);
+    const oldLink = screen.getByRole('link', { name: /Old Doc/ });
+    const newLink = screen.getByRole('link', { name: /New Doc/ });
+    expect(oldLink.getAttribute('data-freshness')).toBe('stale');
+    expect(newLink.getAttribute('data-freshness')).toBe('fresh');
+  });
 });

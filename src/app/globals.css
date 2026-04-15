@@ -313,6 +313,33 @@
   border-radius: 50%;
   background: var(--accent);
 }
+
+/* Staleness cues — confidence-weighted dimming on document rows.
+   Fresh docs render normally; aging is dimmed; stale adds a rust dot
+   to the right edge. The classifier lives in src/lib/brain/freshness.ts.
+   Co-existence with the active-state dot (`.node.selected::after` /
+   `.node[data-active="true"]::after` at right: 16px): the stale dot uses
+   `::before` at right: 6px so an active+stale row shows both markers
+   stacked along the right edge without overlap. */
+.node.doc[data-freshness="aging"] {
+  color: var(--ink-3);
+}
+.node.doc[data-freshness="stale"] {
+  color: var(--ink-3);
+  position: relative;
+}
+.node.doc[data-freshness="stale"]::before {
+  content: "";
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  pointer-events: none;
+}
 .chev {
   width: 12px;
   flex-shrink: 0;

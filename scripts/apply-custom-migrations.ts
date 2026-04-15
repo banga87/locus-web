@@ -34,6 +34,7 @@ const CUSTOM_MIGRATIONS = [
   '0008_skill_manifests_select_only.sql',
   '0009_session_attachments_owner_scope.sql',
   '0010_attachment_storage.sql',
+  '0012_audit_events_mcp_invocation_enum.sql',
 ];
 
 async function main() {

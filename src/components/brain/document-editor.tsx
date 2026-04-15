@@ -14,10 +14,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
-import { CheckIcon, LoaderIcon, XCircleIcon } from 'lucide-react';
+import { CheckIcon, LoaderIcon, XIcon, XCircleIcon } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { TiptapEditor } from '@/components/editor/tiptap-editor';
+import { ThemeToggle } from '@/components/shell/theme-toggle';
 import {
   FrontmatterSidebar,
   type FrontmatterValue,
@@ -152,47 +152,72 @@ export function DocumentEditor({ document, owners }: Props) {
     };
   }, [flush]);
 
+  const breadcrumb = [
+    { label: 'Brain', href: '/brain' },
+    { label: frontmatter.title || 'Untitled' },
+  ];
+
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs">
+    <>
+      <div className="topbar">
+        <nav className="crumbs" aria-label="Breadcrumb">
+          {breadcrumb.map((c, i) => {
+            const isLast = i === breadcrumb.length - 1;
+            return (
+              <span key={i} className={isLast ? 'cur' : undefined}>
+                {c.href && !isLast ? <Link href={c.href}>{c.label}</Link> : c.label}
+                {!isLast && <span> / </span>}
+              </span>
+            );
+          })}
+        </nav>
+        <div className="topbar-spacer" />
+        <div className="flex items-center gap-3 text-xs">
           <SaveIndicator state={saveState} />
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/brain/${document.id}`}>Done editing</Link>
-        </Button>
+        <Link
+          href={`/brain/${document.id}`}
+          className="icon-btn"
+          title="Close editor"
+          aria-label="Close editor"
+        >
+          <XIcon className="size-4" />
+        </Link>
+        <ThemeToggle />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="min-w-0 rounded-lg border border-border bg-background p-6">
-          <input
-            type="text"
-            value={frontmatter.title}
-            onChange={(e) => onFrontmatterChange({ title: e.target.value })}
-            placeholder="Untitled"
-            className="mb-4 w-full border-0 bg-transparent text-2xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground"
+      <div className="mx-auto w-full max-w-6xl px-6 py-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+          <div className="min-w-0 rounded-lg border border-border bg-background p-6">
+            <input
+              type="text"
+              value={frontmatter.title}
+              onChange={(e) => onFrontmatterChange({ title: e.target.value })}
+              placeholder="Untitled"
+              className="mb-4 w-full border-0 bg-transparent text-2xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground"
+            />
+            <TiptapEditor
+              initialContent={initialHtml}
+              placeholder="Start writing…"
+              onUpdate={onHtmlUpdate}
+            />
+            <button
+              type="button"
+              onClick={() => router.push(`/brain/${document.id}`)}
+              className="sr-only"
+            >
+              Done
+            </button>
+          </div>
+
+          <FrontmatterSidebar
+            value={frontmatter}
+            owners={owners}
+            onChange={onFrontmatterChange}
           />
-          <TiptapEditor
-            initialContent={initialHtml}
-            placeholder="Start writing…"
-            onUpdate={onHtmlUpdate}
-          />
-          <button
-            type="button"
-            onClick={() => router.push(`/brain/${document.id}`)}
-            className="sr-only"
-          >
-            Done
-          </button>
         </div>
-
-        <FrontmatterSidebar
-          value={frontmatter}
-          owners={owners}
-          onChange={onFrontmatterChange}
-        />
       </div>
-    </div>
+    </>
   );
 }
 

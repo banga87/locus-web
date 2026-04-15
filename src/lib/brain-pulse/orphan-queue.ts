@@ -26,8 +26,9 @@ export function createOrphanQueue<T>(opts: OrphanQueueOptions<T>): OrphanQueue<T
   const buckets = new Map<string, Timed<T>[]>();
 
   function enqueue(entry: OrphanEntry<T>) {
-    let timed: Timed<T>;
-    const timer = setTimeout(() => {
+    // Build a placeholder so the timer closure can reference the final object.
+    const timed = { ...entry } as Timed<T>;
+    timed.timer = setTimeout(() => {
       const bucket = buckets.get(entry.key);
       if (!bucket) return;
       const idx = bucket.findIndex((e) => e === timed);
@@ -35,7 +36,6 @@ export function createOrphanQueue<T>(opts: OrphanQueueOptions<T>): OrphanQueue<T
       if (bucket.length === 0) buckets.delete(entry.key);
       opts.onDrop(entry);
     }, opts.timeoutMs);
-    timed = { ...entry, timer };
     const arr = buckets.get(entry.key) ?? [];
     arr.push(timed);
     buckets.set(entry.key, arr);

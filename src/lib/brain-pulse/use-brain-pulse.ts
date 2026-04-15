@@ -166,6 +166,13 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
   const [pulses, setPulses] = useState<Pulse[]>([]);
   const [mcpCallLines, setMcpCallLines] = useState<McpCallLine[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
+  // Tick once per second so activeAgents / eventRate60s memos stay accurate
+  // without calling Date.now() directly during render (react-hooks/purity).
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => clearInterval(t);
+  }, []);
 
   const channelRef = useRef<RealtimeChannel | null>(null);
   const batcherRef = useRef<ReturnType<typeof createEventBatcher<BrainPulseEventBase>> | null>(null);
@@ -218,7 +225,8 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
 
   useEffect(() => {
     // Reset pulse buffer when re-subscribing (e.g. companyId change).
-    setPulses([]);
+    // Deferred so it doesn't trigger cascading-render lint (react-hooks/set-state-in-effect).
+    const resetTimer = setTimeout(() => setPulses([]), 0);
 
     function ingest(evt: BrainPulseEventBase) {
       // document_mutation: trigger SWR revalidation immediately.
@@ -322,6 +330,7 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
     channelRef.current = channel;
 
     return () => {
+      clearTimeout(resetTimer);
       batcherRef.current?.dispose();
       orphanRef.current?.dispose();
       if (pausedTimerRef.current) {
@@ -341,11 +350,10 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
     };
   }, [supabase, input.brainId, input.companyId]);
 
-  const now = Date.now();
   const activeAgents: ActiveAgent[] = useMemo(() => {
     const byId = new Map<string, ActiveAgent>();
     for (const e of events) {
-      if (now - e.createdAt.getTime() > WINDOW_MS) continue;
+      if (nowMs - e.createdAt.getTime() > WINDOW_MS) continue;
       const cur = byId.get(e.actorId);
       if (cur) {
         cur.countLast60s += 1;
@@ -359,11 +367,11 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
       }
     }
     return [...byId.values()].sort((a, b) => b.countLast60s - a.countLast60s);
-  }, [events, now]);
+  }, [events, nowMs]);
 
   const eventRate60s = useMemo(
-    () => events.filter((e) => now - e.createdAt.getTime() <= WINDOW_MS).length,
-    [events, now],
+    () => events.filter((e) => nowMs - e.createdAt.getTime() <= WINDOW_MS).length,
+    [events, nowMs],
   );
 
   return {

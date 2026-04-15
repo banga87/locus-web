@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useBrainPulse } from '@/lib/brain-pulse/use-brain-pulse';
 import { collapseEvents } from '@/lib/brain-pulse/event-formatters';
@@ -25,6 +25,12 @@ export function NeuronsClient({ brainId, companyId, seedGraph }: Props) {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Stable clock for memos that need current time (avoids react-hooks/purity).
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => clearInterval(t);
+  }, []);
 
   const visibleEvents = useMemo(
     () => (selectedAgentId ? state.events.filter((e) => e.actorId === selectedAgentId) : state.events),
@@ -34,16 +40,15 @@ export function NeuronsClient({ brainId, companyId, seedGraph }: Props) {
 
   const mcpCounts = useMemo(() => {
     const out: Record<string, number> = {};
-    const now = Date.now();
     for (const e of state.events) {
       if (e.category !== 'mcp_invocation' || e.eventType !== 'invoke') continue;
-      if (now - e.createdAt.getTime() > 60_000) continue;
+      if (nowMs - e.createdAt.getTime() > 60_000) continue;
       const id = e.details.mcp_connection_id as string | undefined;
       if (!id) continue;
       out[id] = (out[id] ?? 0) + 1;
     }
     return out;
-  }, [state.events]);
+  }, [state.events, nowMs]);
 
   if (seedGraph.nodes.length === 0) return <EmptyState variant="no-docs" />;
   if (state.graphError) return <EmptyState variant="error" onRetry={state.retryGraph} />;

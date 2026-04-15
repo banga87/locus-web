@@ -11,7 +11,7 @@
 //     error: reconnecting; after 60s: paused. companyId in dep array for
 //     cross-company switch re-subscription. Orphan queue drained on new nodes.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 
@@ -22,7 +22,7 @@ import { createEventBatcher } from './event-batcher';
 import { filterEvent } from './event-filter';
 import { createOrphanQueue } from './orphan-queue';
 import type {
-  ActiveAgent, ActorType, BrainPulseEventBase, BrainPulseState, ConnectionStatus, Pulse,
+  ActiveAgent, ActorType, BrainPulseEventBase, BrainPulseState, ConnectionStatus, McpCallLine, Pulse,
 } from './types';
 
 const PULSE_DURATION_MS = 1200;
@@ -30,10 +30,78 @@ const CREATE_PULSE_DURATION_MS = 2000;
 const DELETE_PULSE_DURATION_MS = 800;
 const MAX_CONCURRENT_PULSES = 40;
 
+const MCP_INVOKE_TTL_MS = 15_000;
+const MCP_RETURN_FADE_MS = 600;
+const PENDING_COMPLETE_BUFFER_MS = 2_000;
+
 function pulseDurationFor(evt: BrainPulseEventBase): number {
   if (evt.category === 'document_mutation' && evt.eventType === 'delete') return DELETE_PULSE_DURATION_MS;
   if (evt.category === 'document_mutation' && (evt.eventType === 'create' || evt.eventType === 'document.create' || evt.eventType === 'document.created')) return CREATE_PULSE_DURATION_MS;
   return PULSE_DURATION_MS;
+}
+
+// These refs are passed in so helpers remain pure functions without closures
+// that would capture stale ref values.
+function processMcpEvent(
+  evt: BrainPulseEventBase,
+  inFlightRef: React.MutableRefObject<Map<string, McpCallLine>>,
+  pendingCompletesRef: React.MutableRefObject<Map<string, { at: number; durationMs: number; timer: ReturnType<typeof setTimeout> }>>,
+): void {
+  const details = evt.details as {
+    invocation_id?: string;
+    mcp_connection_id?: string;
+    origin_doc_id?: string;
+    duration_ms?: number;
+  };
+  const invId = details.invocation_id;
+  const mcpId = details.mcp_connection_id;
+  if (!invId || !mcpId) return;
+
+  if (evt.eventType === 'invoke') {
+    const pending = pendingCompletesRef.current.get(invId);
+    const line: McpCallLine = {
+      id: `mcp-${invId}`,
+      invocationId: invId,
+      originNodeId: details.origin_doc_id ?? null,
+      mcpConnectionId: mcpId,
+      agentId: evt.actorId,
+      startedAt: evt.createdAt.getTime(),
+      completedAt: pending ? pending.at : null,
+    };
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingCompletesRef.current.delete(invId);
+    }
+    inFlightRef.current.set(invId, line);
+  } else if (evt.eventType === 'complete' || evt.eventType === 'error') {
+    const existing = inFlightRef.current.get(invId);
+    if (existing) {
+      existing.completedAt = evt.createdAt.getTime();
+    } else {
+      // complete before invoke: buffer 2s, drop silently if invoke never arrives
+      // (spec §10: no phantom return line with no origin)
+      const timer = setTimeout(() => pendingCompletesRef.current.delete(invId), PENDING_COMPLETE_BUFFER_MS);
+      pendingCompletesRef.current.set(invId, {
+        at: evt.createdAt.getTime(),
+        durationMs: details.duration_ms ?? 0,
+        timer,
+      });
+    }
+  }
+}
+
+function pruneMcpLines(
+  inFlightRef: React.MutableRefObject<Map<string, McpCallLine>>,
+): void {
+  const now = Date.now();
+  for (const [id, line] of inFlightRef.current) {
+    const age = now - line.startedAt;
+    if (line.completedAt === null && age > MCP_INVOKE_TTL_MS) {
+      inFlightRef.current.delete(id);
+    } else if (line.completedAt !== null && now - line.completedAt > MCP_RETURN_FADE_MS) {
+      inFlightRef.current.delete(id);
+    }
+  }
 }
 
 export interface UseBrainPulseInput {
@@ -96,6 +164,7 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
 
   const [events, setEvents] = useState<BrainPulseEventBase[]>([]);
   const [pulses, setPulses] = useState<Pulse[]>([]);
+  const [mcpCallLines, setMcpCallLines] = useState<McpCallLine[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
 
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -104,6 +173,8 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
   const knownNodeIdsRef = useRef<Set<string>>(new Set(input.seedGraph.nodes.map((n) => n.id)));
   const prevNodeIdsRef = useRef<Set<string>>(new Set(input.seedGraph.nodes.map((n) => n.id)));
   const pausedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightRef = useRef<Map<string, McpCallLine>>(new Map());
+  const pendingCompletesRef = useRef<Map<string, { at: number; durationMs: number; timer: ReturnType<typeof setTimeout> }>>(new Map());
 
   // Drain the orphan queue whenever SWR delivers new nodes.
   useEffect(() => {
@@ -125,6 +196,21 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
       setPulses((prev) => {
         const alive = prev.filter((p) => now - p.createdAt < p.durationMs);
         return alive.length === prev.length ? prev : alive;
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Prune expired MCP call lines every 500ms so they fade even between event batches.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      pruneMcpLines(inFlightRef);
+      setMcpCallLines((prev) => {
+        const current = Array.from(inFlightRef.current.values());
+        // Shallow-compare length + id list to avoid unnecessary re-renders.
+        if (current.length !== prev.length) return current;
+        for (let i = 0; i < current.length; i++) if (current[i].id !== prev[i]?.id) return current;
+        return prev;
       });
     }, 500);
     return () => clearInterval(interval);
@@ -196,6 +282,12 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
           const alive = prev.filter((p) => now - p.createdAt < p.durationMs);
           return [...alive, ...fresh].slice(-MAX_CONCURRENT_PULSES);
         });
+        // Process MCP events and snapshot in-flight lines for render.
+        for (const e of batch) {
+          if (e.category === 'mcp_invocation') processMcpEvent(e, inFlightRef, pendingCompletesRef);
+        }
+        pruneMcpLines(inFlightRef);
+        setMcpCallLines(Array.from(inFlightRef.current.values()));
       },
     });
 
@@ -236,6 +328,10 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
         clearTimeout(pausedTimerRef.current);
         pausedTimerRef.current = null;
       }
+      for (const { timer } of pendingCompletesRef.current.values()) clearTimeout(timer);
+      pendingCompletesRef.current.clear();
+      inFlightRef.current.clear();
+      setMcpCallLines([]);
       const c = channelRef.current;
       channelRef.current = null;
       if (c) {
@@ -274,7 +370,7 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
     graph,
     events,
     pulses,
-    mcpCallLines: [],
+    mcpCallLines,
     activeAgents,
     mcpConnections: graph.mcpConnections,
     eventRate60s,

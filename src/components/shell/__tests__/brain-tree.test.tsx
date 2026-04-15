@@ -158,4 +158,28 @@ describe('BrainTree', () => {
     const missionLink = screen.getByRole('link', { name: /Mission/ });
     expect(missionLink.getAttribute('data-active')).toBe('true');
   });
+
+  it('starts expanded when it contains the active document', () => {
+    vi.mocked(usePathname).mockReturnValue('/brain/d2');
+    render(<BrainTree tree={tree} />);
+    // Product and Terravolt should both have .open class — d2 lives in
+    // Product → Terravolt, so both ancestors must auto-expand on mount.
+    const productGroup = screen
+      .getByRole('button', { name: /Product/ })
+      .closest('.group');
+    const terravoltGroup = screen
+      .getByRole('button', { name: /Terravolt/ })
+      .closest('.group');
+    expect(productGroup?.classList.contains('open')).toBe(true);
+    expect(terravoltGroup?.classList.contains('open')).toBe(true);
+  });
+
+  it('starts collapsed when it does not contain the active document', () => {
+    vi.mocked(usePathname).mockReturnValue('/brain/d1'); // d1 is in Brand, not Product
+    render(<BrainTree tree={tree} />);
+    const productGroup = screen
+      .getByRole('button', { name: /Product/ })
+      .closest('.group');
+    expect(productGroup?.classList.contains('open')).toBe(false);
+  });
 });

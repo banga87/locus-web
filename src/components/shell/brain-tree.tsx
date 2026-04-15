@@ -36,8 +36,37 @@ export function BrainTree({ tree }: BrainTreeProps) {
   );
 }
 
+function folderContainsPath(
+  folder: ManifestFolder,
+  pathname: string | null,
+): boolean {
+  if (!pathname) return false;
+  for (const doc of folder.documents) {
+    if (
+      pathname === `/brain/${doc.id}` ||
+      pathname.startsWith(`/brain/${doc.id}/`)
+    ) {
+      return true;
+    }
+  }
+  for (const sub of folder.folders) {
+    if (folderContainsPath(sub, pathname)) return true;
+  }
+  return false;
+}
+
 function FolderNode({ folder }: { folder: ManifestFolder }) {
-  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  // Lazy initializer: only runs on mount. We seed `open` so that any folder
+  // whose subtree contains the active document starts expanded — otherwise
+  // landing on `/brain/<deep-doc-id>` leaves the active doc invisible behind
+  // collapsed ancestors.
+  //
+  // TODO: Currently only auto-expands on mount. Changing routes client-side
+  // won't re-open collapsed folders to reveal the new active doc.
+  // Acceptable for MVP: users typically navigate within an already-open folder.
+  // Fix: lift state to BrainTree + useEffect keyed on pathname.
+  const [open, setOpen] = useState(() => folderContainsPath(folder, pathname));
   const childCount = folder.documents.length + folder.folders.length;
 
   return (

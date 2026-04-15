@@ -12,7 +12,12 @@ import { db } from '@/db';
 import { companies } from '@/db/schema';
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
-import { AppShell } from '@/components/shell/app-shell';
+import { getFolderTree } from '@/lib/brain/folders';
+import {
+  getBrainForCompany,
+  getPinnedDocuments,
+} from '@/lib/brain/queries';
+import { NewAppShell } from '@/components/shell/new-app-shell';
 
 export default async function AppLayout({
   children,
@@ -61,12 +66,23 @@ export default async function AppLayout({
     return <>{children}</>;
   }
 
+  // Load sidebar data alongside the app shell render. Both queries hit
+  // indexed per-brain paths; doing them in parallel keeps the layout
+  // TTFB close to a single round-trip.
+  const brain = await getBrainForCompany(ctx.companyId);
+  const [tree, pinned] = await Promise.all([
+    getFolderTree({ brainId: brain.id }),
+    getPinnedDocuments({ brainId: brain.id }),
+  ]);
+
   return (
-    <AppShell
+    <NewAppShell
       companyName={companyName}
       user={{ email: ctx.email, fullName: ctx.fullName, role: ctx.role }}
+      tree={tree}
+      pinned={pinned}
     >
       {children}
-    </AppShell>
+    </NewAppShell>
   );
 }

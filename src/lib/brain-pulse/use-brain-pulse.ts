@@ -22,8 +22,19 @@ import { createEventBatcher } from './event-batcher';
 import { filterEvent } from './event-filter';
 import { createOrphanQueue } from './orphan-queue';
 import type {
-  ActiveAgent, ActorType, BrainPulseEventBase, BrainPulseState, ConnectionStatus,
+  ActiveAgent, ActorType, BrainPulseEventBase, BrainPulseState, ConnectionStatus, Pulse,
 } from './types';
+
+const PULSE_DURATION_MS = 1200;
+const CREATE_PULSE_DURATION_MS = 2000;
+const DELETE_PULSE_DURATION_MS = 800;
+const MAX_CONCURRENT_PULSES = 40;
+
+function pulseDurationFor(evt: BrainPulseEventBase): number {
+  if (evt.category === 'document_mutation' && evt.eventType === 'delete') return DELETE_PULSE_DURATION_MS;
+  if (evt.category === 'document_mutation' && (evt.eventType === 'create' || evt.eventType === 'document.create' || evt.eventType === 'document.created')) return CREATE_PULSE_DURATION_MS;
+  return PULSE_DURATION_MS;
+}
 
 export interface UseBrainPulseInput {
   brainId: string;
@@ -84,6 +95,7 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
   const graph = graphData ?? input.seedGraph;
 
   const [events, setEvents] = useState<BrainPulseEventBase[]>([]);
+  const [pulses, setPulses] = useState<Pulse[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
 
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -106,7 +118,22 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
   const revalidateGraphRef = useRef(revalidateGraph);
   useEffect(() => { revalidateGraphRef.current = revalidateGraph; }, [revalidateGraph]);
 
+  // Prune expired pulses every 500ms so the buffer doesn't clog under low activity.
   useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setPulses((prev) => {
+        const alive = prev.filter((p) => now - p.createdAt < p.durationMs);
+        return alive.length === prev.length ? prev : alive;
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    // Reset pulse buffer when re-subscribing (e.g. companyId change).
+    setPulses([]);
+
     function ingest(evt: BrainPulseEventBase) {
       // document_mutation: trigger SWR revalidation immediately.
       // On create: also hold in orphan queue until the new node appears in graph.
@@ -146,6 +173,29 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
       highLoadThreshold: 10,
       flush: (batch) => {
         setEvents((prev) => [...batch, ...prev].slice(0, MAX_EVENTS_RETAINED));
+        setPulses((prev) => {
+          const now = Date.now();
+          const fresh: Pulse[] = batch
+            // delete pulses can reference about-to-leave nodes; other events require the
+            // target to still be known. Ghost-node pulse (referencing already-deleted
+            // nodes) is deferred to v2 — silently dropped here. TODO: v2
+            .filter((e) => {
+              if (e.targetType !== 'document' || !e.targetId) return false;
+              if (e.category === 'document_mutation' && e.eventType === 'delete') return true;
+              return knownNodeIdsRef.current.has(e.targetId);
+            })
+            .map((e) => ({
+              id: `p-${e.id}`,
+              nodeId: e.targetId!,
+              agentId: e.actorId,
+              category: e.category,
+              eventType: e.eventType,
+              createdAt: now,
+              durationMs: pulseDurationFor(e),
+            }));
+          const alive = prev.filter((p) => now - p.createdAt < p.durationMs);
+          return [...alive, ...fresh].slice(-MAX_CONCURRENT_PULSES);
+        });
       },
     });
 
@@ -223,7 +273,7 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
   return {
     graph,
     events,
-    pulses: [],
+    pulses,
     mcpCallLines: [],
     activeAgents,
     mcpConnections: graph.mcpConnections,

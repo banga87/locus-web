@@ -40,7 +40,8 @@ export type AuditEventCategory =
   | 'authentication'
   | 'maintenance'
   | 'administration'
-  | 'token_usage';
+  | 'token_usage'
+  | 'mcp_invocation';
 
 /**
  * Shape of an event passed to `logEvent()`. Field names match the Drizzle

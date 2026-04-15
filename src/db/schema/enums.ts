@@ -54,6 +54,7 @@ export const auditEventCategoryEnum = pgEnum('audit_event_category', [
   'maintenance',
   'administration',
   'token_usage',
+  'mcp_invocation',
 ]);
 
 // Agent access token lifecycle states. In Pre-MVP we only use `active` and

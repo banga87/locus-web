@@ -207,7 +207,7 @@ describe('logEvent — brainId', () => {
   });
 
   it('persists brainId when supplied', async () => {
-    const captured: any[] = [];
+    const captured: Array<{ brainId: string | null }> = [];
     __setWriter(async (rows) => { captured.push(...rows); });
 
     logEvent({
@@ -226,7 +226,7 @@ describe('logEvent — brainId', () => {
   });
 
   it('leaves brainId as null when omitted', async () => {
-    const captured: any[] = [];
+    const captured: Array<{ brainId: string | null }> = [];
     __setWriter(async (rows) => { captured.push(...rows); });
 
     logEvent({

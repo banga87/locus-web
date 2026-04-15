@@ -18,7 +18,7 @@
 // A transient "zero current manifests" window is acceptable because reads
 // can always fall back to regenerating on demand.
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
@@ -99,7 +99,8 @@ export async function regenerateManifest(brainId: string): Promise<void> {
         isNull(documents.deletedAt),
         isNull(documents.type),
       ),
-    );
+    )
+    .orderBy(desc(documents.isPinned), documents.title);
 
   // 3. Build the tree. First materialise every folder as a node, then
   //    attach to its parent (or push to roots).

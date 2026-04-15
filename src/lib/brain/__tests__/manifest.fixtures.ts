@@ -9,7 +9,7 @@
 // Mirrors the `manifest.test.ts` suffix/teardown convention so the two
 // suites can run side-by-side without colliding.
 
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
@@ -169,7 +169,12 @@ export async function readCurrentManifest(brainId: string): Promise<Manifest> {
   const [row] = await db
     .select({ content: navigationManifests.content })
     .from(navigationManifests)
-    .where(eq(navigationManifests.brainId, brainId))
+    .where(
+      and(
+        eq(navigationManifests.brainId, brainId),
+        eq(navigationManifests.isCurrent, true),
+      ),
+    )
     .limit(1);
 
   if (!row) {
@@ -179,15 +184,19 @@ export async function readCurrentManifest(brainId: string): Promise<Manifest> {
 }
 
 export async function cleanupSeeds(): Promise<void> {
-  // Cascade via brain → companies. parent_id has RESTRICT on delete, so
-  // wipe nested folders first by deleting documents (no-op cascade) and
-  // then folders bottom-up. Easier: rely on brain cascade for
-  // documents/manifests, then delete folders explicitly children-first.
+  // folders.parent_id has ON DELETE RESTRICT, so a brain-cascade that
+  // tries to drop the parent folder while a child still references it
+  // will fail. Delete nested folders explicitly first, then top-level
+  // folders, then the brain (which cascades documents + manifests),
+  // then the company.
   for (const s of created.splice(0)) {
-    // documents + navigation_manifests cascade with brain.
+    await db
+      .delete(folders)
+      .where(
+        and(eq(folders.brainId, s.brainId), isNotNull(folders.parentId)),
+      );
+    await db.delete(folders).where(eq(folders.brainId, s.brainId));
     await db.delete(brains).where(eq(brains.id, s.brainId));
-    // folders cascade off brain too (brainId FK is cascade), so the
-    // brain delete handles them. Finally drop the company.
     await db.delete(companies).where(eq(companies.id, s.companyId));
   }
 }

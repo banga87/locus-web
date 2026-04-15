@@ -16,6 +16,7 @@ import { requireRole } from '@/lib/api/auth';
 import { withAuth, requireCompany } from '@/lib/api/handler';
 import { decodeCursor, encodeCursor } from '@/lib/api/pagination';
 import { created, error, paginated } from '@/lib/api/response';
+import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import {
@@ -184,6 +185,7 @@ export const POST = (req: Request) =>
           isCore: false,
           ownerId: ctx.userId,
           type: documentType,
+          metadata: { outbound_links: parseOutboundLinks(input.content) },
           version: 1,
         })
         .returning();

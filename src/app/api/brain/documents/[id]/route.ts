@@ -19,6 +19,7 @@ import { documents, documentVersions, folders, users } from '@/db/schema';
 import { requireRole } from '@/lib/api/auth';
 import { withAuth, requireCompany } from '@/lib/api/handler';
 import { error, success } from '@/lib/api/response';
+import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import {
@@ -201,6 +202,17 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
     const typeUpdate =
       patch.content !== undefined ? { type: newType } : {};
 
+    // Recompute outbound_links when content changes; preserve other metadata fields.
+    const metadataUpdate =
+      patch.content !== undefined
+        ? {
+            metadata: {
+              ...((existing.metadata as Record<string, unknown> | null) ?? {}),
+              outbound_links: parseOutboundLinks(patch.content),
+            },
+          }
+        : {};
+
     const changedKeys = Object.keys(patch);
     const summary = `updated: ${changedKeys.join(', ')}`;
 
@@ -216,6 +228,7 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
         ...(patch.folderId !== undefined ? { folderId: patch.folderId } : {}),
         ...(newPath !== undefined ? { path: newPath } : {}),
         ...typeUpdate,
+        ...metadataUpdate,
         version: nextVersion,
         updatedAt: new Date(),
       })

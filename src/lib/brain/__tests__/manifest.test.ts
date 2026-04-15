@@ -14,9 +14,9 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   brains,
-  categories,
   companies,
   documents,
+  folders,
   navigationManifests,
 } from '@/db/schema';
 
@@ -25,8 +25,8 @@ import { regenerateManifest, type Manifest } from '../manifest';
 interface LocalFixtures {
   companyId: string;
   brainId: string;
-  brandCatId: string;
-  pricingCatId: string;
+  brandFolderId: string;
+  pricingFolderId: string;
   emptyBrainId: string;
   emptyCompanyId: string;
   suffix: string;
@@ -47,9 +47,10 @@ beforeAll(async () => {
     .values({ companyId: company.id, name: 'Main Brain', slug: 'main' })
     .returning({ id: brains.id });
 
-  // Two categories with explicit sort order so we can assert stable output.
-  const [brandCat] = await db
-    .insert(categories)
+  // Two top-level folders with explicit sort order so we can assert
+  // stable output.
+  const [brandFolder] = await db
+    .insert(folders)
     .values({
       companyId: company.id,
       brainId: brain.id,
@@ -58,10 +59,10 @@ beforeAll(async () => {
       description: 'How we sound.',
       sortOrder: 0,
     })
-    .returning({ id: categories.id });
+    .returning({ id: folders.id });
 
-  const [pricingCat] = await db
-    .insert(categories)
+  const [pricingFolder] = await db
+    .insert(folders)
     .values({
       companyId: company.id,
       brainId: brain.id,
@@ -70,7 +71,7 @@ beforeAll(async () => {
       description: null,
       sortOrder: 1,
     })
-    .returning({ id: categories.id });
+    .returning({ id: folders.id });
 
   // Three documents: two in brand, one in pricing. One of the brand docs
   // is soft-deleted to assert the deletedAt filter.
@@ -78,7 +79,7 @@ beforeAll(async () => {
     {
       companyId: company.id,
       brainId: brain.id,
-      categoryId: brandCat.id,
+      folderId: brandFolder.id,
       title: 'Brand Voice Guide',
       slug: `brand-voice-${suffix}`,
       path: `brand/brand-voice-${suffix}`,
@@ -91,7 +92,7 @@ beforeAll(async () => {
     {
       companyId: company.id,
       brainId: brain.id,
-      categoryId: brandCat.id,
+      folderId: brandFolder.id,
       title: 'Logo Usage',
       slug: `logo-usage-${suffix}`,
       path: `brand/logo-usage-${suffix}`,
@@ -103,7 +104,7 @@ beforeAll(async () => {
     {
       companyId: company.id,
       brainId: brain.id,
-      categoryId: pricingCat.id,
+      folderId: pricingFolder.id,
       title: 'Plans',
       slug: `plans-${suffix}`,
       path: `pricing/plans-${suffix}`,
@@ -117,7 +118,7 @@ beforeAll(async () => {
     {
       companyId: company.id,
       brainId: brain.id,
-      categoryId: brandCat.id,
+      folderId: brandFolder.id,
       title: 'Old Logo',
       slug: `old-logo-${suffix}`,
       path: `brand/old-logo-${suffix}`,
@@ -127,7 +128,7 @@ beforeAll(async () => {
     },
   ]);
 
-  // Second brain with no categories/documents for the empty-manifest test.
+  // Second brain with no folders/documents for the empty-manifest test.
   const [emptyCompany] = await db
     .insert(companies)
     .values({ name: `Empty Co ${suffix}`, slug: `empty-${suffix}` })
@@ -145,8 +146,8 @@ beforeAll(async () => {
   f = {
     companyId: company.id,
     brainId: brain.id,
-    brandCatId: brandCat.id,
-    pricingCatId: pricingCat.id,
+    brandFolderId: brandFolder.id,
+    pricingFolderId: pricingFolder.id,
     emptyBrainId: emptyBrain.id,
     emptyCompanyId: emptyCompany.id,
     suffix,
@@ -154,7 +155,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Cascade via brains: documents + categories + navigation_manifests all
+  // Cascade via brains: documents + folders + navigation_manifests all
   // reference brain_id with onDelete cascade. document_versions has the
   // immutability trigger but we don't create versions here, so no need to
   // disable it.
@@ -165,7 +166,7 @@ afterAll(async () => {
 });
 
 describe('regenerateManifest', () => {
-  it('inserts a current manifest row with categories in sortOrder', async () => {
+  it('inserts a current manifest row with folders in sortOrder', async () => {
     await regenerateManifest(f.brainId);
 
     const rows = await db
@@ -179,11 +180,11 @@ describe('regenerateManifest', () => {
 
     const manifest = current[0].content as Manifest;
     expect(manifest.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    expect(manifest.categories).toHaveLength(2);
-    expect(manifest.categories[0].slug).toBe('brand');
-    expect(manifest.categories[1].slug).toBe('pricing');
+    expect(manifest.folders).toHaveLength(2);
+    expect(manifest.folders[0].slug).toBe('brand');
+    expect(manifest.folders[1].slug).toBe('pricing');
 
-    const brand = manifest.categories[0];
+    const brand = manifest.folders[0];
     expect(brand.name).toBe('Brand & Voice');
     expect(brand.description).toBe('How we sound.');
     // Two live docs in brand; the soft-deleted "old-logo" must be excluded.
@@ -196,7 +197,7 @@ describe('regenerateManifest', () => {
       expect(d.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     }
 
-    const pricing = manifest.categories[1];
+    const pricing = manifest.folders[1];
     expect(pricing.description).toBeNull();
     expect(pricing.documents).toHaveLength(1);
     expect(pricing.documents[0]).toMatchObject({
@@ -229,7 +230,7 @@ describe('regenerateManifest', () => {
     expect(rows[0].isCurrent).toBe(true);
   });
 
-  it('emits empty categories[] for a brain with no categories', async () => {
+  it('emits empty folders[] for a brain with no folders', async () => {
     await regenerateManifest(f.emptyBrainId);
 
     const [row] = await db
@@ -245,24 +246,24 @@ describe('regenerateManifest', () => {
 
     expect(row).toBeDefined();
     const manifest = row.content as Manifest;
-    expect(manifest.categories).toEqual([]);
+    expect(manifest.folders).toEqual([]);
   });
 
-  it('emits empty documents[] for a category with no live docs', async () => {
-    // Create a transient empty category on the main brain, regen, then
+  it('emits empty documents[] for a folder with no live docs', async () => {
+    // Create a transient empty folder on the main brain, regen, then
     // drop it so the next suite run is clean-ish. (Teardown also catches
     // it via brain-cascade.)
-    const emptySlug = `empty-cat-${randomUUID().slice(0, 6)}`;
-    const [emptyCat] = await db
-      .insert(categories)
+    const emptySlug = `empty-folder-${randomUUID().slice(0, 6)}`;
+    const [emptyFolder] = await db
+      .insert(folders)
       .values({
         companyId: f.companyId,
         brainId: f.brainId,
         slug: emptySlug,
-        name: 'Empty Cat',
+        name: 'Empty Folder',
         sortOrder: 99,
       })
-      .returning({ id: categories.id });
+      .returning({ id: folders.id });
 
     await regenerateManifest(f.brainId);
 
@@ -278,11 +279,11 @@ describe('regenerateManifest', () => {
       .limit(1);
 
     const manifest = row.content as Manifest;
-    const emptyEntry = manifest.categories.find((c) => c.slug === emptySlug);
+    const emptyEntry = manifest.folders.find((c) => c.slug === emptySlug);
     expect(emptyEntry).toBeDefined();
     expect(emptyEntry!.documents).toEqual([]);
 
-    // Cleanup this ad-hoc category eagerly to keep teardown simple.
-    await db.delete(categories).where(eq(categories.id, emptyCat.id));
+    // Cleanup this ad-hoc folder eagerly to keep teardown simple.
+    await db.delete(folders).where(eq(folders.id, emptyFolder.id));
   });
 });

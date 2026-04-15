@@ -22,7 +22,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { companies } from './companies';
 import { brains } from './brains';
-import { categories } from './categories';
+import { folders } from './folders';
 import { users } from './users';
 import { documentStatusEnum, confidenceLevelEnum } from './enums';
 
@@ -48,7 +48,7 @@ export const documents = pgTable(
       .notNull()
       .references(() => brains.id, { onDelete: 'cascade' }),
 
-    categoryId: uuid('category_id').references(() => categories.id, {
+    folderId: uuid('folder_id').references(() => folders.id, {
       onDelete: 'set null',
     }),
 
@@ -101,6 +101,10 @@ export const documents = pgTable(
     // brand voice, or pricing. Agents treat them as authoritative context.
     isCore: boolean('is_core').notNull().default(false),
 
+    // Pinning: brain-scoped boolean surfaced in the sidebar's Pinned
+    // section. Cheap to query via partial index `documents_brain_pinned_idx`.
+    isPinned: boolean('is_pinned').notNull().default(false),
+
     // ---------------------------------------------------------------------
 
     // Estimated token count for this document. Pre-computed on save so
@@ -139,10 +143,15 @@ export const documents = pgTable(
   (table) => [
     index('documents_company_id_idx').on(table.companyId),
     index('documents_brain_id_idx').on(table.brainId),
-    index('documents_category_id_idx').on(table.categoryId),
+    index('documents_folder_id_idx').on(table.folderId),
     index('documents_brain_path_idx').on(table.brainId, table.path),
     index('documents_brain_status_idx').on(table.brainId, table.status),
     index('documents_brain_is_core_idx').on(table.brainId, table.isCore),
+    // Partial index supports the sidebar's Pinned section query:
+    // SELECT ... WHERE brain_id = $1 AND is_pinned = true.
+    index('documents_brain_pinned_idx')
+      .on(table.brainId, table.isPinned)
+      .where(sql`"is_pinned" = true`),
     index('documents_owner_id_idx').on(table.ownerId),
     index('documents_deleted_at_idx').on(table.deletedAt),
     // GIN index backs the search_brain tool's tsvector lookups.

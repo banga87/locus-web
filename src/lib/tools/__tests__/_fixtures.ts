@@ -9,7 +9,7 @@ import { eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { brains } from '@/db/schema/brains';
-import { categories } from '@/db/schema/categories';
+import { categories } from '@/db/schema/folders';
 import { companies } from '@/db/schema/companies';
 import { users } from '@/db/schema/users';
 

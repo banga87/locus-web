@@ -8,7 +8,7 @@ import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { documents } from '@/db/schema/documents';
-import { categories } from '@/db/schema/categories';
+import { categories } from '@/db/schema/folders';
 import { documentVersions } from '@/db/schema/document-versions';
 import type { LocusTool, ToolContext, ToolResult } from '../types';
 

@@ -55,10 +55,11 @@ export function NewSidebar({
       <WorkspaceRow companyName={companyName} />
 
       <div className="quick">
-        {/* ⌘K placeholder — wired in a later task. Kept as div to
-            preserve the mockup's role="button" semantics without a
-            real keyboard handler yet. */}
-        <div className="quick-item" role="button" tabIndex={0}>
+        {/* Placeholder for ⌘K command palette — wired in a later task.
+            Intentionally a plain div (no role/tabIndex) so we don't
+            advertise interactivity that doesn't exist yet; the "Search ⌘K"
+            text is still readable by screen readers as visible content. */}
+        <div className="quick-item">
           <SearchIcon />
           Search
           <span className="kbd">⌘K</span>

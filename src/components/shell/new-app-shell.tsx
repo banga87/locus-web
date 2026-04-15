@@ -1,5 +1,3 @@
-'use client';
-
 // Minimal two-column shell: sidebar (left) + main (right). The grid
 // template and surface colours come from `.app` / `.side` / `.main` in
 // globals.css. Mobile responsiveness is deferred post-MVP — below the

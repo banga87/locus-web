@@ -50,6 +50,11 @@ export const auditEvents = pgTable(
     sessionId: uuid('session_id'),
     tokenId: uuid('token_id'),
 
+    // Brain-scope for events that target brain-scoped entities.
+    // Nullable: authentication / administration events aren't brain-scoped.
+    // ON DELETE SET NULL is enforced at the DB level (migration 0013).
+    brainId: uuid('brain_id'),
+
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -22,3 +22,9 @@ The agent harness (`runAgentTurn` + hook bus + tool bridge) is designed to be ca
 
 **If you catch a PR adding any of the forbidden imports to `src/lib/agent/`:** reject and push the Next.js/Vercel coupling up into the route layer. There is an ESLint `no-restricted-imports` rule and a grep check in CI enforcing this — do not silence either.
 <!-- END:agent-harness-boundary -->
+
+<!-- BEGIN:mcp-in-oauth -->
+## MCP-IN OAuth
+
+`/api/mcp` accepts two Bearer token types: legacy PATs (`lat_live_` / `lat_test_` prefix) and OAuth JWTs issued through `/api/oauth/*` (DCR + consent flow at `/auth/mcp`). See `docs/superpowers/specs/2026-04-15-mcp-in-oauth-design.md` for the full spec. The unified validator is at `src/lib/mcp/auth.ts`.
+<!-- END:mcp-in-oauth -->

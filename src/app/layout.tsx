@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
+import { WebVitals } from "@/lib/axiom/client";
 
 const fraunces = Fraunces({
   variable: "--font-display",
@@ -40,6 +41,7 @@ export default async function RootLayout({
       data-theme={theme}
       className={`${fraunces.variable} ${inter.variable} ${jetbrains.variable} h-full antialiased ${theme === "dark" ? "dark" : ""}`}
     >
+      <WebVitals />
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

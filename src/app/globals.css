@@ -44,7 +44,7 @@
 }
 
 :root, [data-theme="light"] {
-  --paper: #faf8f3;
+  --paper: #fdfcf9;
   --paper-2: #f1ede2;
   --ink: #1a1a17;
   --ink-2: #4b4a44;
@@ -168,8 +168,19 @@
 
 .app {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: var(--sidebar-width, 280px) 4px 1fr;
+  transition: grid-template-columns 180ms ease-out;
   height: 100vh;
+}
+
+/* Cursor + selection lock during sidebar drag. Toggled by useSidebarLayout
+   via document.documentElement[data-dragging]. */
+:root[data-dragging] {
+  cursor: col-resize !important;
+  user-select: none;
+}
+:root[data-dragging] * {
+  cursor: col-resize !important;
 }
 
 .side {

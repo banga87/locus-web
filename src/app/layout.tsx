@@ -42,6 +42,9 @@ export default async function RootLayout({
       className={`${fraunces.variable} ${inter.variable} ${jetbrains.variable} h-full antialiased ${theme === "dark" ? "dark" : ""}`}
     >
       <WebVitals />
+      <head>
+        <style>{`:root { --sidebar-width: 280px; }`}</style>
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

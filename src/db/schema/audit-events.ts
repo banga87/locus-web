@@ -49,6 +49,8 @@ export const auditEvents = pgTable(
     // Originating session or token (denormalized; no FK).
     sessionId: uuid('session_id'),
     tokenId: uuid('token_id'),
+    // 'pat' | 'oauth' | null. null for non-token actors.
+    tokenType: text('token_type'),
 
     // Brain-scope for events that target brain-scoped entities.
     // Nullable: authentication / administration events aren't brain-scoped.

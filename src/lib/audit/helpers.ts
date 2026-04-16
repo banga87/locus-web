@@ -93,6 +93,10 @@ export function logAuthEvent(params: {
   ipAddress?: string;
   sessionId?: string;
   tokenId?: string;
+  // 'pat' | 'oauth' for token-backed events, null otherwise. Matches the
+  // `token_type` column added in the MCP-IN OAuth migration. Optional so
+  // existing call sites that predate OAuth don't need to pass it.
+  tokenType?: 'pat' | 'oauth' | null;
   // Per design doc: token events target the token owner's user id;
   // login events have no target (actor is the target).
   targetUserId?: string;
@@ -110,5 +114,6 @@ export function logAuthEvent(params: {
     ipAddress: params.ipAddress,
     sessionId: params.sessionId,
     tokenId: params.tokenId,
+    tokenType: params.tokenType ?? null,
   });
 }

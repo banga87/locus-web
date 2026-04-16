@@ -181,13 +181,31 @@ export const getDocumentTool: LocusTool<GetDocumentInput, GetDocumentOutput> = {
     let body = doc.content;
     if (section) {
       const extracted = extractH2Section(doc.content, section);
-      // Missing section is not an error — we return the full doc with a
-      // note. Keeps the tool forgiving while the agent figures out what
-      // sections exist. (If this proves noisy in practice we can flip it
-      // to `document_not_found`; for Pre-MVP keep it permissive.)
-      body =
-        extracted ??
-        `<!-- section '${section}' not found; returning full document -->\n\n${doc.content}`;
+      if (extracted === null) {
+        return {
+          success: false,
+          error: {
+            code: 'section_not_found',
+            message: `No section titled '${section}' in document '${doc.path}'.`,
+            available_sections: listH2Headings(doc.content),
+            hint: 'Pick one of the available_sections, or call again without `section` to get the full document.',
+            retryable: false,
+          },
+          metadata: {
+            responseTokens: 0,
+            executionMs: 0,
+            documentsAccessed: [doc.id],
+            details: {
+              eventType: 'document.read',
+              path: doc.path,
+              section_requested: section,
+              found: true,
+              section_found: false,
+            },
+          },
+        };
+      }
+      body = extracted;
     }
 
     // -------- Owner email lookup ---------------------------------------
@@ -248,6 +266,7 @@ export const getDocumentTool: LocusTool<GetDocumentInput, GetDocumentOutput> = {
           path: doc.path,
           section_requested: section,
           truncated,
+          section_found: section ? true : null,
         },
       },
     };
@@ -257,6 +276,21 @@ export const getDocumentTool: LocusTool<GetDocumentInput, GetDocumentOutput> = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Enumerate all H2 headings in markdown content, in document order,
+ * verbatim (preserves case and surrounding punctuation). Used by
+ * `section_not_found` error responses.
+ */
+function listH2Headings(content: string): string[] {
+  const headings: string[] = [];
+  for (const line of content.split('\n')) {
+    if (line.startsWith('## ')) {
+      headings.push(line.slice(3).trim());
+    }
+  }
+  return headings;
+}
 
 /**
  * Extract a single H2 section from markdown content. Matches the H2

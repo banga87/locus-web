@@ -1,8 +1,9 @@
-// Settings index. Only one settings sub-page exists for Pre-MVP, so we just
-// redirect straight to it. Later this will become a real nav landing page.
+// Settings index. No landing page yet — redirect straight to the
+// agent-access page, which is the primary (and most-used) settings
+// surface today. Will be replaced by a real nav landing page later.
 
 import { redirect } from 'next/navigation';
 
 export default function SettingsPage() {
-  redirect('/settings/agent-tokens');
+  redirect('/settings/agent-access');
 }

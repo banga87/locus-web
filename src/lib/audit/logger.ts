@@ -39,6 +39,7 @@ type AuditEventInsert = {
   ipAddress: string | null;
   sessionId: string | null;
   tokenId: string | null;
+  tokenType: 'pat' | 'oauth' | null;
   createdAt: Date;
 };
 
@@ -108,6 +109,7 @@ async function drainBuffer(): Promise<void> {
     ipAddress: e.ipAddress ?? null,
     sessionId: e.sessionId ?? null,
     tokenId: e.tokenId ?? null,
+    tokenType: e.tokenType ?? null,
     // `_capturedAt` is guaranteed to be set by `logEvent()`.
     createdAt: e._capturedAt as Date,
   }));

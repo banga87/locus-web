@@ -1,8 +1,13 @@
+// @vitest-environment node
 // MCP auth tests — exercise authenticateAgentToken against the live DB.
 //
 // Each test creates a scratch company + token via the real token
 // primitives. We spy on `logAuthEvent` to confirm the audit trail is
 // complete on every outcome, and tear down inserted rows in afterAll.
+//
+// Pinned to the node vitest environment because the OAuth path calls
+// jose's SignJWT/jwtVerify, and jose's webapi build does `instanceof
+// Uint8Array` checks against its own realm (jsdom fails the check).
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
@@ -21,6 +26,7 @@ import { db } from '@/db';
 import { agentAccessTokens, companies } from '@/db/schema';
 import { createToken, revokeToken } from '@/lib/auth/tokens';
 import { logAuthEvent } from '@/lib/audit/helpers';
+import { signAccessToken } from '@/lib/oauth/jwt';
 
 import { authenticateAgentToken } from '../auth';
 
@@ -30,6 +36,10 @@ let TEST_COMPANY_ID: string;
 const insertedTokenIds: string[] = [];
 
 beforeAll(async () => {
+  process.env.MCP_OAUTH_JWT_SECRET =
+    process.env.MCP_OAUTH_JWT_SECRET ??
+    'test-secret-at-least-32-bytes-long-xxxxxxxxxxxxxx';
+
   const [company] = await db
     .insert(companies)
     .values({
@@ -79,7 +89,9 @@ describe('authenticateAgentToken', () => {
       ok: true,
       tokenId: record.id,
       companyId: TEST_COMPANY_ID,
+      userId: null,
       scopes: ['read'],
+      tokenType: 'pat',
     });
 
     expect(logAuthEvent).toHaveBeenCalledWith(
@@ -179,5 +191,50 @@ describe('authenticateAgentToken', () => {
     if (!result.ok) {
       expect(result.code).toBe('invalid_token');
     }
+  });
+});
+
+describe('authenticateAgentToken — OAuth path', () => {
+  it('accepts a valid JWT and returns oauth token context', async () => {
+    const jwt = await signAccessToken({
+      userId: '11111111-1111-1111-1111-111111111111',
+      companyId: '22222222-2222-2222-2222-222222222222',
+      clientId: '33333333-3333-3333-3333-333333333333',
+      scopes: ['read'],
+    });
+    const r = await authenticateAgentToken(
+      makeRequest({ Authorization: `Bearer ${jwt}` }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.tokenType).toBe('oauth');
+      expect(r.userId).toBe('11111111-1111-1111-1111-111111111111');
+      expect(r.companyId).toBe('22222222-2222-2222-2222-222222222222');
+      expect(r.tokenId).toBe('33333333-3333-3333-3333-333333333333');
+      expect(r.scopes).toEqual(['read']);
+    }
+  });
+
+  it('rejects a JWT with tampered signature', async () => {
+    const jwt = await signAccessToken({
+      userId: 'u',
+      companyId: 'c',
+      clientId: 'cl',
+      scopes: [],
+    });
+    const tampered = jwt.slice(0, -2) + 'xx';
+    const r = await authenticateAgentToken(
+      makeRequest({ Authorization: `Bearer ${tampered}` }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('invalid_token');
+  });
+
+  it('rejects a garbage token that is neither PAT nor JWT', async () => {
+    const r = await authenticateAgentToken(
+      makeRequest({ Authorization: 'Bearer nonsense' }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('invalid_token');
   });
 });

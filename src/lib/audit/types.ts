@@ -66,6 +66,9 @@ export interface AuditEvent {
   sessionId?: string;
   tokenId?: string;
   brainId?: string;
+  // 'pat' | 'oauth' | null. null for non-token actors and for paths that
+  // don't know the token type (e.g. generic auth-failed before dispatch).
+  tokenType?: 'pat' | 'oauth' | null;
 
   // Populated by the logger at call time. Not part of the public call
   // surface — callers should not set this.

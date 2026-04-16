@@ -158,34 +158,47 @@ export type WorkflowOutput = 'document' | 'message' | 'both';
 /**
  * Authored fields on a `type: workflow` document (user-editable via the
  * Tiptap editor / frontmatter block).
+ *
+ * `output_category` and `schedule` are always present in the validated value
+ * (`validateWorkflowFrontmatter` normalises absent → null), so callers never
+ * need to distinguish `undefined` vs `null`.
  */
 export interface WorkflowFrontmatter {
   type: 'workflow';
   /** What the workflow produces when it runs. */
   output: WorkflowOutput;
-  /** Slug of the folder/category where output docs get filed. Nullable. */
-  output_category?: string | null;
+  /** Slug of the folder/category where output docs get filed. */
+  output_category: string | null;
   /** MCP slugs that must be connected before the run can start. */
   requires_mcps: string[];
   /** Cron string (reserved for Phase 2) or null. */
-  schedule?: string | null;
+  schedule: string | null;
 }
 
 /**
  * Runtime-stamped provenance fields written on documents that were created or
- * last touched by a workflow run. These are NOT user-editable — they are
- * stamped by write-tool code paths and excluded from user-facing input schemas.
+ * last touched by a workflow run. NOT user-editable — stamped by workflow-run
+ * code paths and excluded from user-facing input schemas.
+ *
+ * Discriminated union: a stamp is either the "created" pair (immutable once
+ * set, written exactly once when a workflow creates a doc) OR the
+ * "last-touched" pair (overwritten on every workflow update of an existing
+ * doc). Task 5's stamp middleware constructs one variant per operation type
+ * — never both in a single write, never neither, never mixed.
  */
-export interface WorkflowOutputStamp {
-  /** Ref of the workflow doc that created this document (immutable once set). */
-  created_by_workflow: string;
-  /** UUID of the workflow run that created this document (immutable once set). */
-  created_by_workflow_run_id: string;
-  /** Ref of the workflow doc that last touched this document. */
-  last_touched_by_workflow: string;
-  /** UUID of the workflow run that last touched this document. */
-  last_touched_by_workflow_run_id: string;
-}
+export type WorkflowOutputStamp =
+  | {
+      /** Ref of the workflow doc that created this document (immutable). */
+      created_by_workflow: string;
+      /** UUID of the workflow run that created this document (immutable). */
+      created_by_workflow_run_id: string;
+    }
+  | {
+      /** Ref of the workflow doc that last touched this document. */
+      last_touched_by_workflow: string;
+      /** UUID of the workflow run that last touched this document. */
+      last_touched_by_workflow_run_id: string;
+    };
 
 /** Validation error shape — one entry per failing field. */
 export interface ValidationError {
@@ -198,7 +211,7 @@ export type WorkflowFrontmatterResult =
   | { ok: true; value: WorkflowFrontmatter }
   | { ok: false; errors: ValidationError[] };
 
-const VALID_OUTPUT_VALUES: WorkflowOutput[] = ['document', 'message', 'both'];
+const WORKFLOW_OUTPUT_VALUES: WorkflowOutput[] = ['document', 'message', 'both'];
 
 /**
  * Validate a raw frontmatter object as `WorkflowFrontmatter`. Accepts any
@@ -209,8 +222,11 @@ const VALID_OUTPUT_VALUES: WorkflowOutput[] = ['document', 'message', 'both'];
  *   - `type` must equal `'workflow'`
  *   - `output` is required and must be `'document' | 'message' | 'both'`
  *   - `requires_mcps` must be an array of strings; missing → invalid
- *   - `output_category` is optional string or null
- *   - `schedule` is optional string or null
+ *   - `output_category` may be string, null, or absent (absent → null)
+ *   - `schedule` may be string, null, or absent (absent → null)
+ *
+ * On success, `output_category` and `schedule` are always present in the
+ * returned `value` — absence in the input is normalised to `null`.
  */
 export function validateWorkflowFrontmatter(
   input: unknown,
@@ -234,10 +250,10 @@ export function validateWorkflowFrontmatter(
   // output — required
   if (!('output' in fm) || fm['output'] === undefined || fm['output'] === null) {
     errors.push({ field: 'output', message: 'is required' });
-  } else if (!VALID_OUTPUT_VALUES.includes(fm['output'] as WorkflowOutput)) {
+  } else if (!WORKFLOW_OUTPUT_VALUES.includes(fm['output'] as WorkflowOutput)) {
     errors.push({
       field: 'output',
-      message: `must be one of: ${VALID_OUTPUT_VALUES.join(', ')}`,
+      message: `must be one of: ${WORKFLOW_OUTPUT_VALUES.join(', ')}`,
     });
   }
 

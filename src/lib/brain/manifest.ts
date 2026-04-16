@@ -29,6 +29,27 @@ import {
   navigationManifests,
 } from '@/db/schema';
 
+/**
+ * Platform-internal document types that must NEVER appear in the agent-facing
+ * manifest. Any other value of `documents.type` (null, 'workflow', or a
+ * user-authored vocabulary type like 'pricing-model' / 'brand-voice' / 'icp')
+ * is manifest-visible.
+ *
+ * This is a DENYLIST, not an allowlist, by design. Locus's brain concept lets
+ * users author docs with arbitrary `type` frontmatter to organise domain
+ * knowledge (see `src/lib/brain/save.ts` → `extractDocumentTypeFromFrontmatter`:
+ * "deliberately permissive so arbitrary vocabulary types flow through
+ * unchanged"). Those user-authored types are the brain's content and MUST be
+ * in the manifest. An allowlist would silently drop them all.
+ *
+ * New platform-internal types added in future phases must be appended here.
+ */
+const MANIFEST_EXCLUDED_TYPES = [
+  'agent-scaffolding',
+  'agent-definition',
+  'skill',
+] as const;
+
 export interface ManifestDocument {
   id: string;
   path: string;
@@ -61,10 +82,10 @@ export interface Manifest {
  * the same shape without writing a `navigation_manifests` row — sidebar
  * data fetchers, the folders CRUD lib's `getFolderTree` — can reuse it.
  *
- * Includes live (`deletedAt IS NULL`) documents that are either plain
- * knowledge (type IS NULL) or workflow definitions (type = 'workflow').
- * Platform-internal types (agent-scaffolding, agent-definition, skill) are
- * excluded.
+ * Includes all live (`deletedAt IS NULL`) documents except those whose
+ * `type` is in `MANIFEST_EXCLUDED_TYPES` (agent-scaffolding,
+ * agent-definition, skill). That denylist passes through NULL-typed
+ * knowledge docs, workflow docs, and any user-authored vocabulary types.
  */
 export async function buildFolderTree(
   brainId: string,
@@ -77,13 +98,10 @@ export async function buildFolderTree(
     .where(eq(folders.brainId, brainId))
     .orderBy(folders.sortOrder, folders.name);
 
-  // 2. Fetch all live, manifest-visible documents for the brain.
-  //    Included: plain knowledge (type IS NULL) + workflow definitions
-  //    (type = 'workflow') so the Platform Agent can reference workflow
-  //    docs by name.
-  //    Excluded: platform-internal types — agent-scaffolding,
-  //    agent-definition, skill — which are never surfaced to agents.
-  const EXCLUDED_TYPES = ['agent-scaffolding', 'agent-definition', 'skill'];
+  // 2. Fetch all live, manifest-visible documents. Denylist filter keyed
+  //    on `MANIFEST_EXCLUDED_TYPES` — everything else (NULL type, workflow
+  //    docs, user-authored vocabulary types like 'pricing-model') passes
+  //    through. See the constant's JSDoc for the rationale.
   const docRows = await db
     .select({
       id: documents.id,
@@ -104,7 +122,7 @@ export async function buildFolderTree(
         isNull(documents.deletedAt),
         or(
           isNull(documents.type),
-          notInArray(documents.type, EXCLUDED_TYPES),
+          notInArray(documents.type, [...MANIFEST_EXCLUDED_TYPES]),
         ),
       ),
     )

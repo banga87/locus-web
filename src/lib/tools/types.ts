@@ -94,7 +94,7 @@ export interface ToolError {
    *   - `invalid_input`        — ajv validation failed
    *   - `unknown_tool`         — no tool registered with that name
    *   - `scope_denied`         — actor lacks the required scope
-   *   - `permission_denied`    — future: fine-grained ACL denial
+   *   - `permission_denied`    — role gate denied the actor (see evaluator.ts)
    *   - `document_not_found`   — tool-level lookup miss
    *   - `execution_error`      — unexpected throw from `tool.call()`
    *   - `rate_limited`         — future: MCP rate-limit layer

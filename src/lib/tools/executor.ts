@@ -34,7 +34,6 @@ import {
   PermissionDeniedError,
 } from '@/lib/agent/permissions/evaluator';
 
-import { TOOL_ACTION_MAP, type ToolAction } from './action-map';
 import { resolveResource } from './resource-resolver';
 import { estimateTokens } from './token-estimator';
 import type {
@@ -142,19 +141,22 @@ export async function executeTool(
 
   // ---- Step 3: Permission check -----------------------------------------
   //
+  // `tool.action` is the single source of truth for what this call requires.
+  // Both gates (scope + role) read it from the same field — no drift risk
+  // between a name-indexed map and the tool's own declaration.
+  //
   // `resolveResource()` runs here so per-resource ACL context is available
   // when document-level policy matching lands (Phase 2). The fine-grained
   // `requiresApproval` branch is also a Phase 2 concern.
-  const action: ToolAction = TOOL_ACTION_MAP[tool.name] ?? inferActionFromTool(tool);
   void resolveResource(tool.name, rawInput, context);
 
-  if (!hasScope(context.actor, action)) {
+  if (!hasScope(context.actor, tool.action)) {
     const denied = buildError(
       'scope_denied',
-      `Actor does not have '${action}' scope for tool '${tool.name}'.`,
+      `Actor does not have '${tool.action}' scope for tool '${tool.name}'.`,
       {
         hint:
-          action === 'read'
+          tool.action === 'read'
             ? 'This token needs the "read" scope to call read tools.'
             : 'This token needs the "write" scope to call write tools.',
         retryable: false,
@@ -253,16 +255,8 @@ export async function executeTool(
  * evaluation (for Platform Agent actors) lives in
  * `@/lib/agent/permissions/evaluator` and runs after this gate.
  */
-function hasScope(actor: Actor, action: ToolAction): boolean {
+function hasScope(actor: Actor, action: 'read' | 'write'): boolean {
   return actor.scopes.includes(action);
-}
-
-/**
- * Fallback when a tool name is not in `TOOL_ACTION_MAP`. Honors the
- * tool's `isReadOnly()` hint so unregistered tools still route sensibly.
- */
-function inferActionFromTool(tool: LocusTool): ToolAction {
-  return tool.isReadOnly() ? 'read' : 'write';
 }
 
 function buildError(

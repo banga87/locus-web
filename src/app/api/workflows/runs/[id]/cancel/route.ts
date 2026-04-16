@@ -11,9 +11,21 @@
 // would appear "stuck" and get wrongly promoted to failed.
 //
 // Access control: triggered_by OR Owner/Admin (same as status route).
+//
+// Audit trail: emits a `workflow.run.cancelled` event (category:
+// 'administration', actorType: 'human') on successful state transition.
+// The audit event is only emitted when the UPDATE actually landed — if
+// cancelWorkflowRun returns null (race: run reached a terminal state
+// between the read and the guarded update), no event is emitted because
+// no state change occurred. `waitUntil(flushEvents())` ensures the
+// buffered audit write lands before the function shuts down.
+
+import { waitUntil } from '@vercel/functions';
 
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
+import { flushEvents, logEvent } from '@/lib/audit/logger';
+import type { TargetType } from '@/lib/audit/types';
 import { getWorkflowRunById, cancelWorkflowRun } from '@/lib/workflow/queries';
 
 export const runtime = 'nodejs';
@@ -65,7 +77,8 @@ export async function POST(
 
   if (!updated) {
     // Race condition: the run completed/failed between our read and the
-    // update. Re-read to return the actual current status.
+    // update. Re-read to return the actual current status. Intentionally
+    // no audit emit here — no state change occurred on this call.
     const latest = await getWorkflowRunById(id);
     return Response.json(
       {
@@ -76,6 +89,37 @@ export async function POST(
       { status: 409 },
     );
   }
+
+  // Confirmed state change: emit the audit event. Naming convention
+  // matches `mcp.connection.{created,updated,disabled,deleted}` in
+  // src/app/api/admin/mcp-connections — dotted lowercase, domain-scoped.
+  //
+  // TargetType note: the `TargetType` union in src/lib/audit/types.ts
+  // does not yet list 'workflow_run'. The underlying column is
+  // `varchar(64)` so the DB accepts it without a migration; we cast to
+  // keep this route within scope (widening the shared type is a
+  // separate change). Future audit-hygiene work should extend the
+  // union alongside any other workflow-audit event types we add.
+  logEvent({
+    companyId: auth.companyId!,
+    category: 'administration',
+    eventType: 'workflow.run.cancelled',
+    actorType: 'human',
+    actorId: auth.userId,
+    actorName: auth.fullName ?? undefined,
+    targetType: 'workflow_run' as TargetType,
+    targetId: id,
+    details: {
+      workflow_document_id: run.workflowDocumentId,
+      triggered_by: run.triggeredBy,
+      previous_status: 'running',
+    },
+  });
+
+  // logEvent buffers + drains on a microtask. waitUntil(flushEvents())
+  // keeps the function alive long enough for the buffered write to land
+  // after the response stream closes — same pattern as the chat route.
+  waitUntil(flushEvents());
 
   return Response.json({ run_id: id, status: 'cancelled' });
 }

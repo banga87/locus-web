@@ -15,6 +15,16 @@ function makeFakeSupabase() {
   const channels: Array<{ handler: (p: { new: Record<string, unknown> }) => void; unsubscribed: boolean }> = [];
   const statusCallbacks: Array<(status: string) => void> = [];
   const client = {
+    // useBrainPulse gates channel.join() behind auth.getSession() + realtime.setAuth
+    // so Realtime joins carry the user's JWT. Tests mirror that: the promise
+    // resolves synchronously on the microtask queue so the channel is created
+    // before assertions run.
+    auth: {
+      getSession: () => Promise.resolve({ data: { session: { access_token: 'test-token' } } }),
+    },
+    realtime: {
+      setAuth: (_token: string | null) => {},
+    },
     channel(_name: string) {
       const ctx: { handler: (p: { new: Record<string, unknown> }) => void; unsubscribed: boolean } = {
         handler: () => {}, unsubscribed: false,
@@ -68,6 +78,8 @@ describe('useBrainPulse', () => {
       () => useBrainPulse({ brainId: 'b1', companyId: 'c1', seedGraph: seed, supabaseClient: fake.client as never }),
       { wrapper },
     );
+    // Channel creation is now gated on auth.getSession() — wait for it to register.
+    await waitFor(() => expect(fake.channels).toHaveLength(1));
     act(() => {
       fake.emit({
         id: 'e-1', created_at: new Date().toISOString(),
@@ -85,12 +97,13 @@ describe('useBrainPulse', () => {
     });
   });
 
-  it('filters out excluded categories (authentication)', () => {
+  it('filters out excluded categories (authentication)', async () => {
     const fake = makeFakeSupabase();
     const { result } = renderHook(
       () => useBrainPulse({ brainId: 'b1', companyId: 'c1', seedGraph: seed, supabaseClient: fake.client as never }),
       { wrapper },
     );
+    await waitFor(() => expect(fake.channels).toHaveLength(1));
     act(() => {
       fake.emit({
         id: 'e-auth', created_at: new Date().toISOString(),
@@ -104,26 +117,27 @@ describe('useBrainPulse', () => {
     expect(result.current.events).toEqual([]);
   });
 
-  it('unsubscribes the channel on unmount', () => {
+  it('unsubscribes the channel on unmount', async () => {
     const fake = makeFakeSupabase();
     const { unmount } = renderHook(
       () => useBrainPulse({ brainId: 'b1', companyId: 'c1', seedGraph: seed, supabaseClient: fake.client as never }),
       { wrapper },
     );
+    await waitFor(() => expect(fake.channels).toHaveLength(1));
     unmount();
     expect(fake.channels[0].unsubscribed).toBe(true);
   });
 
-  it('re-subscribes when companyId changes (cross-company switch)', () => {
+  it('re-subscribes when companyId changes (cross-company switch)', async () => {
     const fake = makeFakeSupabase();
     const { rerender } = renderHook(
       ({ companyId }: { companyId: string }) =>
         useBrainPulse({ brainId: 'b1', companyId, seedGraph: seed, supabaseClient: fake.client as never }),
       { wrapper, initialProps: { companyId: 'c1' } },
     );
-    expect(fake.channels).toHaveLength(1);
+    await waitFor(() => expect(fake.channels).toHaveLength(1));
     rerender({ companyId: 'c2' });
-    expect(fake.channels).toHaveLength(2);
+    await waitFor(() => expect(fake.channels).toHaveLength(2));
     expect(fake.channels[0].unsubscribed).toBe(true);
   });
 

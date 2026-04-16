@@ -31,6 +31,7 @@ import { workflowRuns } from '@/db/schema/workflow-runs';
 import { brains } from '@/db/schema/brains';
 import { folders } from '@/db/schema/folders';
 import { companies } from '@/db/schema/companies';
+import { users } from '@/db/schema/users';
 
 import { runAgentTurn } from '@/lib/agent/run';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
@@ -129,16 +130,51 @@ export async function runWorkflow(runId: string): Promise<void> {
   const frontmatter = fmResult.value;
   const workflowDocRef = workflowDoc.path;
 
+  // ---- Resolve the triggering user's role --------------------------------
+  // The runner acts as a platform_agent on behalf of the user who triggered
+  // the run — the permission evaluator (Task 1) gates write tools on
+  // actor.role, so the runner MUST pass through the real role rather than a
+  // hardcoded value. Without this, any user (including viewers) could
+  // escalate to editor by triggering a workflow that calls write tools.
+  //
+  // Future hardening: a `triggered_by_role` snapshot column on workflow_runs
+  // would freeze the role at trigger time so role changes between trigger
+  // and execution can't affect an already-running workflow. For MVP, live
+  // lookup is acceptable — the trigger route rejects viewers up-front so
+  // this live lookup only observes editor/admin/owner.
+  const [triggeringUser] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, run.triggeredBy))
+    .limit(1);
+
+  if (!triggeringUser) {
+    // Triggering user was deleted between insert and execution. Emit a
+    // run_error and mark failed — this is the only path where the run
+    // can't proceed at all.
+    await insertEvent(runId, 0, 'run_error', { reason: 'triggering_user_missing' });
+    await markFailed(runId, 'Triggering user not found');
+    return;
+  }
+
+  // users.role is nullable in the schema (defaults to 'viewer' on insert).
+  // Treat a null column value as 'viewer' — the most restrictive fallback,
+  // consistent with the column default. The trigger route already rejects
+  // viewer-role callers up front, so in normal flow this path only observes
+  // editor/admin/owner; the fallback exists for data-drift safety.
+  const triggeringRole = triggeringUser.role ?? 'viewer';
+
   // ---- Build context objects -------------------------------------------
   // The runner acts as a platform_agent on behalf of the user who triggered
   // the run. We give it write scope so the stamp middleware can call the
-  // write tools (create_document / update_document).
+  // write tools (create_document / update_document). Role comes from the
+  // DB lookup above — Task 1's evaluator gates write tools on role.
   const toolContext = {
     actor: {
       type: 'platform_agent' as const,
       id: run.triggeredBy,
       scopes: ['read', 'write'],
-      role: 'editor' as const,
+      role: triggeringRole,
     },
     companyId: workflowDoc.companyId,
     brainId: workflowDoc.brainId,

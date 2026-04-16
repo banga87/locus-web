@@ -33,11 +33,18 @@ import { workflowRuns } from '@/db/schema/workflow-runs';
 // ---------------------------------------------------------------------------
 
 // Stub requireAuth — resolved to the seeded user once beforeAll finishes.
-// Uses vi.fn() so individual tests can override with mockRejectedValueOnce.
-const mockAuth = {
+// Uses vi.fn() so individual tests can override with mockRejectedValueOnce
+// or mockResolvedValueOnce (used by the viewer-rejection test).
+const mockAuth: {
+  userId: string;
+  companyId: string;
+  role: 'owner' | 'admin' | 'editor' | 'viewer';
+  email: string;
+  fullName: string;
+} = {
   userId: '',
   companyId: '',
-  role: 'owner' as const,
+  role: 'owner',
   email: 'wf-trigger@local',
   fullName: 'WF Trigger Tester',
 };
@@ -233,6 +240,23 @@ describe('POST /api/workflows/runs', () => {
     expect(res.status).toBe(401);
     const body = await res.json() as { error: string };
     expect(body.error).toBe('unauthenticated');
+  });
+
+  it('returns 403 forbidden when the caller has role=viewer', async () => {
+    // Closes the permission-escalation gap: viewers must not be able to
+    // trigger workflows (they would fail-closed at the first write tool
+    // inside the runner anyway — reject at the gate). Pre-reject check
+    // runs before the workflow doc is looked up, so a viewer can't even
+    // probe which workflow IDs exist.
+    mockRequireAuth.mockResolvedValueOnce({
+      ...mockAuth,
+      role: 'viewer',
+    });
+
+    const res = await POST(buildRequest({ workflow_document_id: workflowDocId }));
+    expect(res.status).toBe(403);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('forbidden');
   });
 
   it('returns 404 when workflow_document_id does not exist', async () => {

@@ -68,6 +68,22 @@ export async function POST(req: Request) {
     );
   }
 
+  // Role gate: viewers cannot trigger workflows. A viewer-triggered workflow
+  // would fail-closed on the first write tool inside the runner (Task 1's
+  // evaluator denies write tools for viewers), so we pre-reject here rather
+  // than waste infrastructure and leave a failed run row behind. Placed
+  // before doc lookup so a viewer can't probe which workflow IDs exist.
+  if (auth.role === 'viewer') {
+    return Response.json(
+      {
+        error: 'forbidden',
+        message:
+          'Viewers cannot trigger workflows. Ask an editor or owner to trigger it.',
+      },
+      { status: 403 },
+    );
+  }
+
   let body: { workflow_document_id?: unknown };
   try {
     body = (await req.json()) as { workflow_document_id?: unknown };

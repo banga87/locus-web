@@ -108,6 +108,8 @@ interface RunFixtures {
   brainId: string;
   folderId: string;
   userId: string;
+  /** Secondary user seeded with role='viewer' for the permission-denial test. */
+  viewerUserId: string;
   workflowDocId: string;
   workflowDocPath: string;
 }
@@ -143,12 +145,31 @@ async function setupRunFixtures(): Promise<RunFixtures> {
     name: 'Reports',
   });
 
+  // Seed as editor — the runner now passes through the triggering user's
+  // real role to the permission evaluator. The happy-path test creates no
+  // docs, but future tests that call write tools need an editor+ user to
+  // pass role-gating. A second viewer user is added below for the
+  // permission-denial test.
   const userId = randomUUID();
   await db.insert(users).values({
     id: userId,
     companyId: company!.id,
     fullName: 'Run User',
     email: `run-${suffix}@example.test`,
+    role: 'editor',
+    status: 'active',
+  });
+
+  // Secondary user with role='viewer' — used by the permission-denial test
+  // to prove the runner correctly passes the triggering user's real role to
+  // the evaluator (viewers cannot call write tools).
+  const viewerUserId = randomUUID();
+  await db.insert(users).values({
+    id: viewerUserId,
+    companyId: company!.id,
+    fullName: 'Viewer User',
+    email: `viewer-${suffix}@example.test`,
+    role: 'viewer',
     status: 'active',
   });
 
@@ -189,6 +210,7 @@ async function setupRunFixtures(): Promise<RunFixtures> {
     brainId: brain!.id,
     folderId: folder!.id,
     userId,
+    viewerUserId,
     workflowDocId: wfDoc!.id,
     workflowDocPath,
   };
@@ -198,6 +220,7 @@ async function teardownRunFixtures(f: RunFixtures): Promise<void> {
   // Delete workflow_runs first (FK to users + documents)
   await db.delete(workflowRuns).where(eq(workflowRuns.workflowDocumentId, f.workflowDocId));
   await db.delete(users).where(eq(users.id, f.userId));
+  await db.delete(users).where(eq(users.id, f.viewerUserId));
   // brains cascade to documents + folders
   await db.transaction(async (tx) => {
     await tx.execute(
@@ -211,13 +234,19 @@ async function teardownRunFixtures(f: RunFixtures): Promise<void> {
   await db.delete(companies).where(eq(companies.id, f.companyId));
 }
 
-/** Seed a workflow_run row and return its id. */
-async function seedRun(f: RunFixtures): Promise<string> {
+/**
+ * Seed a workflow_run row and return its id.
+ *
+ * @param f         Fixtures bundle (company/brain/user/workflow doc).
+ * @param triggeredBy  Optional override — defaults to the editor user.
+ *                     Pass `f.viewerUserId` for permission-denial tests.
+ */
+async function seedRun(f: RunFixtures, triggeredBy?: string): Promise<string> {
   const [run] = await db
     .insert(workflowRuns)
     .values({
       workflowDocumentId: f.workflowDocId,
-      triggeredBy: f.userId,
+      triggeredBy: triggeredBy ?? f.userId,
       status: 'queued',
     })
     .returning({ id: workflowRuns.id });
@@ -428,4 +457,121 @@ describe('runWorkflow — missing run', () => {
     mockProvider.setModel(makeStreamModel([]));
     await expect(runWorkflow(randomUUID())).rejects.toThrow(/not found/);
   });
+});
+
+describe('runWorkflow — triggering user role', () => {
+  // This test documents the end-to-end wiring: runWorkflow looks up the
+  // triggering user's role in the DB (not a hardcoded 'editor'), and passes
+  // it through to the permission evaluator. A viewer-triggered workflow
+  // cannot escalate to editor via the workflow path — write tools return
+  // permission_denied at the executor gate.
+  //
+  // We don't enumerate every role × tool combination here — that's covered
+  // by the Task 1 evaluator tests. This single test proves the plumbing.
+  it(
+    'denies write tools when the triggering user has role=viewer',
+    { timeout: 15_000 },
+    async () => {
+      // Mock LLM: call 1 emits a create_document tool-call; call 2 (the
+      // continuation turn after the tool result is returned) emits a plain
+      // text finish so the agent loop terminates. Without the second-call
+      // branch the runner would hit maxSteps=40 with the same tool-call
+      // response on every turn and the test would time out.
+      //
+      // The executor's role gate rejects the create_document call because
+      // role=viewer has no write permission on brain resources. The runner
+      // treats the denial as a normal tool_result event (isError=true) and
+      // the loop continues to run_complete — unlike LLM stream errors or
+      // hook denials, a per-tool denial is not a terminal run failure.
+      let callIdx = 0;
+      mockProvider.setModel(
+        new MockLanguageModelV3({
+          doStream: async () => {
+            callIdx++;
+            if (callIdx === 1) {
+              return {
+                stream: simulateReadableStream({
+                  chunks: [
+                    { type: 'stream-start', warnings: [] },
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'call-viewer-write',
+                      toolName: 'create_document',
+                      input: JSON.stringify({
+                        path: 'reports/viewer-denied-doc',
+                        title: 'Should Not Be Created',
+                        body: 'This write must be denied.',
+                      }),
+                    },
+                    {
+                      type: 'finish',
+                      usage: {
+                        inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                        outputTokens: { total: 5, text: 5, reasoning: undefined },
+                      },
+                      finishReason: { unified: 'tool-calls', raw: 'tool_use' },
+                    },
+                  ] satisfies LanguageModelV3StreamPart[],
+                }),
+              };
+            }
+            // Second turn: the LLM "sees" the permission_denied result and
+            // gives up. Emit a plain text stop so the agent loop exits.
+            return {
+              stream: simulateReadableStream({
+                chunks: [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'text-start', id: 't2' },
+                  { type: 'text-delta', id: 't2', delta: 'Write denied; aborting.' },
+                  { type: 'text-end', id: 't2' },
+                  {
+                    type: 'finish',
+                    usage: {
+                      inputTokens: { total: 5, noCache: 5, cacheRead: undefined, cacheWrite: undefined },
+                      outputTokens: { total: 3, text: 3, reasoning: undefined },
+                    },
+                    finishReason: { unified: 'stop', raw: 'end_turn' },
+                  },
+                ] satisfies LanguageModelV3StreamPart[],
+              }),
+            };
+          },
+        }),
+      );
+
+      // Seed a run triggered by the viewer user.
+      const runId = await seedRun(fix, fix.viewerUserId);
+      await runWorkflow(runId);
+
+      const run = await getRun(runId);
+      expect(run).not.toBeNull();
+      // The run reached normal completion — a per-tool denial is not a
+      // terminal failure. output_document_ids stays empty because the
+      // write was blocked at the executor gate.
+      expect(run!.status).toBe('completed');
+      expect(run!.outputDocumentIds).toEqual([]);
+
+      // The tool_result event carries the permission_denied signal.
+      //
+      // Note the shape: bridgeLocusTool converts a failed executeTool()
+      // return into `{ error: true, code, message, hint }` and yields it
+      // as the tool's return value — not as an exception. The AI SDK
+      // therefore reports `isError: false` in the streamed event (the
+      // tool "succeeded" at returning an error envelope), and the
+      // denial signal lives in the payload's `result.error === true`
+      // / `result.code === 'permission_denied'` fields.
+      const events = await getEvents(runId);
+      const toolResult = events.find((e) => e.eventType === 'tool_result');
+      expect(toolResult).toBeDefined();
+      const payload = toolResult!.payload as Record<string, unknown>;
+      expect(payload.toolName).toBe('create_document');
+      const result = payload.result as { error?: boolean; code?: string };
+      expect(result.error).toBe(true);
+      expect(result.code).toBe('permission_denied');
+
+      // Terminal run_complete event still lands — a per-tool denial does
+      // not short-circuit the run.
+      expect(events.at(-1)!.eventType).toBe('run_complete');
+    },
+  );
 });

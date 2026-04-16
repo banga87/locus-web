@@ -36,7 +36,13 @@ function readStored(): SidebarState {
       collapsed: typeof parsed.collapsed === 'boolean' ? parsed.collapsed : DEFAULT_STATE.collapsed,
       width: clampWidth(typeof parsed.width === 'number' ? parsed.width : DEFAULT_WIDTH),
       sections: parsed.sections && typeof parsed.sections === 'object'
-        ? { ...DEFAULT_STATE.sections, ...parsed.sections }
+        ? {
+            ...DEFAULT_STATE.sections,
+            ...Object.fromEntries(
+              (Object.entries(parsed.sections) as [string, unknown][])
+                .filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean')
+            ),
+          }
         : DEFAULT_STATE.sections,
     };
   } catch {
@@ -63,7 +69,10 @@ function ensureHydrated() {
   if (hydrated) return;
   currentState = readStored();
   hydrated = true;
-  applyCssVar(currentState);
+  // Do NOT call applyCssVar here — ensureHydrated runs inside
+  // getSnapshot which must be a pure read. CSS var writes happen
+  // in setState (on every update) and in ensureSidebarHydrated
+  // (which SidebarLayoutBoot calls in a useLayoutEffect).
 }
 
 function applyCssVar(state: SidebarState) {
@@ -156,6 +165,7 @@ export function useSidebarLayout(): SidebarLayoutApi {
 // enough to trigger hydration.
 export function ensureSidebarHydrated(): void {
   ensureHydrated();
+  applyCssVar(currentState);
   listeners.forEach((fn) => fn());
 }
 

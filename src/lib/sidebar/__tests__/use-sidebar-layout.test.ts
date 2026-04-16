@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
-import { useSidebarLayout, __resetForTest } from '@/lib/sidebar/use-sidebar-layout';
+import { useSidebarLayout, ensureSidebarHydrated, __resetForTest } from '@/lib/sidebar/use-sidebar-layout';
 
 const KEY = 'locus.sidebar.v1';
 
@@ -22,6 +22,9 @@ describe('useSidebarLayout', () => {
 
   it('writes --sidebar-width to documentElement', () => {
     const { result } = renderHook(() => useSidebarLayout());
+    // SidebarLayoutBoot calls ensureSidebarHydrated() in useLayoutEffect
+    // in production; simulate that trigger here.
+    act(() => ensureSidebarHydrated());
     expect(document.documentElement.style.getPropertyValue('--sidebar-width')).toBe('280px');
     act(() => result.current.setWidth(320));
     expect(document.documentElement.style.getPropertyValue('--sidebar-width')).toBe('320px');
@@ -73,11 +76,11 @@ describe('useSidebarLayout', () => {
 
   it('expandSidebarWithSection opens only that section', () => {
     const { result } = renderHook(() => useSidebarLayout());
-    // Start collapsed, two sections open
+    // Start collapsed; both sections remain ON by default.
     act(() => {
       result.current.toggleCollapsed();
-      result.current.toggleSection('pinned'); // turn it off
-      result.current.toggleSection('pinned'); // on
+      // Precondition: collapsed, brain ON, pinned ON (defaults).
+      // expandSidebarWithSection('pinned') must leave pinned ON, brain OFF.
     });
     act(() => result.current.expandSidebarWithSection('pinned'));
     expect(result.current.collapsed).toBe(false);

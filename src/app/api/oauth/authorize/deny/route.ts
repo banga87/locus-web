@@ -6,11 +6,17 @@
 // Supabase auth cookie being SameSite=Lax to block cross-site forgery.
 
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
+import { logger as axiomLogger } from '@/lib/axiom/server';
 import { getSession, deleteSession } from '@/lib/oauth/sessions';
 
 export const runtime = 'nodejs';
+
+function flush(): void {
+  waitUntil(axiomLogger.flush());
+}
 
 function errorHtml(status: number, title: string, detail: string): Response {
   const safeTitle = escapeHtml(title);
@@ -30,8 +36,9 @@ function escapeHtml(s: string): string {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  let ctx;
   try {
-    await requireAuth();
+    ctx = await requireAuth();
   } catch (e) {
     if (e instanceof ApiAuthError) {
       return new Response(JSON.stringify({ error: e.code }), {
@@ -65,6 +72,11 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   await deleteSession(sessionRef);
+  axiomLogger.info('oauth.consent.denied', {
+    clientId: session.clientId,
+    userId: ctx.userId,
+  });
+  flush();
 
   const separator = session.redirectUri.includes('?') ? '&' : '?';
   let denyUrl = session.redirectUri + separator + 'error=access_denied';

@@ -13,11 +13,17 @@
 // application/x-www-form-urlencoded, not JSON.
 
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
+import { logger as axiomLogger } from '@/lib/axiom/server';
 import { consumeCode } from '@/lib/oauth/codes';
 import { rotateRefreshToken, issueRefreshToken } from '@/lib/oauth/refresh';
 import { signAccessToken } from '@/lib/oauth/jwt';
 
 export const runtime = 'nodejs';
+
+function flush(): void {
+  waitUntil(axiomLogger.flush());
+}
 
 const DEFAULT_SCOPES = ['read'];
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
@@ -36,12 +42,19 @@ export async function POST(request: Request): Promise<Response> {
   try {
     form = await request.formData();
   } catch {
+    axiomLogger.warn('oauth.token.rejected', { reason: 'form_parse' });
+    flush();
     return jsonError('invalid_request');
   }
 
   const grantType = form.get('grant_type');
   if (grantType === 'authorization_code') return handleCode(form);
   if (grantType === 'refresh_token') return handleRefresh(form);
+  axiomLogger.warn('oauth.token.rejected', {
+    reason: 'unsupported_grant_type',
+    grantType: typeof grantType === 'string' ? grantType : null,
+  });
+  flush();
   return jsonError('unsupported_grant_type');
 }
 
@@ -60,6 +73,11 @@ async function handleCode(form: FormData): Promise<Response> {
     typeof codeVerifier !== 'string' ||
     typeof clientId !== 'string'
   ) {
+    axiomLogger.warn('oauth.token.rejected', {
+      reason: 'missing_param',
+      grantType: 'authorization_code',
+    });
+    flush();
     return jsonError('invalid_request');
   }
 
@@ -70,7 +88,15 @@ async function handleCode(form: FormData): Promise<Response> {
   // from the first redemption. We defer: access tokens are stateless
   // 1-hour JWTs (no blocklist yet), and an honest client's retry simply
   // fails here → user re-consents. Revisit when we add a JWT blocklist.
-  if (!result.ok) return jsonError('invalid_grant');
+  if (!result.ok) {
+    axiomLogger.warn('oauth.token.rejected', {
+      reason: 'invalid_grant',
+      grantType: 'authorization_code',
+      clientId,
+    });
+    flush();
+    return jsonError('invalid_grant');
+  }
 
   const accessToken = await signAccessToken({
     userId: result.userId,
@@ -83,6 +109,12 @@ async function handleCode(form: FormData): Promise<Response> {
     userId: result.userId,
     companyId: result.companyId,
   });
+  axiomLogger.info('oauth.token.issued', {
+    grantType: 'authorization_code',
+    clientId: result.clientId,
+    userId: result.userId,
+  });
+  flush();
   return successResponse({
     access_token: accessToken,
     token_type: 'Bearer',
@@ -93,13 +125,27 @@ async function handleCode(form: FormData): Promise<Response> {
 
 async function handleRefresh(form: FormData): Promise<Response> {
   const refreshToken = form.get('refresh_token');
-  if (typeof refreshToken !== 'string') return jsonError('invalid_request');
+  if (typeof refreshToken !== 'string') {
+    axiomLogger.warn('oauth.token.rejected', {
+      reason: 'missing_param',
+      grantType: 'refresh_token',
+    });
+    flush();
+    return jsonError('invalid_request');
+  }
 
   const result = await rotateRefreshToken({ refreshToken });
   // Any failure mode — unknown / expired / revoked_chain_killed — maps
   // to invalid_grant. The chain-revoke side effect for replays is
   // already applied inside rotateRefreshToken.
-  if (!result.ok) return jsonError('invalid_grant');
+  if (!result.ok) {
+    axiomLogger.warn('oauth.token.rejected', {
+      reason: 'invalid_grant',
+      grantType: 'refresh_token',
+    });
+    flush();
+    return jsonError('invalid_grant');
+  }
 
   const accessToken = await signAccessToken({
     userId: result.userId,
@@ -107,6 +153,12 @@ async function handleRefresh(form: FormData): Promise<Response> {
     clientId: result.clientId,
     scopes: DEFAULT_SCOPES,
   });
+  axiomLogger.info('oauth.token.issued', {
+    grantType: 'refresh_token',
+    clientId: result.clientId,
+    userId: result.userId,
+  });
+  flush();
   return successResponse({
     access_token: accessToken,
     token_type: 'Bearer',

@@ -21,6 +21,7 @@ import { waitUntil } from '@vercel/functions';
 
 import { authenticateAgentToken } from '@/lib/mcp/auth';
 import { registerMcpTools } from '@/lib/mcp/tools';
+import { logger as axiomLogger } from '@/lib/axiom/server';
 import { flushEvents } from '@/lib/audit/logger';
 
 export const runtime = 'nodejs';
@@ -47,7 +48,9 @@ export async function POST(request: Request): Promise<Response> {
   // take effect on the very next tool call (see `src/lib/mcp/auth.ts`).
   const auth = await authenticateAgentToken(request);
   if (!auth.ok) {
+    axiomLogger.warn('mcp.auth.rejected', { code: auth.code });
     waitUntil(flushEvents());
+    waitUntil(axiomLogger.flush());
     return Response.json(
       {
         jsonrpc: '2.0',

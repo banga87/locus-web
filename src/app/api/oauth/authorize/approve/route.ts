@@ -14,13 +14,19 @@
 // forgery attempt with 401. If we ever relax SameSite on that cookie we
 // MUST add a CSRF token here (double-submit or origin check).
 
+import { waitUntil } from '@vercel/functions';
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
+import { logger as axiomLogger } from '@/lib/axiom/server';
 import { getSession, deleteSession } from '@/lib/oauth/sessions';
 import { generateCode } from '@/lib/oauth/codes';
 import { buildSuccessPageHtml } from '@/lib/oauth/success-page';
 
 export const runtime = 'nodejs';
+
+function flush(): void {
+  waitUntil(axiomLogger.flush());
+}
 
 function errorHtml(status: number, title: string, detail: string): Response {
   const safeTitle = escapeHtml(title);
@@ -66,6 +72,8 @@ export async function POST(request: Request): Promise<Response> {
 
   const session = await getSession(sessionRef);
   if (!session) {
+    axiomLogger.warn('oauth.consent.rejected', { reason: 'session_expired', userId: ctx.userId });
+    flush();
     return errorHtml(
       400,
       'Consent session expired',
@@ -74,6 +82,12 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (!ctx.companyId) {
+    axiomLogger.warn('oauth.consent.rejected', {
+      reason: 'no_company',
+      userId: ctx.userId,
+      clientId: session.clientId,
+    });
+    flush();
     return errorHtml(
       500,
       'Setup incomplete',
@@ -89,6 +103,12 @@ export async function POST(request: Request): Promise<Response> {
     codeChallenge: session.codeChallenge,
   });
   await deleteSession(sessionRef);
+  axiomLogger.info('oauth.consent.approved', {
+    clientId: session.clientId,
+    userId: ctx.userId,
+    companyId: ctx.companyId,
+  });
+  flush();
 
   const separator = session.redirectUri.includes('?') ? '&' : '?';
   let redirectTarget =

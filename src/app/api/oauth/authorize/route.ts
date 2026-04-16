@@ -17,13 +17,19 @@
 // wrong redirect URI, bad params) render a plain 400 HTML page instead.
 
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { ApiAuthError } from '@/lib/api/errors';
 import { requireAuth } from '@/lib/api/auth';
+import { logger as axiomLogger } from '@/lib/axiom/server';
 import { getClientById, touchClient } from '@/lib/oauth/clients';
 import { createSession } from '@/lib/oauth/sessions';
 import { isLocalhostRedirectUri } from '@/lib/oauth/redirect-uri';
 
 export const runtime = 'nodejs';
+
+function flush(): void {
+  waitUntil(axiomLogger.flush());
+}
 
 function errorHtml(title: string, detail: string): Response {
   const safeTitle = escapeHtml(title);
@@ -65,18 +71,24 @@ export async function GET(request: Request): Promise<Response> {
   const state = url.searchParams.get('state');
 
   if (responseType !== 'code') {
+    axiomLogger.warn('oauth.authorize.rejected', { reason: 'response_type' });
+    flush();
     return errorHtml(
       'Invalid request',
       'response_type must be "code".',
     );
   }
   if (codeChallengeMethod !== 'S256') {
+    axiomLogger.warn('oauth.authorize.rejected', { reason: 'pkce_method' });
+    flush();
     return errorHtml(
       'Invalid request',
       'code_challenge_method must be "S256".',
     );
   }
   if (!clientId || !redirectUri || !codeChallenge) {
+    axiomLogger.warn('oauth.authorize.rejected', { reason: 'missing_param' });
+    flush();
     return errorHtml(
       'Invalid request',
       'Missing required parameter (client_id, redirect_uri, or code_challenge).',
@@ -85,6 +97,8 @@ export async function GET(request: Request): Promise<Response> {
 
   const client = await getClientById(clientId);
   if (!client) {
+    axiomLogger.warn('oauth.authorize.rejected', { reason: 'unknown_client', clientId });
+    flush();
     return errorHtml('Unknown client', 'This client_id is not registered.');
   }
 
@@ -92,6 +106,8 @@ export async function GET(request: Request): Promise<Response> {
     !client.redirectUris.includes(redirectUri) ||
     !isLocalhostRedirectUri(redirectUri)
   ) {
+    axiomLogger.warn('oauth.authorize.rejected', { reason: 'redirect_uri_mismatch', clientId });
+    flush();
     return errorHtml(
       'Invalid redirect URI',
       'This redirect_uri is not allowed for this client.',
@@ -105,6 +121,8 @@ export async function GET(request: Request): Promise<Response> {
     codeChallenge,
     state,
   });
+  axiomLogger.info('oauth.authorize.session_created', { clientId, sessionRef: session.sessionRef });
+  flush();
 
   const consentUrl = new URL(
     `/auth/mcp?session=${encodeURIComponent(session.sessionRef)}`,

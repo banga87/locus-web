@@ -54,6 +54,7 @@ function buildEchoTool(
       required: ['name'],
       additionalProperties: false,
     },
+    action: 'read' as const,
     isReadOnly: () => true,
     call: vi.fn(async (input: unknown) => {
       return {
@@ -218,6 +219,7 @@ describe('buildToolSet — capability filter', () => {
       additionalProperties: false,
     },
     capabilities: ['web'],
+    action: 'read' as const,
     isReadOnly: () => true,
     call: vi.fn(async () => ({
       success: true,

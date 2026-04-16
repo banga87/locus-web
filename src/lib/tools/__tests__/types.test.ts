@@ -9,6 +9,7 @@ describe('type surface extensions', () => {
       description: 'x',
       inputSchema: {},
       capabilities: ['web'],
+      action: 'read' as const,
       isReadOnly: () => true,
       call: async () => ({
         success: true,

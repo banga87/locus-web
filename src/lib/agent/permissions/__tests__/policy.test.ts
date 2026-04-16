@@ -6,6 +6,10 @@ describe('policy matrix', () => {
     expect(policyAllows({ role: 'owner' }, { action: 'write' })).toBe(true);
   });
 
+  it('allows Admin to write', () => {
+    expect(policyAllows({ role: 'admin' }, { action: 'write' })).toBe(true);
+  });
+
   it('allows Editor to write', () => {
     expect(policyAllows({ role: 'editor' }, { action: 'write' })).toBe(true);
   });
@@ -17,6 +21,7 @@ describe('policy matrix', () => {
   it('allows all roles to read', () => {
     expect(policyAllows({ role: 'viewer' }, { action: 'read' })).toBe(true);
     expect(policyAllows({ role: 'editor' }, { action: 'read' })).toBe(true);
+    expect(policyAllows({ role: 'admin' }, { action: 'read' })).toBe(true);
     expect(policyAllows({ role: 'owner' }, { action: 'read' })).toBe(true);
   });
 });

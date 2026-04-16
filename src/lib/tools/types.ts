@@ -166,9 +166,10 @@ export interface LocusTool<I = unknown, O = unknown> {
    * declare 'read'. Write tools (Task 2) declare 'write'. The executor
    * uses this to run the role-based permission evaluator before dispatch.
    *
-   * When absent the executor falls back to inferring from `isReadOnly()`.
+   * Required at the type level so a new write tool cannot silently bypass
+   * the permission gate — the compiler forces every tool to declare intent.
    */
-  readonly action?: 'read' | 'write';
+  readonly action: 'read' | 'write';
 
   /** True if the tool does not modify brain state. */
   isReadOnly(): boolean;

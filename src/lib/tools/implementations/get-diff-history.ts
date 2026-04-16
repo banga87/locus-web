@@ -4,7 +4,7 @@
 // Each entry carries the latest version's summary plus, optionally, a
 // short content preview.
 
-import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lt, or } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { documents } from '@/db/schema/documents';
@@ -16,6 +16,8 @@ interface GetDiffHistoryInput {
   since: string;
   folder?: string;
   include_content_preview?: boolean;
+  limit?: number;
+  cursor?: string;
 }
 
 interface DiffEntry {
@@ -29,6 +31,7 @@ interface DiffEntry {
 interface GetDiffHistoryOutput {
   since: string;
   changes: DiffEntry[];
+  next_cursor: string | null;
 }
 
 const PREVIEW_CHARS = 200;
@@ -48,6 +51,8 @@ export const getDiffHistoryTool: LocusTool<
       since: { type: 'string', format: 'date-time' },
       folder: { type: 'string', minLength: 1 },
       include_content_preview: { type: 'boolean' },
+      limit: { type: 'integer', minimum: 1, maximum: 500 },
+      cursor: { type: 'string', minLength: 1 },
     },
     required: ['since'],
     additionalProperties: false,
@@ -80,12 +85,34 @@ export const getDiffHistoryTool: LocusTool<
       };
     }
     const includePreview = input.include_content_preview === true;
+    const limit = input.limit ?? 50;
 
-    // Gather documents matching the window + optional folder slug. We
-    // need both the document metadata and the latest version summary, so
-    // do two queries (document list → version lookup for that id set) to
-    // keep the SQL readable.
-    //
+    // Decode cursor (if present) before building the query. Malformed
+    // cursors surface as invalid_input — can't be expressed in JSON Schema
+    // since the payload is opaque.
+    let cursor: CursorPayload | null = null;
+    if (typeof input.cursor === 'string') {
+      cursor = decodeCursor(input.cursor);
+      if (cursor === null) {
+        return {
+          success: false,
+          error: {
+            code: 'invalid_input',
+            message: `'${input.cursor}' is not a valid cursor.`,
+            hint:
+              "Pass 'cursor' verbatim from the previous response's 'next_cursor', or omit it to start from the beginning.",
+            retryable: false,
+          },
+          metadata: {
+            responseTokens: 0,
+            executionMs: 0,
+            documentsAccessed: [],
+            details: { eventType: 'document.diff_history' },
+          },
+        };
+      }
+    }
+
     // `isNull(documents.type)` restricts results to user-authored
     // documents — scaffolding/skills/agent-definitions carry a non-null
     // `type` and should never surface in the change feed.
@@ -98,7 +125,25 @@ export const getDiffHistoryTool: LocusTool<
     if (input.folder) {
       whereClauses.push(eq(folders.slug, input.folder));
     }
+    if (cursor) {
+      // Keyset predicate: rows strictly "after" the cursor in the
+      // (updatedAt DESC, id DESC) ordering. Note: since stays ANDed at
+      // the top level and never relaxes — a stale cursor whose t <= since
+      // naturally produces an empty page.
+      const cursorTime = new Date(cursor.t);
+      whereClauses.push(
+        or(
+          lt(documents.updatedAt, cursorTime),
+          and(
+            eq(documents.updatedAt, cursorTime),
+            lt(documents.id, cursor.id),
+          ),
+        )!,
+      );
+    }
 
+    // Fetch limit+1 so we can detect whether another page exists without
+    // a second query. Sort DESC on both keys for the keyset to work.
     const docs = await db
       .select({
         id: documents.id,
@@ -110,23 +155,31 @@ export const getDiffHistoryTool: LocusTool<
       })
       .from(documents)
       .leftJoin(folders, eq(folders.id, documents.folderId))
-      .where(and(...whereClauses));
+      .where(and(...whereClauses))
+      .orderBy(desc(documents.updatedAt), desc(documents.id))
+      .limit(limit + 1);
 
-    const docIds = docs.map((d) => d.id);
-    // Map of documentId -> latest changeSummary/versionNumber/createdAt.
+    // Trim and build next_cursor. `docs` came back DESC-ordered, so the
+    // last kept row's (updatedAt, id) is the cursor for the next page.
+    let nextCursor: string | null = null;
+    const kept = docs;
+    if (docs.length > limit) {
+      kept.length = limit; // drop the probe row in place
+      const last = kept[kept.length - 1];
+      nextCursor = encodeCursor({
+        t: last.updatedAt.toISOString(),
+        id: last.id,
+      });
+    }
+
+    // Versions lookup runs on the kept set only.
+    const docIds = kept.map((d) => d.id);
     const latestVersions = new Map<
       string,
-      {
-        summary: string | null;
-        versionNumber: number;
-        createdAt: Date;
-      }
+      { summary: string | null; versionNumber: number; createdAt: Date }
     >();
 
     if (docIds.length > 0) {
-      // Fetch versions for all matched docs, newest-first. We reduce in
-      // JS to find the latest per document — cleaner than DISTINCT ON
-      // and sidesteps any uuid[] cast quirks with the pg driver.
       const versionRows = await db
         .select({
           documentId: documentVersions.documentId,
@@ -149,11 +202,8 @@ export const getDiffHistoryTool: LocusTool<
       }
     }
 
-    const changes: DiffEntry[] = docs.map((d) => {
+    const changes: DiffEntry[] = kept.map((d) => {
       const latest = latestVersions.get(d.id);
-      // If no version exists (doc is brand-new or hasn't been saved via
-      // the versioning path yet), treat the document row itself as the
-      // change signal.
       const changeType = latest
         ? latest.versionNumber === 1
           ? 'created'
@@ -174,23 +224,68 @@ export const getDiffHistoryTool: LocusTool<
       return entry;
     });
 
-    // Sort newest first for display.
-    changes.sort((a, b) => (a.changed_at < b.changed_at ? 1 : -1));
+    // No post-sort needed — the DB already returned DESC-ordered rows.
 
     return {
       success: true,
-      data: { since: input.since, changes },
+      data: { since: input.since, changes, next_cursor: nextCursor },
       metadata: {
         responseTokens: 0,
         executionMs: 0,
-        documentsAccessed: docs.map((d) => d.id),
+        documentsAccessed: kept.map((d) => d.id),
         details: {
           eventType: 'document.diff_history',
           since: input.since,
           folder: input.folder ?? null,
-          change_count: changes.length,
+          limit,
+          has_cursor: cursor !== null,
+          returned_count: changes.length,
+          change_count: changes.length, // keep legacy field for the existing audit-assert test
         },
       },
     };
   },
 };
+
+// ---------------------------------------------------------------------------
+// Cursor codec
+// ---------------------------------------------------------------------------
+
+/**
+ * Opaque cursor shape. Callers never see the JSON — they receive and
+ * replay `next_cursor` verbatim. Format is base64-encoded JSON with
+ * `t` (ISO-8601 timestamp of the last row's updatedAt) and `id`
+ * (documents.id of the same row, never a joined-row id).
+ */
+interface CursorPayload {
+  t: string;
+  id: string;
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function encodeCursor(payload: CursorPayload): string {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
+}
+
+function decodeCursor(raw: string): CursorPayload | null {
+  try {
+    const json = Buffer.from(raw, 'base64').toString('utf8');
+    const parsed = JSON.parse(json) as unknown;
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      typeof (parsed as { t?: unknown }).t !== 'string' ||
+      typeof (parsed as { id?: unknown }).id !== 'string'
+    ) {
+      return null;
+    }
+    const { t, id } = parsed as CursorPayload;
+    if (Number.isNaN(new Date(t).getTime())) return null;
+    if (!UUID_RE.test(id)) return null;
+    return { t, id };
+  } catch {
+    return null;
+  }
+}

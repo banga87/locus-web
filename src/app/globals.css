@@ -48,7 +48,7 @@
   --paper-2: #f1ede2;
   --ink: #1a1a17;
   --ink-2: #4b4a44;
-  --ink-3: #8a887d;
+  --ink-3: #76746a;
   --rule: #e0dccf;
   --rule-soft: #ecebe0;
   --hover: #efeadb;
@@ -742,6 +742,41 @@
   width: 2px;
   background: var(--accent);
   border-radius: 2px;
+}
+
+@media (max-width: 767px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .side, .side-rail {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 280px;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 200ms ease-out;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0);
+  }
+  .app[data-sidebar-mobile-open="true"] .side,
+  .app[data-sidebar-mobile-open="true"] .side-rail {
+    transform: translateX(0);
+    box-shadow: 2px 0 8px rgba(0,0,0,0.08);
+  }
+  .sidebar-resize-handle { display: none; }
+}
+
+.sidebar-mobile-trigger {
+  display: none;
+  position: fixed;
+  top: 12px; left: 12px;
+  width: 36px; height: 36px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  z-index: 40;
+}
+@media (max-width: 767px) {
+  .sidebar-mobile-trigger { display: grid; place-items: center; }
 }
 
 /* === End app shell === */

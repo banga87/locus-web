@@ -12,22 +12,10 @@ import {
   integer,
   jsonb,
   timestamp,
-  pgEnum,
   index,
 } from 'drizzle-orm/pg-core';
 import { workflowRuns } from './workflow-runs';
-
-// All event types a run can emit.
-export const workflowEventTypeEnum = pgEnum('workflow_event_type', [
-  'turn_start',
-  'llm_delta',
-  'tool_start',
-  'tool_result',
-  'reasoning',
-  'turn_complete',
-  'run_error',
-  'run_complete',
-]);
+import { workflowEventTypeEnum } from './enums';
 
 export const workflowRunEvents = pgTable(
   'workflow_run_events',

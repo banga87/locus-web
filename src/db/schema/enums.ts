@@ -65,3 +65,35 @@ export const agentTokenStatusEnum = pgEnum('agent_token_status', [
   'revoked',
   'expired',
 ]);
+
+// --- Workflow run enums (Phase 1.5) ----------------------------------------
+
+// How a workflow run was initiated. 'schedule' is reserved for Phase 2 cron
+// triggers.
+export const triggeredByKindEnum = pgEnum('triggered_by_kind', [
+  'manual',
+  'schedule',
+]);
+
+// Lifecycle status of a workflow run.
+// 'queued' is reserved for future queueing support; initial inserts use
+// 'running' directly (preflight passes → start immediately).
+export const workflowRunStatusEnum = pgEnum('workflow_run_status', [
+  'queued',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+]);
+
+// All event types a workflow run can emit over its lifetime.
+export const workflowEventTypeEnum = pgEnum('workflow_event_type', [
+  'turn_start',
+  'llm_delta',
+  'tool_start',
+  'tool_result',
+  'reasoning',
+  'turn_complete',
+  'run_error',
+  'run_complete',
+]);

@@ -15,29 +15,12 @@ import {
   integer,
   numeric,
   timestamp,
-  pgEnum,
   index,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { documents } from './documents';
 import { users } from './users';
-
-// How the run was initiated. 'schedule' is reserved for Phase 2 cron triggers.
-export const triggeredByKindEnum = pgEnum('triggered_by_kind', [
-  'manual',
-  'schedule',
-]);
-
-// Lifecycle status of a workflow run.
-// 'queued' is reserved for future queueing support; initial inserts use
-// 'running' directly (preflight passes → start immediately).
-export const workflowRunStatusEnum = pgEnum('workflow_run_status', [
-  'queued',
-  'running',
-  'completed',
-  'failed',
-  'cancelled',
-]);
+import { triggeredByKindEnum, workflowRunStatusEnum } from './enums';
 
 export const workflowRuns = pgTable(
   'workflow_runs',
@@ -92,6 +75,13 @@ export const workflowRuns = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /**
+     * Last write timestamp. IMPORTANT: the runner MUST explicitly set this on
+     * every `UPDATE workflow_runs SET ...` — there is no DB trigger to
+     * auto-bump it. The zombie sweeper (Task 6) reads `updated_at` to detect
+     * stuck runs, so forgetting to bump it will cause false-positive zombie
+     * sweeps.
+     */
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -24,7 +24,7 @@ interface SidebarExpandedProps {
 }
 
 export function SidebarExpanded({ companyName, user, tree, pinned }: SidebarExpandedProps) {
-  const { toggleCollapsed } = useSidebarLayout();
+  const { collapsed, toggleCollapsed } = useSidebarLayout();
   const userInitials = (user.fullName ?? user.email)
     .split(/\s+/)
     .map((s) => s[0])
@@ -46,7 +46,7 @@ export function SidebarExpanded({ companyName, user, tree, pinned }: SidebarExpa
             onClick={toggleCollapsed}
             aria-label="Collapse sidebar"
             className="brand-collapse"
-            aria-expanded={true}
+            aria-expanded={!collapsed}
           >
             <PanelLeftClose size={16} />
           </button>

@@ -11,7 +11,7 @@ const SECTIONS = [
 ] as const;
 
 export function SidebarRail() {
-  const { sections, toggleCollapsed, expandSidebarWithSection } = useSidebarLayout();
+  const { collapsed, sections, toggleCollapsed, expandSidebarWithSection } = useSidebarLayout();
   return (
     <aside className="side side-rail">
       <div className="rail-brand" title="Locus">
@@ -22,7 +22,7 @@ export function SidebarRail() {
         className="rail-btn"
         onClick={toggleCollapsed}
         aria-label="Expand sidebar"
-        aria-expanded={false}
+        aria-expanded={!collapsed}
       >
         <PanelLeft size={18} />
       </button>

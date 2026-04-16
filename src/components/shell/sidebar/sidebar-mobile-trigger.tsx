@@ -1,35 +1,40 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Menu } from 'lucide-react';
 
 export function SidebarMobileTrigger() {
+  const [open, setOpen] = useState(false);
+
   useEffect(() => {
     const clear = () => {
       if (window.innerWidth >= 768) {
         document.querySelector('.app')?.removeAttribute('data-sidebar-mobile-open');
+        setOpen(false);
       }
     };
     window.addEventListener('resize', clear);
     return () => window.removeEventListener('resize', clear);
   }, []);
 
+  const handleClick = () => {
+    const app = document.querySelector('.app');
+    if (!app) return;
+    if (open) {
+      app.removeAttribute('data-sidebar-mobile-open');
+      setOpen(false);
+    } else {
+      app.setAttribute('data-sidebar-mobile-open', 'true');
+      setOpen(true);
+    }
+  };
+
   return (
     <button
       type="button"
       className="sidebar-mobile-trigger"
-      aria-label="Open sidebar"
-      onClick={(e) => {
-        const app = document.querySelector('.app');
-        if (!app) return;
-        const open = app.getAttribute('data-sidebar-mobile-open') === 'true';
-        if (open) {
-          app.removeAttribute('data-sidebar-mobile-open');
-          e.currentTarget.setAttribute('aria-label', 'Open sidebar');
-        } else {
-          app.setAttribute('data-sidebar-mobile-open', 'true');
-          e.currentTarget.setAttribute('aria-label', 'Close sidebar');
-        }
-      }}
+      aria-label={open ? 'Close sidebar' : 'Open sidebar'}
+      aria-expanded={open}
+      onClick={handleClick}
     >
       <Menu size={20} />
     </button>

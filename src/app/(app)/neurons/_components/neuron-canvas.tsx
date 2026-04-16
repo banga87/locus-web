@@ -61,10 +61,26 @@ export function NeuronCanvas({ graph, pulses, mcpCallLines, mcpConnections, solo
   const mcpScreenPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   const [fgReady, setFgReady] = useState(false);
+  const [dims, setDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const hasCentredRef = useRef(false);
   const setFgRef = useCallback((instance: ForceGraphMethods | null) => {
     fgRef.current = instance;
     setFgReady(Boolean(instance));
+  }, []);
+
+  // Track wrap dimensions — ForceGraph2D defaults to window.innerWidth when
+  // width/height props are unset, overflowing narrower parents.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setDims({ w: r.width, h: r.height });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   // Re-measure hex screen positions on resize + mount.
@@ -173,6 +189,8 @@ export function NeuronCanvas({ graph, pulses, mcpCallLines, mcpConnections, solo
       <ForceGraph2D
         ref={setFgRef as never}
         graphData={graphData}
+        width={dims.w || undefined}
+        height={dims.h || undefined}
         nodeRelSize={nodeRelSize}
         cooldownTicks={cooldownTicks}
         d3AlphaDecay={0.04}

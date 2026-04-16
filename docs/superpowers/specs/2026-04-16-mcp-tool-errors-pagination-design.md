@@ -50,6 +50,7 @@ When the caller passes `section` and no H2 in the document matches (case-insensi
 - `section_not_found` fires only when the document exists but no H2 matches the requested section. Both conditions distinguishable by the `found` / `section_found` metadata fields.
 - `available_sections` contains every H2 heading in the document, verbatim (preserving case and surrounding punctuation). Small and deterministic — typical documents have 5–30 H2s, so enumeration is cheap and a fuzzy match adds no value at this size.
 - Documents with zero H2s return `available_sections: []` and the hint already covers the recovery path ("call again without `section`").
+- The field name diverges from the `suggestions` field used by `document_not_found` on purpose: `available_sections` is exhaustive and unranked, `suggestions` is a fuzzy-ranked top-3. Different semantics, different names.
 
 ### Implementation notes
 
@@ -92,27 +93,31 @@ When the caller passes `section` and no H2 in the document matches (case-insensi
 
 Base64-encoded JSON: `{ "t": "<changed_at ISO>", "id": "<document_id>" }`.
 
-Opaque to callers. The format is an internal implementation detail — agents must pass the `next_cursor` value verbatim. Documented in the tool description as opaque.
+Opaque to callers. The format is an internal implementation detail — agents must pass the `next_cursor` value verbatim. Documented in the tool description as opaque. `cursor.id` is always `documents.id` (never `folders.id` or any joined-row id); the folder filter is applied identically on every page regardless of cursor.
 
 ### Query changes
 
 Sort: `ORDER BY documents.updatedAt DESC, documents.id DESC`. The `id` tiebreaker matters because batched writes (seed scripts, bulk imports) produce multiple rows with identical `updatedAt`; without a stable secondary key, keyset pagination can skip or duplicate rows across page boundaries.
 
-WHERE clause gains keyset predicate when `cursor` is present:
+`since` remains an **exclusive lower bound** (`updatedAt > since`, matching the existing `gt(documents.updatedAt, since)` at `get-diff-history.ts:96`). It is always ANDed at top level; the cursor predicate never relaxes the `since` window. Explicit WHERE shape:
 
 ```
 updatedAt > since
-AND (cursor IS NULL
+AND (
+  cursor IS NULL
   OR updatedAt < cursor.t
-  OR (updatedAt = cursor.t AND id < cursor.id))
+  OR (updatedAt = cursor.t AND id < cursor.id)
+)
 ```
 
 Fetch `limit + 1` rows. If the query returns `limit + 1`, trim the last row and emit a `next_cursor` built from the last kept row's `updatedAt` + `id`. Otherwise `next_cursor: null`.
 
+**Stale-cursor behaviour:** if `cursor.t <= since` (a caller reusing a cursor from a prior wider query), the two predicates naturally produce an empty result set — the tool returns `changes: []` and `next_cursor: null` without a special-case error. This is a valid no-op; the caller's recovery is to drop the cursor and start from their new `since`.
+
 ### Error cases
 
-- `limit` outside `[1, 500]` → `invalid_input` with message including the allowed range.
-- Malformed `cursor` (bad base64, bad JSON, missing `t` or `id`, unparseable `t` as ISO-8601, non-UUID `id`) → `invalid_input` with hint: `"Pass 'cursor' verbatim from the previous response's 'next_cursor', or omit it to start from the beginning."`
+- `limit` bounds are enforced in the JSON Schema (`minimum: 1`, `maximum: 500`); schema-validation failures surface through the executor's standard `invalid_input` path — no custom check in `call()`.
+- Malformed `cursor` (bad base64, bad JSON, missing `t` or `id`, unparseable `t` as ISO-8601, non-UUID `id`) → `invalid_input` at runtime with hint: `"Pass 'cursor' verbatim from the previous response's 'next_cursor', or omit it to start from the beginning."` This can't be expressed in JSON Schema since the cursor is opaque.
 
 Callers must continue to pass `since` on every paginated request — the tool is stateless. `since` defines the window start; `cursor` advances within that window.
 
@@ -129,7 +134,9 @@ All land in the `details` jsonb blob. No migration.
 - `paginates newest-first with a stable cursor across two pages — concat equals unpaginated result`
 - `respects limit bounds (min 1, max 500) and returns invalid_input outside the range`
 - `handles ties on updatedAt via the id tiebreaker — no duplicates, no skips when three documents share a timestamp`
+- `handles ties across the entire window — five documents all sharing one updatedAt paginate deterministically via id tiebreaker alone`
 - `rejects malformed cursor with invalid_input (covers bad base64, missing fields, non-ISO timestamp)`
+- `returns empty changes and null next_cursor when cursor.t <= since (stale-cursor no-op)`
 - `next_cursor is null on the final page`
 - existing `since`-validation, folder-filter, and preview tests remain unchanged
 

@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/session-cleanup",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/zombie-sweeper",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

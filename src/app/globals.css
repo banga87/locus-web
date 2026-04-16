@@ -1030,6 +1030,8 @@
   .neurons-sidebar__row[data-selected='true'],
   .neurons-mcp-hex[data-calling='true'],
   .neurons-narrative__line { animation: none; }
+
+  .app { transition: none; }
 }
 
 /* === End Neurons === */

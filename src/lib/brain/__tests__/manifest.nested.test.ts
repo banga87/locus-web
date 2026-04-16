@@ -63,4 +63,21 @@ describe('regenerateManifest — nested folders', () => {
     walk(m.folders);
     expect(allDocs.find((d) => d.title === 'Skill Doc')).toBeUndefined();
   });
+
+  it('includes documents with type: workflow', async () => {
+    // Workflow docs must appear in the manifest so the Platform Agent can
+    // reference them by name. This guards against a regression to a
+    // blanket `isNull(type)` filter that would silently drop them.
+    await regenerateManifest(brainId);
+    const m = await readCurrentManifest(brainId);
+    const allDocs: { title: string }[] = [];
+    const walk = (fs: typeof m.folders): void => {
+      for (const f of fs) {
+        allDocs.push(...f.documents);
+        walk(f.folders);
+      }
+    };
+    walk(m.folders);
+    expect(allDocs.find((d) => d.title === 'Weekly Error Report')).toBeDefined();
+  });
 });

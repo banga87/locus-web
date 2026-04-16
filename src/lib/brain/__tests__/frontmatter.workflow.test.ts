@@ -31,4 +31,13 @@ describe('workflow frontmatter', () => {
     });
     expect(res.ok).toBe(true);
   });
+
+  it('accepts output: both', () => {
+    const res = validateWorkflowFrontmatter({
+      type: 'workflow',
+      output: 'both',
+      requires_mcps: [],
+    });
+    expect(res.ok).toBe(true);
+  });
 });

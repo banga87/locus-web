@@ -84,6 +84,10 @@ export function NewSidebar({
           <NeuronsIcon />
           Neurons
         </Link>
+        <Link href="/workflows" className="quick-item">
+          <WorkflowsIcon />
+          Workflows
+        </Link>
       </div>
 
       <div className="side-body">
@@ -304,6 +308,26 @@ function NeuronsIcon() {
       <circle cx="4" cy="18" r="2" />
       <circle cx="20" cy="18" r="2" />
       <path d="M6 7l4 4M18 7l-4 4M6 17l4-4M18 17l-4-4" />
+    </svg>
+  );
+}
+
+function WorkflowsIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden="true"
+    >
+      <rect x="3" y="3" width="5" height="5" rx="1" />
+      <rect x="16" y="3" width="5" height="5" rx="1" />
+      <rect x="9.5" y="16" width="5" height="5" rx="1" />
+      <path d="M5.5 8v3a1 1 0 001 1h11a1 1 0 001-1V8" />
+      <path d="M12 12v4" />
     </svg>
   );
 }

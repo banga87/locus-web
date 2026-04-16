@@ -97,6 +97,8 @@ export interface ToolError {
   message: string;
   /** Per-field validation hints from ajv, or fuzzy-match suggestions. */
   suggestions?: string[];
+  /** Exhaustive list of valid section names returned with `section_not_found`. */
+  available_sections?: string[];
   /** Free-form actionable hint for the agent consuming this error. */
   hint?: string;
   /** Whether the caller may retry without changing inputs. */

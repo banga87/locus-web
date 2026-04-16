@@ -79,6 +79,17 @@ beforeAll(async () => {
     status: 'active',
   });
 
+  // Doc with zero H2 headings — section lookup must still fail cleanly.
+  await db.insert(documents).values({
+    companyId: fixtures.companyId,
+    brainId: fixtures.brainId,
+    title: 'No Sections Doc',
+    slug: `nosec-${fixtures.suffix}`,
+    path: `brand/nosec-${fixtures.suffix}`,
+    content: '# Heading One\n\nBody with no H2s at all.',
+    status: 'active',
+  });
+
   registerLocusTools();
 });
 
@@ -152,6 +163,36 @@ describe('get_document', () => {
     expect(data.document.content).not.toContain('Email support');
     // Overview preceded it but must also not leak.
     expect(data.document.content).not.toContain('Top level intro');
+  });
+
+  it('returns section_not_found with available_sections listing every H2 when section is mistyped', async () => {
+    const result = await executeTool(
+      'get_document',
+      {
+        path: `${SECTIONED_PATH_BASE}-${fixtures.suffix}`,
+        section: 'Actors',
+      },
+      fixtures.context,
+    );
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('section_not_found');
+    expect(result.error?.retryable).toBe(false);
+    expect(result.error?.message).toContain("'Actors'");
+    const anyErr = result.error as unknown as { available_sections?: string[] };
+    expect(anyErr.available_sections).toEqual(['Overview', 'Pricing', 'Support']);
+    expect(result.error?.hint).toContain('available_sections');
+  });
+
+  it('returns section_not_found with empty available_sections when the document has no H2 headings', async () => {
+    const result = await executeTool(
+      'get_document',
+      { path: `brand/nosec-${fixtures.suffix}`, section: 'Anything' },
+      fixtures.context,
+    );
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('section_not_found');
+    const anyErr = result.error as unknown as { available_sections?: string[] };
+    expect(anyErr.available_sections).toEqual([]);
   });
 
   it('returns document_not_found with suggestions for a typo path', async () => {

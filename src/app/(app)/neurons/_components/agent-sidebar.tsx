@@ -29,11 +29,12 @@ export function AgentSidebar({
                   type="button"
                   className="neurons-sidebar__row"
                   data-selected={selectedAgentId === a.id}
+                  style={{ ['--agent-color' as string]: a.color.canvas }}
                   onClick={() => onSelect(selectedAgentId === a.id ? null : a.id)}
                 >
                   <span
                     className="neurons-sidebar__dot"
-                    style={{ background: a.color.css }}
+                    style={{ background: a.color.canvas }}
                     aria-hidden
                   />
                   <span className="neurons-sidebar__name">{a.name}</span>

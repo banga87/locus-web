@@ -179,7 +179,13 @@ export async function executeTool(
     try {
       evaluate(
         { actor: { role: context.actor.role }, brainId: context.brainId },
-        { action: tool.action, resourceType: tool.resourceType },
+        {
+          action: tool.action,
+          // `resourceType` is optional on LocusTool — tools that don't
+          // touch a brain resource (web_search, web_fetch) omit it. Default
+          // to 'document' for the evaluator's error-message shape.
+          resourceType: tool.resourceType ?? 'document',
+        },
       );
     } catch (err) {
       if (err instanceof PermissionDeniedError) {

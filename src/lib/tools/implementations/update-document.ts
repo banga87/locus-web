@@ -203,41 +203,57 @@ export const updateDocumentTool: LocusTool<
 
     const changeSummary = `updated by agent: ${editableKeys.join(', ')}`;
 
-    const [updated] = await db
-      .update(documents)
-      .set({
-        ...(input.title !== undefined ? { title: input.title } : {}),
-        ...(input.body !== undefined ? { content: input.body } : {}),
-        ...(input.summary !== undefined ? { summary: input.summary } : {}),
-        ...(input.status !== undefined ? { status: input.status } : {}),
-        ...(input.confidenceLevel !== undefined
-          ? { confidenceLevel: input.confidenceLevel }
-          : {}),
-        ...typeUpdate,
-        ...metadataUpdate,
-        version: nextVersion,
-        updatedAt: new Date(),
-      })
-      .where(eq(documents.id, existing.id))
-      .returning();
+    // ---- Atomic update: document row + version snapshot -----------------
+    // Wrapped in a transaction so a crash between the two writes can't
+    // leave the `documents.version` column incremented with no matching
+    // `document_versions` row. Side effects run AFTER commit — they're
+    // best-effort and should not hold a transaction open across network
+    // I/O.
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(documents)
+        .set({
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.body !== undefined ? { content: input.body } : {}),
+          ...(input.summary !== undefined ? { summary: input.summary } : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.confidenceLevel !== undefined
+            ? { confidenceLevel: input.confidenceLevel }
+            : {}),
+          ...typeUpdate,
+          ...metadataUpdate,
+          version: nextVersion,
+          updatedAt: new Date(),
+        })
+        .where(eq(documents.id, existing.id))
+        .returning();
 
-    // ---- Write version snapshot -----------------------------------------
-    await db.insert(documentVersions).values({
-      companyId: context.companyId,
-      documentId: existing.id,
-      versionNumber: nextVersion,
-      content: nextContent,
-      changeSummary,
-      changedBy: context.actor.id,
-      changedByType: 'agent',
-      metadataSnapshot: {
-        title: updated.title,
-        status: updated.status,
-        confidenceLevel: updated.confidenceLevel,
-      },
+      // `.returning()` should always yield the single updated row. Guard
+      // against an empty array to convert an "impossible" condition into
+      // a controlled error rather than an opaque undefined-access.
+      if (!row) {
+        throw new Error('documents update returned no row');
+      }
+
+      await tx.insert(documentVersions).values({
+        companyId: context.companyId,
+        documentId: existing.id,
+        versionNumber: nextVersion,
+        content: nextContent,
+        changeSummary,
+        changedBy: context.actor.id,
+        changedByType: 'agent',
+        metadataSnapshot: {
+          title: row.title,
+          status: row.status,
+          confidenceLevel: row.confidenceLevel,
+        },
+      });
+
+      return row;
     });
 
-    // ---- Side effects (best-effort) -------------------------------------
+    // ---- Side effects (best-effort, outside the transaction) ------------
     await tryRegenerateManifest(context.brainId);
     // Fire on both old and new type so skill manifest stays consistent when
     // a doc is re-typed (e.g. knowledge → skill or vice-versa).

@@ -173,15 +173,17 @@ export interface LocusTool<I = unknown, O = unknown> {
 
   /**
    * The resource type this tool operates on. Passed to the permission
-   * evaluator's `EvalRequest.resourceType`. All current tools operate on
-   * documents; workflow + session tools will declare their own type once
-   * those resources land.
+   * evaluator's `EvalRequest.resourceType` (which today uses it only in
+   * the `PermissionDeniedError` message). Document-operating tools declare
+   * `'document'`; workflow + session tools will declare their own type
+   * once those resources land.
    *
-   * Having this on the tool (rather than hardcoded in the executor) means
-   * future tool types (e.g. 'workflow') automatically get the right
-   * permission check without a change to the executor.
+   * Optional: tools that don't touch a brain resource (web_search,
+   * web_fetch) omit this field. The executor defaults to `'document'`
+   * for the evaluator call when absent, which keeps the error message
+   * shape consistent with today's behaviour.
    */
-  readonly resourceType: 'document' | 'workflow' | 'session';
+  readonly resourceType?: 'document' | 'workflow' | 'session';
 
   /** True if the tool does not modify brain state. */
   isReadOnly(): boolean;

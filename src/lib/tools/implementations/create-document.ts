@@ -160,12 +160,13 @@ export const createDocumentTool: LocusTool<
       };
     }
 
-    // ---- Check for path collision ----------------------------------------
-    // `documents.path` has no unique DB constraint (slug uniqueness within
-    // a folder is the enforced invariant), but two docs at the same path
-    // within a brain is a corruption we must prevent. Check proactively so
-    // we can return a clean PATH_TAKEN error instead of an ambiguous slug
-    // error from the DB's folder-scoped unique index.
+    // ---- Check for path collision (fast-fail for friendlier UX) ---------
+    // The DB-level partial unique index `documents_brain_slug_live_unique`
+    // (migration 0016) is the authoritative guard against duplicate paths
+    // within a brain. This proactive SELECT lets us return PATH_TAKEN
+    // without a DB-error roundtrip in the common case; the transaction
+    // below still catches the TOCTOU race where a concurrent insert lands
+    // between this SELECT and our INSERT.
     const [existing] = await db
       .select({ id: documents.id })
       .from(documents)
@@ -208,31 +209,66 @@ export const createDocumentTool: LocusTool<
         ? context.actor.id
         : null;
 
-    // ---- Insert document -------------------------------------------------
+    // ---- Atomic insert: document row + initial version row --------------
+    // Wrapped in a transaction so a crash between the two inserts can't
+    // leave a documents row with no matching document_versions row.
+    // Side effects (manifest regeneration, skill-manifest rebuild) run
+    // AFTER commit — they're best-effort and should not hold a
+    // transaction open across network I/O.
     let doc: typeof documents.$inferSelect;
     try {
-      const rows = await db
-        .insert(documents)
-        .values({
+      doc = await db.transaction(async (tx) => {
+        const [inserted] = await tx
+          .insert(documents)
+          .values({
+            companyId: context.companyId,
+            brainId: context.brainId,
+            folderId: folder.id,
+            title: input.title,
+            slug: docSlug,
+            path: input.path,
+            content: input.body,
+            summary: input.summary ?? null,
+            status: input.status ?? 'draft',
+            confidenceLevel: input.confidenceLevel ?? 'medium',
+            isCore: false,
+            ownerId,
+            type: documentType,
+            metadata: { outbound_links: parseOutboundLinks(input.body) },
+            version: 1,
+          })
+          .returning();
+
+        // `.returning()` should always give us exactly one row for a
+        // successful INSERT ... VALUES (single row). A guard here converts
+        // an "impossible" empty-array result into a controlled error
+        // instead of an opaque "Cannot read properties of undefined".
+        if (!inserted) {
+          throw new Error('documents insert returned no row');
+        }
+
+        await tx.insert(documentVersions).values({
           companyId: context.companyId,
-          brainId: context.brainId,
-          folderId: folder.id,
-          title: input.title,
-          slug: docSlug,
-          path: input.path,
+          documentId: inserted.id,
+          versionNumber: 1,
           content: input.body,
-          summary: input.summary ?? null,
-          status: input.status ?? 'draft',
-          confidenceLevel: input.confidenceLevel ?? 'medium',
-          isCore: false,
-          ownerId,
-          type: documentType,
-          metadata: { outbound_links: parseOutboundLinks(input.body) },
-          version: 1,
-        })
-        .returning();
-      doc = rows[0];
+          changeSummary: 'created by agent',
+          changedBy: context.actor.id,
+          changedByType: 'agent',
+          metadataSnapshot: {
+            title: inserted.title,
+            status: inserted.status,
+            confidenceLevel: inserted.confidenceLevel,
+          },
+        });
+
+        return inserted;
+      });
     } catch (e) {
+      // TOCTOU race: a concurrent create landed at the same
+      // (brain_id, slug) between our proactive SELECT and the INSERT. The
+      // partial unique index `documents_brain_slug_live_unique` rejects
+      // it; surface the same clean PATH_TAKEN the proactive check returns.
       const msg = e instanceof Error ? e.message : String(e);
       if (/unique|duplicate/i.test(msg)) {
         return {
@@ -253,23 +289,7 @@ export const createDocumentTool: LocusTool<
       throw e;
     }
 
-    // ---- Write initial version row ---------------------------------------
-    await db.insert(documentVersions).values({
-      companyId: context.companyId,
-      documentId: doc.id,
-      versionNumber: 1,
-      content: input.body,
-      changeSummary: 'created by agent',
-      changedBy: context.actor.id,
-      changedByType: 'agent',
-      metadataSnapshot: {
-        title: doc.title,
-        status: doc.status,
-        confidenceLevel: doc.confidenceLevel,
-      },
-    });
-
-    // ---- Side effects (best-effort) -------------------------------------
+    // ---- Side effects (best-effort, outside the transaction) ------------
     await tryRegenerateManifest(context.brainId);
     maybeScheduleSkillManifestRebuild(context.companyId, documentType);
 

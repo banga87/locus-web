@@ -45,7 +45,9 @@ export const webFetchTool: LocusTool<WebFetchInput, WebFetchOutput> = {
   capabilities: ['web'],
 
   action: 'read' as const,
-  resourceType: 'document' as const,
+  // No `resourceType` — web_fetch pulls external content, not a brain
+  // resource. The executor defaults to 'document' for the evaluator's
+  // error message if a role-gate denial ever fires here.
 
   isReadOnly() { return true; },
 

@@ -10,7 +10,9 @@
 // for the zombie sweeper: if updated_at were not bumped, a cancelled run
 // would appear "stuck" and get wrongly promoted to failed.
 //
-// Access control: triggered_by OR Owner/Admin (same as status route).
+// Access control delegated to canAccessRun() — tenant isolation,
+// triggered-by match, or Owner/Admin within the same tenant. Denial
+// returns 404 (not 403) so we don't leak UUID existence across tenants.
 //
 // Audit trail: emits a `workflow.run.cancelled` event (category:
 // 'administration', actorType: 'human') on successful state transition.
@@ -25,7 +27,7 @@ import { waitUntil } from '@vercel/functions';
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
 import { flushEvents, logEvent } from '@/lib/audit/logger';
-import type { TargetType } from '@/lib/audit/types';
+import { canAccessRun } from '@/lib/workflow/access';
 import { getWorkflowRunById, cancelWorkflowRun } from '@/lib/workflow/queries';
 
 export const runtime = 'nodejs';
@@ -54,12 +56,8 @@ export async function POST(
     return Response.json({ error: 'not_found' }, { status: 404 });
   }
 
-  // Access control: triggered_by match OR Owner/Admin role.
-  const isOwnerOrAdmin = auth.role === 'owner' || auth.role === 'admin';
-  const isTriggeredBy = run.triggeredBy === auth.userId;
-
-  if (!isTriggeredBy && !isOwnerOrAdmin) {
-    return Response.json({ error: 'forbidden' }, { status: 403 });
+  if (!canAccessRun(run, auth)) {
+    return Response.json({ error: 'not_found' }, { status: 404 });
   }
 
   // State machine guard: only allow running → cancelled.
@@ -93,13 +91,6 @@ export async function POST(
   // Confirmed state change: emit the audit event. Naming convention
   // matches `mcp.connection.{created,updated,disabled,deleted}` in
   // src/app/api/admin/mcp-connections — dotted lowercase, domain-scoped.
-  //
-  // TargetType note: the `TargetType` union in src/lib/audit/types.ts
-  // does not yet list 'workflow_run'. The underlying column is
-  // `varchar(64)` so the DB accepts it without a migration; we cast to
-  // keep this route within scope (widening the shared type is a
-  // separate change). Future audit-hygiene work should extend the
-  // union alongside any other workflow-audit event types we add.
   logEvent({
     companyId: auth.companyId!,
     category: 'administration',
@@ -107,7 +98,7 @@ export async function POST(
     actorType: 'human',
     actorId: auth.userId,
     actorName: auth.fullName ?? undefined,
-    targetType: 'workflow_run' as TargetType,
+    targetType: 'workflow_run',
     targetId: id,
     details: {
       workflow_document_id: run.workflowDocumentId,

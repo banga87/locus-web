@@ -1,14 +1,17 @@
 // GET /api/workflows/runs/[id] — return the workflow_run row.
 //
-// Access control: the caller must be the user who triggered the run
-// (triggered_by == auth.userId) OR have Owner/Admin role.
+// Access control delegated to `canAccessRun()` in @/lib/workflow/access.
+// Three rules apply: tenant isolation (auth.companyId == run.companyId),
+// triggered-by match, or Owner/Admin role within the same tenant.
 //
-// Simplification note (Phase 1.5): Owner/Admin check uses users.role from
-// requireAuth() — no extra DB query needed because requireAuth already loads
-// the role from the public.users table.
+// On denial we return 404, not 403 — a 403 would confirm that the UUID
+// exists (just that the caller can't see it), which leaks information
+// across tenants. The trigger route uses the same approach for
+// cross-tenant workflow docs.
 
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
+import { canAccessRun } from '@/lib/workflow/access';
 import { getWorkflowRunById } from '@/lib/workflow/queries';
 
 export const runtime = 'nodejs';
@@ -37,12 +40,11 @@ export async function GET(
     return Response.json({ error: 'not_found' }, { status: 404 });
   }
 
-  // Access control: triggered_by match OR Owner/Admin role.
-  const isOwnerOrAdmin = auth.role === 'owner' || auth.role === 'admin';
-  const isTriggeredBy = run.triggeredBy === auth.userId;
-
-  if (!isTriggeredBy && !isOwnerOrAdmin) {
-    return Response.json({ error: 'forbidden' }, { status: 403 });
+  if (!canAccessRun(run, auth)) {
+    // 404 (not 403) — do not confirm existence of a UUID belonging to
+    // another tenant or to a different user. Matches the trigger
+    // route's cross-tenant handling.
+    return Response.json({ error: 'not_found' }, { status: 404 });
   }
 
   return Response.json(run);

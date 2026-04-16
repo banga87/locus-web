@@ -68,14 +68,40 @@ export async function createWorkflowRun(
 
 /**
  * Load a workflow_run row by id. Returns `null` if not found.
+ *
+ * The returned shape includes `companyId` joined through the owning
+ * `documents` row — the workflow_runs table itself has no companyId
+ * column. The ACL helper in `./access.ts` uses this field to enforce
+ * tenant isolation on the read/cancel routes, which would otherwise
+ * allow an owner/admin in Company A to read/cancel runs in Company B
+ * if they guessed the run UUID.
  */
 export async function getWorkflowRunById(runId: string) {
-  const [row] = await db
-    .select()
+  const rows = await db
+    .select({
+      id: workflowRuns.id,
+      workflowDocumentId: workflowRuns.workflowDocumentId,
+      triggeredBy: workflowRuns.triggeredBy,
+      triggeredByKind: workflowRuns.triggeredByKind,
+      status: workflowRuns.status,
+      startedAt: workflowRuns.startedAt,
+      completedAt: workflowRuns.completedAt,
+      outputDocumentIds: workflowRuns.outputDocumentIds,
+      summary: workflowRuns.summary,
+      errorMessage: workflowRuns.errorMessage,
+      totalInputTokens: workflowRuns.totalInputTokens,
+      totalOutputTokens: workflowRuns.totalOutputTokens,
+      totalCostUsd: workflowRuns.totalCostUsd,
+      createdAt: workflowRuns.createdAt,
+      updatedAt: workflowRuns.updatedAt,
+      // Denormalised from the owning document — needed for tenant isolation.
+      companyId: documents.companyId,
+    })
     .from(workflowRuns)
+    .innerJoin(documents, eq(documents.id, workflowRuns.workflowDocumentId))
     .where(eq(workflowRuns.id, runId))
     .limit(1);
-  return row ?? null;
+  return rows[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------

@@ -79,6 +79,12 @@ let brainId: string;
 let userId: string;
 let workflowDocId: string;
 
+// Secondary tenant — used to prove cross-tenant access is rejected even
+// when the caller holds role=owner in their own tenant.
+let otherCompanyId: string;
+let otherBrainId: string;
+let otherUserId: string;
+
 beforeAll(async () => {
   resetAuditForTests();
 
@@ -138,6 +144,35 @@ beforeAll(async () => {
     .returning({ id: documents.id });
   workflowDocId = wfDoc!.id;
 
+  // Secondary tenant — owner of Company B. They must NOT be able to
+  // read/cancel runs owned by Company A even knowing the run UUID.
+  const [otherCompany] = await db
+    .insert(companies)
+    .values({ name: `Other Cancel Co ${suffix}`, slug: `ocn-${suffix}` })
+    .returning({ id: companies.id });
+  otherCompanyId = otherCompany!.id;
+
+  const mintedOtherUserId = randomUUID();
+  await db.insert(users).values({
+    id: mintedOtherUserId,
+    email: `other-${suffix}@cancel.local`,
+    fullName: `Other Cancel Tester ${suffix}`,
+    role: 'owner',
+    status: 'active',
+    companyId: otherCompanyId,
+  });
+  otherUserId = mintedOtherUserId;
+
+  const [otherBrain] = await db
+    .insert(brains)
+    .values({
+      companyId: otherCompanyId,
+      name: 'Other Brain',
+      slug: `ocn-brain-${suffix}`,
+    })
+    .returning({ id: brains.id });
+  otherBrainId = otherBrain!.id;
+
   mockAuth.userId = userId;
   mockAuth.companyId = companyId;
 }, 60_000);
@@ -160,6 +195,10 @@ afterAll(async () => {
   await db.delete(users).where(eq(users.id, userId));
   await db.delete(brains).where(eq(brains.id, brainId));
   await db.delete(companies).where(eq(companies.id, companyId));
+  // Secondary tenant cleanup — brains CASCADE to docs + folders.
+  await db.delete(users).where(eq(users.id, otherUserId));
+  await db.delete(brains).where(eq(brains.id, otherBrainId));
+  await db.delete(companies).where(eq(companies.id, otherCompanyId));
 }, 60_000);
 
 // --- Helpers ------------------------------------------------------------
@@ -270,6 +309,56 @@ describe('POST /api/workflows/runs/[id]/cancel', () => {
           ),
         );
       expect(events).toHaveLength(0);
+    },
+    30_000,
+  );
+
+  it(
+    'returns 404 (not 403) on cross-tenant access — owner of Company B cannot cancel Company A run',
+    async () => {
+      // Seed a run owned by Company A (fixture tenant).
+      const runId = await seedRunningRun();
+
+      // Override auth to present as the owner of Company B.
+      mockRequireAuth.mockResolvedValueOnce({
+        userId: otherUserId,
+        companyId: otherCompanyId,
+        role: 'owner',
+        email: `other-${suffix}@cancel.local`,
+        fullName: `Other Cancel Tester ${suffix}`,
+      });
+
+      const res = await POST(buildCancelRequest(), {
+        params: Promise.resolve({ id: runId }),
+      });
+
+      // 404 (not 403) — do not leak UUID existence across tenants.
+      expect(res.status).toBe(404);
+
+      // Row state unchanged — still 'running'.
+      const [row] = await db
+        .select({ status: workflowRuns.status })
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, runId))
+        .limit(1);
+      expect(row!.status).toBe('running');
+
+      // No audit event emitted for the cross-tenant caller.
+      await flushWaitUntil();
+      await flushEvents();
+      const events = await db
+        .select()
+        .from(auditEvents)
+        .where(
+          and(
+            eq(auditEvents.eventType, 'workflow.run.cancelled'),
+            eq(auditEvents.targetId, runId),
+          ),
+        );
+      expect(events).toHaveLength(0);
+
+      // Clean up the still-running row to keep teardown deterministic.
+      await db.delete(workflowRuns).where(eq(workflowRuns.id, runId));
     },
     30_000,
   );

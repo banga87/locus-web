@@ -27,7 +27,8 @@ export type TargetType =
   | 'session'
   | 'connection'
   | 'brain'
-  | 'user';
+  | 'user'
+  | 'workflow_run';
 
 /**
  * Event category. Must match the `audit_event_category` pgEnum.

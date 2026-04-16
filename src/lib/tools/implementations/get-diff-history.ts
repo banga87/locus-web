@@ -42,9 +42,11 @@ export const getDiffHistoryTool: LocusTool<
 > = {
   name: 'get_diff_history',
   description:
-    "List documents in this brain updated after `since`. Returns each " +
-    "doc's most recent version summary; include_content_preview=true " +
-    'adds the first 200 chars of current content.',
+    "List documents in this brain updated after `since`, newest-first. " +
+    "Returns each doc's most recent version summary; " +
+    "include_content_preview=true adds the first 200 chars of content. " +
+    'Paginates via opaque `cursor`; default `limit` is 50, max 500. ' +
+    'Pass `next_cursor` verbatim on subsequent calls to advance.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -161,10 +163,10 @@ export const getDiffHistoryTool: LocusTool<
 
     // Trim and build next_cursor. `docs` came back DESC-ordered, so the
     // last kept row's (updatedAt, id) is the cursor for the next page.
+    const hasMore = docs.length > limit;
+    const kept = hasMore ? docs.slice(0, limit) : docs;
     let nextCursor: string | null = null;
-    const kept = docs;
-    if (docs.length > limit) {
-      kept.length = limit; // drop the probe row in place
+    if (hasMore) {
       const last = kept[kept.length - 1];
       nextCursor = encodeCursor({
         t: last.updatedAt.toISOString(),
@@ -240,7 +242,6 @@ export const getDiffHistoryTool: LocusTool<
           limit,
           has_cursor: cursor !== null,
           returned_count: changes.length,
-          change_count: changes.length, // keep legacy field for the existing audit-assert test
         },
       },
     };
@@ -282,7 +283,10 @@ function decodeCursor(raw: string): CursorPayload | null {
       return null;
     }
     const { t, id } = parsed as CursorPayload;
-    if (Number.isNaN(new Date(t).getTime())) return null;
+    const parsedDate = new Date(t);
+    if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString() !== t) {
+      return null;
+    }
     if (!UUID_RE.test(id)) return null;
     return { t, id };
   } catch {

@@ -313,6 +313,11 @@ describe('get_diff_history', () => {
       'not-base64!!',                                        // invalid base64
       Buffer.from('{"not":"a cursor"}').toString('base64'), // missing t/id
       Buffer.from('{"t":"nope","id":"also-not-uuid"}').toString('base64'),
+      // Non-ISO timestamp with a valid UUID — must reject on timestamp alone.
+      Buffer.from(
+        JSON.stringify({ t: 'March 15 2026', id: '00000000-0000-0000-0000-000000000001' }),
+        'utf8',
+      ).toString('base64'),
     ];
     for (const cursor of cases) {
       const result = await executeTool(

@@ -299,37 +299,48 @@ export function useBrainPulse(input: UseBrainPulseInput): BrainPulseState {
       },
     });
 
-    const channel = supabase
-      .channel(`brain-pulse:${input.brainId}`)
-      .on(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'postgres_changes' as any,
-        { event: 'INSERT', schema: 'public', table: 'audit_events', filter: `brain_id=eq.${input.brainId}` },
-        (payload: { new: unknown }) => {
-          const row = payload.new as AuditEventRow;
-          const evt = rowToEvent(row);
-          if (!evt) return;
-          ingest(evt);
-        },
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          setConnectionStatus('connected');
-          if (pausedTimerRef.current) {
-            clearTimeout(pausedTimerRef.current);
-            pausedTimerRef.current = null;
-          }
-        } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-          setConnectionStatus('reconnecting');
-          if (!pausedTimerRef.current) {
-            pausedTimerRef.current = setTimeout(() => setConnectionStatus('paused'), 60_000);
-          }
-        }
-      });
+    // Gate the channel.join() until the Realtime socket has the user's JWT.
+    // Realtime evaluates RLS authorization *at join time* per channel — if we
+    // join while the socket is still anon, every row is filtered as anon
+    // forever, even after a later setAuth updates the socket.
+    let cancelled = false;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      supabase.realtime.setAuth(data.session?.access_token ?? null);
 
-    channelRef.current = channel;
+      const channel = supabase
+        .channel(`brain-pulse:${input.brainId}`)
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          'postgres_changes' as any,
+          { event: 'INSERT', schema: 'public', table: 'audit_events', filter: `brain_id=eq.${input.brainId}` },
+          (payload: { new: unknown }) => {
+            const row = payload.new as AuditEventRow;
+            const evt = rowToEvent(row);
+            if (!evt) return;
+            ingest(evt);
+          },
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            setConnectionStatus('connected');
+            if (pausedTimerRef.current) {
+              clearTimeout(pausedTimerRef.current);
+              pausedTimerRef.current = null;
+            }
+          } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+            setConnectionStatus('reconnecting');
+            if (!pausedTimerRef.current) {
+              pausedTimerRef.current = setTimeout(() => setConnectionStatus('paused'), 60_000);
+            }
+          }
+        });
+
+      channelRef.current = channel;
+    });
 
     return () => {
+      cancelled = true;
       clearTimeout(resetTimer);
       batcherRef.current?.dispose();
       orphanRef.current?.dispose();

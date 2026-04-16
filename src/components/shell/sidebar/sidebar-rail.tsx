@@ -5,6 +5,8 @@ import { Brain, Pin, Search, Home, Clock, Network, MessageSquare, Cable, Setting
 
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
 
+import { ThemeToggleRail } from '../theme-toggle';
+
 const SECTIONS = [
   { id: 'brain', icon: Brain, label: 'Brain' },
   { id: 'pinned', icon: Pin, label: 'Pinned' },
@@ -59,6 +61,7 @@ export function SidebarRail() {
         <Link href="/chat" className="rail-btn" title="Chat" aria-label="Chat"><MessageSquare size={18} /></Link>
         <Link href="/mcp" className="rail-btn" title="MCP" aria-label="MCP Connections"><Cable size={18} /></Link>
         <Link href="/settings" className="rail-btn" title="Settings" aria-label="Settings"><Settings size={18} /></Link>
+        <ThemeToggleRail />
       </div>
     </aside>
   );

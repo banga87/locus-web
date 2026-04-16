@@ -17,7 +17,6 @@ import TurndownService from 'turndown';
 import { CheckIcon, LoaderIcon, XIcon, XCircleIcon } from 'lucide-react';
 
 import { TiptapEditor } from '@/components/editor/tiptap-editor';
-import { ThemeToggle } from '@/components/shell/theme-toggle';
 import {
   FrontmatterSidebar,
   type FrontmatterValue,
@@ -183,7 +182,6 @@ export function DocumentEditor({ document, owners }: Props) {
         >
           <XIcon className="size-4" />
         </Link>
-        <ThemeToggle />
       </div>
 
       <div className="mx-auto w-full max-w-6xl px-6 py-6">

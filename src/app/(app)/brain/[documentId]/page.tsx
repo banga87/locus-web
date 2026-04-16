@@ -14,7 +14,6 @@ import { requireAuth } from '@/lib/api/auth';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { DocumentRenderer } from '@/components/brain/document-renderer';
 import { ArticleView } from '@/components/brain/article-view';
-import { ThemeToggle } from '@/components/shell/theme-toggle';
 import { formatDistance } from '@/lib/format/time';
 import { getFreshness } from '@/lib/brain/freshness';
 
@@ -105,20 +104,15 @@ export default async function DocumentViewPage({ params }: PageProps) {
       }}
       actions={
         canEdit ? (
-          <>
-            <Link
-              href={`/brain/${row.id}/edit`}
-              className="icon-btn"
-              title="Edit"
-              aria-label="Edit document"
-            >
-              <PencilIcon className="size-4" />
-            </Link>
-            <ThemeToggle />
-          </>
-        ) : (
-          <ThemeToggle />
-        )
+          <Link
+            href={`/brain/${row.id}/edit`}
+            className="icon-btn"
+            title="Edit"
+            aria-label="Edit document"
+          >
+            <PencilIcon className="size-4" />
+          </Link>
+        ) : null
       }
     >
       <DocumentRenderer markdown={row.content} />

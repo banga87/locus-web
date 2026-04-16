@@ -12,6 +12,7 @@ import { PanelLeftClose } from 'lucide-react';
 import type { ManifestFolder } from '@/lib/brain/manifest';
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
 
+import { ThemeToggleNav } from '../theme-toggle';
 import { WorkspaceRow } from '../workspace-row';
 import { BrainSection } from './sections/brain-section';
 import { PinnedSection } from './sections/pinned-section';
@@ -93,6 +94,7 @@ export function SidebarExpanded({ companyName, user, tree, pinned }: SidebarExpa
           <SettingsIcon />
           Settings
         </Link>
+        <ThemeToggleNav />
       </div>
 
       <div className="user-row">

@@ -14,7 +14,6 @@ import { documents, folders } from '@/db/schema';
 import { requireAuth } from '@/lib/api/auth';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { ArticleView } from '@/components/brain/article-view';
-import { ThemeToggle } from '@/components/shell/theme-toggle';
 import { getFreshness } from '@/lib/brain/freshness';
 import { formatDistance } from '@/lib/format/time';
 
@@ -121,7 +120,6 @@ export default async function BrainHomePage() {
         updatedFreshness: 'fresh',
         author: name,
       }}
-      actions={<ThemeToggle />}
     >
       <div className="grid grid-cols-3 gap-4 my-8">
         <StatCard label="Documents" value={stats.docCount} />

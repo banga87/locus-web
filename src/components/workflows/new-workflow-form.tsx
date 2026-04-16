@@ -114,10 +114,14 @@ export function NewWorkflowForm({ folders }: Props) {
           throw new Error(body.message ?? body.error ?? `HTTP ${res.status}`);
         }
 
-        const payload = (await res.json()) as { data: { id: string } };
-        // Navigate to the brain edit page so the user can refine the workflow
-        // definition (frontmatter fields and body) before running it.
-        router.push(`/brain/${payload.data.id}/edit`);
+        // The POST response's `data` envelope carries the full document
+        // row (see src/lib/api/response.ts::created). We use the slug to
+        // land the user on /workflows/[slug] — the workflow detail page —
+        // rather than the generic /brain/[id]/edit so context is preserved.
+        const payload = (await res.json()) as {
+          data: { id: string; slug: string };
+        };
+        router.push(`/workflows/${payload.data.slug}`);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : 'Failed to create workflow.',

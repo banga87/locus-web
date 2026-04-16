@@ -21,6 +21,7 @@ import { withAuth, requireCompany } from '@/lib/api/handler';
 import { error, success } from '@/lib/api/response';
 import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import { getBrainForCompany } from '@/lib/brain/queries';
+import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import {
   extractDocumentTypeFromContent,
@@ -203,15 +204,56 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
       patch.content !== undefined ? { type: newType } : {};
 
     // Recompute outbound_links when content changes; preserve other metadata fields.
-    const metadataUpdate =
-      patch.content !== undefined
-        ? {
-            metadata: {
-              ...((existing.metadata as Record<string, unknown> | null) ?? {}),
-              outbound_links: parseOutboundLinks(patch.content),
-            },
+    //
+    // Workflow-doc frontmatter sync (Phase 1.5): when the updated content
+    // resolves to `type: workflow`, parse the YAML frontmatter from the body
+    // and mirror the authored fields (output, output_category, requires_mcps,
+    // schedule) into `documents.metadata`. The trigger route's preflight reads
+    // these from metadata — without this sync, user edits to requires_mcps in
+    // the body are silently invisible at run time.
+    //
+    // Silent-skip policy: invalid YAML or an invalid workflow-frontmatter
+    // shape does not block the save. Users save half-edited YAML mid-thought;
+    // we don't want to fight them. The trigger-time preflight +
+    // validateWorkflowFrontmatter catches bad shapes at run time.
+    //
+    // Uses js-yaml (not parseFrontmatterRaw in save.ts) because the hand-rolled
+    // parser there doesn't handle YAML arrays like `requires_mcps: [a, b]`.
+    let metadataUpdate: { metadata?: unknown } = {};
+    if (patch.content !== undefined) {
+      const existingMetadata =
+        (existing.metadata as Record<string, unknown> | null) ?? {};
+
+      let workflowMetadata: Record<string, unknown> = {};
+      if (newType === 'workflow') {
+        const fmMatch = patch.content.match(/^---\n([\s\S]*?)\n---/);
+        if (fmMatch) {
+          try {
+            const parsed = yaml.load(fmMatch[1]) as unknown;
+            const validated = validateWorkflowFrontmatter(parsed);
+            if (validated.ok) {
+              workflowMetadata = {
+                output: validated.value.output,
+                output_category: validated.value.output_category,
+                requires_mcps: validated.value.requires_mcps,
+                schedule: validated.value.schedule,
+              };
+            }
+            // invalid shape → skip sync, keep existing metadata fields.
+          } catch {
+            // YAML parse error → skip sync, keep existing metadata fields.
           }
-        : {};
+        }
+      }
+
+      metadataUpdate = {
+        metadata: {
+          ...existingMetadata,
+          outbound_links: parseOutboundLinks(patch.content),
+          ...workflowMetadata,
+        },
+      };
+    }
 
     const changedKeys = Object.keys(patch);
     const summary = `updated: ${changedKeys.join(', ')}`;

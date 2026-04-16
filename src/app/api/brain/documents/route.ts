@@ -8,6 +8,7 @@
 // a manifest regeneration (best-effort).
 
 import { and, desc, eq, isNull, lt, or } from 'drizzle-orm';
+import yaml from 'js-yaml';
 import { z } from 'zod';
 
 import { db } from '@/db';
@@ -18,6 +19,7 @@ import { decodeCursor, encodeCursor } from '@/lib/api/pagination';
 import { created, error, paginated } from '@/lib/api/response';
 import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import { getBrainForCompany } from '@/lib/brain/queries';
+import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import {
   extractDocumentTypeFromContent,
@@ -168,6 +170,38 @@ export const POST = (req: Request) =>
     // lookups can hit the index instead of parsing content.
     const documentType = extractDocumentTypeFromContent(input.content);
 
+    // Phase 1.5 workflow-doc frontmatter sync: mirrors the PATCH route's
+    // logic (see /api/brain/documents/[id]/route.ts). When the new doc is a
+    // workflow, parse the YAML body and seed metadata with the authored
+    // fields so the trigger route's preflight reads the right values on the
+    // very first run — without this, a freshly-created workflow doc has no
+    // `output`/`requires_mcps` in metadata and every Run click fails
+    // validation until the doc is saved at least once.
+    //
+    // Silent-skip policy: invalid YAML or an invalid workflow frontmatter
+    // shape does not block creation. Trigger-time validation catches bad
+    // shapes at run time.
+    let workflowMetadata: Record<string, unknown> = {};
+    if (documentType === 'workflow') {
+      const fmMatch = input.content.match(/^---\n([\s\S]*?)\n---/);
+      if (fmMatch) {
+        try {
+          const parsed = yaml.load(fmMatch[1]) as unknown;
+          const validated = validateWorkflowFrontmatter(parsed);
+          if (validated.ok) {
+            workflowMetadata = {
+              output: validated.value.output,
+              output_category: validated.value.output_category,
+              requires_mcps: validated.value.requires_mcps,
+              schedule: validated.value.schedule,
+            };
+          }
+        } catch {
+          // YAML parse error — skip sync; trigger-time validation will catch it.
+        }
+      }
+    }
+
     try {
       const [doc] = await db
         .insert(documents)
@@ -185,7 +219,10 @@ export const POST = (req: Request) =>
           isCore: false,
           ownerId: ctx.userId,
           type: documentType,
-          metadata: { outbound_links: parseOutboundLinks(input.content) },
+          metadata: {
+            outbound_links: parseOutboundLinks(input.content),
+            ...workflowMetadata,
+          },
           version: 1,
         })
         .returning();

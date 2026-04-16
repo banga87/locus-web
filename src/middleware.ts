@@ -1,6 +1,8 @@
-// Edge middleware: refresh Supabase session + gate unauthenticated users.
+// Edge middleware: log requests to Axiom + refresh Supabase session + gate
+// unauthenticated users.
 //
 // Pass-through routes skip both the session refresh and the auth gate:
+//   - /api/axiom              — Axiom log proxy (must accept logs before auth)
 //   - /api/mcp/*              — bearer-token-authenticated MCP endpoints
 //   - /api/auth/*             — our own auth callbacks (session doesn't exist yet)
 //   - /api/oauth/register     — RFC 7591 DCR (public)
@@ -20,13 +22,18 @@
 //
 // See design doc 14-frontend-architecture.md §1.3.
 
-import { type NextRequest, NextResponse } from 'next/server';
+import { transformMiddlewareRequest } from '@axiomhq/nextjs';
+import { type NextFetchEvent, type NextRequest, NextResponse } from 'next/server';
 
+import { logger } from '@/lib/axiom/server';
 import { oauthRateLimiter } from '@/lib/oauth/rate-limit';
 import { updateSession } from '@/lib/supabase/middleware';
 
-export async function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
+
+  logger.info(...transformMiddlewareRequest(request));
+  event.waitUntil(logger.flush());
 
   // Rate-limit all /api/oauth/* endpoints by client IP. Applied before
   // the pass-through branch so register/token are also protected.
@@ -50,6 +57,7 @@ export async function middleware(request: NextRequest) {
 
   // Pass-through: no session refresh, no auth gate.
   if (
+    pathname.startsWith('/api/axiom') ||
     pathname.startsWith('/api/mcp') ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/.well-known/') ||

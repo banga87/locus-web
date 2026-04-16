@@ -55,6 +55,7 @@ import { recordUsage } from '@/lib/usage/record';
 import { flushEvents } from '@/lib/audit/logger';
 import { sessionManager } from '@/lib/sessions/manager';
 import { loadMcpOutTools } from '@/lib/mcp-out/bridge';
+import { logger as axiomLogger } from '@/lib/axiom/server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -241,6 +242,22 @@ export async function POST(req: Request) {
     ),
     maxSteps: 6,
     onFinish: (finish) => {
+      // Emit a per-turn tool-call summary to Axiom. Fires once per turn
+      // with every call the agent made — gives us visibility into what
+      // tools ran without logging the full streamed message payload.
+      if (finish.toolCalls?.length) {
+        axiomLogger.info('agent.toolCalls', {
+          sessionId: body.sessionId,
+          userId: auth.userId,
+          companyId: auth.companyId,
+          count: finish.toolCalls.length,
+          calls: finish.toolCalls.map((call) => ({
+            toolName: call.toolName,
+            input: call.input,
+          })),
+        });
+      }
+
       // Persist + bill on the side. `waitUntil` keeps the function alive
       // long enough for the writes after the response stream closes; we
       // never await these inline because that would block the stream.

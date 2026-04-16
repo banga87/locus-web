@@ -40,7 +40,8 @@ export type AuditEventCategory =
   | 'authentication'
   | 'maintenance'
   | 'administration'
-  | 'token_usage';
+  | 'token_usage'
+  | 'mcp_invocation';
 
 /**
  * Shape of an event passed to `logEvent()`. Field names match the Drizzle
@@ -64,6 +65,7 @@ export interface AuditEvent {
   ipAddress?: string;
   sessionId?: string;
   tokenId?: string;
+  brainId?: string;
 
   // Populated by the logger at call time. Not part of the public call
   // surface — callers should not set this.

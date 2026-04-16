@@ -80,6 +80,10 @@ export function NewSidebar({
           <RecentIcon />
           Recent
         </Link>
+        <Link href="/neurons" className="quick-item">
+          <NeuronsIcon />
+          Neurons
+        </Link>
       </div>
 
       <div className="side-body">
@@ -279,6 +283,27 @@ function SettingsIcon() {
     >
       <circle cx="12" cy="12" r="3" />
       <path d="M19 12a7 7 0 10-14 0 7 7 0 0014 0z" />
+    </svg>
+  );
+}
+
+function NeuronsIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <circle cx="4" cy="6" r="2" />
+      <circle cx="20" cy="6" r="2" />
+      <circle cx="4" cy="18" r="2" />
+      <circle cx="20" cy="18" r="2" />
+      <path d="M6 7l4 4M18 7l-4 4M6 17l4-4M18 17l-4-4" />
     </svg>
   );
 }

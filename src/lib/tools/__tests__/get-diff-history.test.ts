@@ -205,7 +205,8 @@ describe('get_diff_history', () => {
       { since: BOUNDARY.toISOString() },
       fixtures.context,
     );
-    expect(logEvent).toHaveBeenCalledTimes(1);
+    // Executor fans out per-doc events; calls[0] is the tool-level one.
+    expect(logEvent).toHaveBeenCalled();
     const event = vi.mocked(logEvent).mock.calls[0]?.[0];
     expect(event?.eventType).toBe('tool.get_diff_history');
     expect(event?.targetType).toBe('brain');

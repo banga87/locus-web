@@ -27,6 +27,7 @@ type Writer = (rows: AuditEventInsert[]) => Promise<void>;
 
 type AuditEventInsert = {
   companyId: string;
+  brainId: string | null;
   category: AuditEvent['category'];
   eventType: string;
   actorType: AuditEvent['actorType'];
@@ -95,6 +96,7 @@ async function drainBuffer(): Promise<void> {
 
   const rows: AuditEventInsert[] = batch.map((e) => ({
     companyId: e.companyId,
+    brainId: e.brainId ?? null,
     category: e.category,
     eventType: e.eventType,
     actorType: e.actorType,

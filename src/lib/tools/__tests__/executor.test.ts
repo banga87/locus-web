@@ -276,6 +276,86 @@ describe('tools/executor — execution + metadata + audit', () => {
     });
   });
 
+  it('stamps brainId on the tool-level audit event', async () => {
+    // Without brainId the Supabase Realtime filter `brain_id=eq.<uuid>`
+    // never matches and the /neurons subscription drops the row.
+    registerTool(buildMockTool());
+
+    await executeTool('mock_echo', { name: 'x' }, buildContext());
+
+    const event = vi.mocked(logEvent).mock.calls[0]?.[0];
+    expect(event?.brainId).toBe(TEST_BRAIN_ID);
+  });
+
+  it('fans out one per-document event for each accessed doc', async () => {
+    // Required for the /neurons pulse feature — pulses target a specific
+    // document node, which needs targetType="document" + targetId=<doc>.
+    const DOC_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const DOC_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    registerTool(
+      buildMockTool({
+        call: vi.fn(async () => ({
+          success: true,
+          data: { ok: true },
+          metadata: {
+            responseTokens: 0,
+            executionMs: 0,
+            documentsAccessed: [DOC_A, DOC_B],
+          },
+        })),
+      }),
+    );
+
+    await executeTool('mock_echo', { name: 'x' }, buildContext());
+
+    // 1 tool-level event + 2 per-document events = 3
+    expect(logEvent).toHaveBeenCalledTimes(3);
+    const calls = vi.mocked(logEvent).mock.calls.map((c) => c[0]);
+
+    const toolLevel = calls.find((e) => e.targetType === 'brain');
+    expect(toolLevel?.targetId).toBe(TEST_BRAIN_ID);
+    expect(toolLevel?.brainId).toBe(TEST_BRAIN_ID);
+
+    const perDoc = calls.filter((e) => e.targetType === 'document');
+    expect(perDoc).toHaveLength(2);
+    expect(perDoc.map((e) => e.targetId).sort()).toEqual([DOC_A, DOC_B].sort());
+    for (const evt of perDoc) {
+      expect(evt.brainId).toBe(TEST_BRAIN_ID);
+      expect(evt.category).toBe('document_access');
+      expect(evt.actorId).toBe(TEST_TOKEN_ID);
+      expect(evt.eventType).toBe('tool.mock_echo');
+    }
+  });
+
+  it('does not fan out when documentsAccessed is empty', async () => {
+    // No accessed docs → only the tool-level event. Avoids gratuitous
+    // inserts for web tools and search-with-no-hits.
+    registerTool(buildMockTool()); // default mock has documentsAccessed: []
+
+    await executeTool('mock_echo', { name: 'x' }, buildContext());
+
+    expect(logEvent).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(logEvent).mock.calls[0]?.[0].targetType).toBe('brain');
+  });
+
+  it('does not fan out on failed tool calls', async () => {
+    // A partially-completed read that reports documentsAccessed on failure
+    // could otherwise produce misleading pulses for an action that didn't
+    // succeed. One audit row (the tool-level one) is enough for the trail.
+    registerTool(
+      buildMockTool({
+        call: vi.fn(async () => {
+          throw new Error('boom');
+        }),
+      }),
+    );
+
+    await executeTool('mock_echo', { name: 'x' }, buildContext());
+
+    expect(logEvent).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(logEvent).mock.calls[0]?.[0].targetType).toBe('brain');
+  });
+
   it('wraps tool exceptions as execution_error and still audits', async () => {
     registerTool(
       buildMockTool({

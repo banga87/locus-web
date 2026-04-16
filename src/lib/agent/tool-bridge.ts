@@ -19,6 +19,8 @@
 import { dynamicTool, jsonSchema, type Tool } from 'ai';
 import type { JSONSchema7 } from '@ai-sdk/provider';
 
+import { logEvent } from '@/lib/audit/logger';
+import { generateInvocationId } from '@/lib/brain-pulse/invocation-id';
 import { PROPOSE_TOOL_PREFIX } from '@/lib/context/proposals';
 import { executeTool, getAllTools } from '@/lib/tools/executor';
 import {
@@ -26,6 +28,22 @@ import {
   proposeDocumentUpdateTool,
 } from '@/lib/tools/propose-document';
 import type { LocusTool, ToolContext } from '@/lib/tools/types';
+
+/**
+ * Metadata supplied alongside an external MCP tool so the bridge can
+ * emit the paired `mcp_invocation` invoke/complete/error audit events.
+ * Task 3 will populate this map per brain from the connections table;
+ * today the call site passes `{}` and MCP tools are unbridged.
+ *
+ * `mcpConnectionId` is used as `targetId` on the audit row — the FK
+ * points at the connection the tool was loaded from. `originDocId`
+ * is optional and reserved for Task 4's OriginDoc-linked invocations.
+ */
+export interface McpToolMeta {
+  mcpConnectionId: string;
+  mcpName: string;
+  originDocId?: string | null;
+}
 
 /**
  * Wrap a single `LocusTool` for the AI SDK. The returned definition is
@@ -54,6 +72,112 @@ export function bridgeLocusTool(
         };
       }
       return result.data;
+    },
+  });
+}
+
+/**
+ * Wrap an external (MCP) tool so its execution emits paired
+ * `mcp_invocation` audit events. Each call produces:
+ *   - one `invoke` event at start (with a fresh `invocation_id`)
+ *   - one `complete` event on success (same `invocation_id`, `duration_ms`)
+ *   - one `error` event on throw (same `invocation_id`, `error_message`)
+ *
+ * The wrapper preserves the underlying tool's exception contract — if
+ * the MCP tool throws, `bridgeMcpTool` re-throws after logging. It does
+ * NOT convert errors to `{error: true, ...}` the way `bridgeLocusTool`
+ * does, because MCP tool errors should surface to the AI SDK's native
+ * error handling (Task 3 picks this up).
+ */
+export function bridgeMcpTool(
+  toolName: string,
+  underlying: Tool,
+  ctx: ToolContext,
+  meta: McpToolMeta,
+): Tool {
+  const actorType = ctx.actor.type;
+  const actorId = ctx.actor.id;
+  const actorName = ctx.actor.name ?? undefined;
+  const brainId = ctx.brainId;
+  const sessionId = ctx.sessionId;
+
+  return dynamicTool({
+    description: underlying.description,
+    inputSchema: underlying.inputSchema,
+    execute: async (args, options) => {
+      const invocationId = generateInvocationId();
+      const started = performance.now();
+
+      logEvent({
+        companyId: ctx.companyId,
+        brainId,
+        category: 'mcp_invocation',
+        eventType: 'invoke',
+        actorType,
+        actorId,
+        actorName,
+        targetType: 'connection',
+        targetId: meta.mcpConnectionId,
+        sessionId,
+        details: {
+          invocation_id: invocationId,
+          mcp_name: meta.mcpName,
+          tool_name: toolName,
+          origin_doc_id: meta.originDocId ?? null,
+        },
+      });
+
+      try {
+        const result = await underlying.execute!(args, options);
+        const durationMs = Math.round(performance.now() - started);
+
+        logEvent({
+          companyId: ctx.companyId,
+          brainId,
+          category: 'mcp_invocation',
+          eventType: 'complete',
+          actorType,
+          actorId,
+          actorName,
+          targetType: 'connection',
+          targetId: meta.mcpConnectionId,
+          sessionId,
+          details: {
+            invocation_id: invocationId,
+            mcp_name: meta.mcpName,
+            tool_name: toolName,
+            origin_doc_id: meta.originDocId ?? null,
+            duration_ms: durationMs,
+          },
+        });
+
+        return result;
+      } catch (err) {
+        const durationMs = Math.round(performance.now() - started);
+
+        logEvent({
+          companyId: ctx.companyId,
+          brainId,
+          category: 'mcp_invocation',
+          eventType: 'error',
+          actorType,
+          actorId,
+          actorName,
+          targetType: 'connection',
+          targetId: meta.mcpConnectionId,
+          sessionId,
+          details: {
+            invocation_id: invocationId,
+            mcp_name: meta.mcpName,
+            tool_name: toolName,
+            origin_doc_id: meta.originDocId ?? null,
+            duration_ms: durationMs,
+            error_message: err instanceof Error ? err.message : String(err),
+          },
+        });
+
+        throw err;
+      }
     },
   });
 }
@@ -92,6 +216,7 @@ function toolAllowed(tool: LocusTool, ctx: ToolContext): boolean {
 export function buildToolSet(
   ctx: ToolContext,
   externalTools: Record<string, Tool> = {},
+  externalToolMeta: Record<string, McpToolMeta> = {},
 ): Record<string, Tool> {
   const brainTools = getAllTools();
   const bridged: Record<string, Tool> = {};
@@ -111,5 +236,17 @@ export function buildToolSet(
   // `src/lib/context/proposals.ts`.
   bridged[`${PROPOSE_TOOL_PREFIX}create`] = proposeDocumentCreateTool as Tool;
   bridged[`${PROPOSE_TOOL_PREFIX}update`] = proposeDocumentUpdateTool as Tool;
-  return { ...bridged, ...externalTools };
+
+  // External tools: if `externalToolMeta` supplies metadata keyed by the
+  // same tool name, wrap in `bridgeMcpTool` to emit `mcp_invocation`
+  // audit events. Otherwise pass the tool through unmodified — this
+  // preserves backward compatibility for non-MCP external tools and
+  // for the current chat route (which passes only `externalTools`).
+  const externalBridged: Record<string, Tool> = {};
+  for (const [name, tool] of Object.entries(externalTools)) {
+    const meta = externalToolMeta[name];
+    externalBridged[name] = meta ? bridgeMcpTool(name, tool, ctx, meta) : tool;
+  }
+
+  return { ...bridged, ...externalBridged };
 }

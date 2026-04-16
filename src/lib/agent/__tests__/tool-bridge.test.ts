@@ -20,6 +20,7 @@ vi.mock('@/lib/audit/logger', () => ({
   flushEvents: vi.fn(async () => {}),
 }));
 
+import { logEvent } from '@/lib/audit/logger';
 import {
   registerTool,
   __resetRegistryForTests,
@@ -263,5 +264,103 @@ describe('buildToolSet — capability filter', () => {
     const set = buildToolSet(ctx);
     expect(set).toHaveProperty('propose_document_create');
     expect(set).toHaveProperty('propose_document_update');
+  });
+});
+
+describe('tool-bridge — mcp_invocation emission', () => {
+  beforeEach(() => {
+    vi.mocked(logEvent).mockClear();
+  });
+
+  function makeMcpCtx(overrides: Partial<ToolContext> = {}): ToolContext {
+    return {
+      actor: {
+        type: 'agent_token',
+        id: 'tok-marketing',
+        name: 'Marketing',
+        scopes: ['read'],
+      },
+      companyId: '11111111-1111-1111-1111-111111111111',
+      brainId: '22222222-2222-2222-2222-222222222222',
+      sessionId: '33333333-3333-3333-3333-333333333333',
+      grantedCapabilities: [],
+      webCallsThisTurn: 0,
+      ...overrides,
+    };
+  }
+
+  it('emits invoke + complete events for successful MCP tool calls', async () => {
+    const { dynamicTool, jsonSchema } = await import('ai');
+    const externalTools = {
+      'mcp__stripe__search_prices': dynamicTool({
+        description: 'Search Stripe prices',
+        inputSchema: jsonSchema({ type: 'object', properties: {} }),
+        execute: async () => ({ prices: [{ id: 'price_1' }] }),
+      }),
+    };
+    const externalToolMeta = {
+      'mcp__stripe__search_prices': { mcpConnectionId: 'm-stripe', mcpName: 'Stripe' },
+    };
+
+    const tools = buildToolSet(makeMcpCtx(), externalTools, externalToolMeta);
+    await tools['mcp__stripe__search_prices'].execute!({}, {} as never);
+
+    const mcpCalls = vi.mocked(logEvent).mock.calls
+      .map((c) => c[0])
+      .filter((e) => e.category === 'mcp_invocation');
+    expect(mcpCalls).toHaveLength(2);
+
+    const invoke = mcpCalls.find((e) => e.eventType === 'invoke');
+    const complete = mcpCalls.find((e) => e.eventType === 'complete');
+    expect(invoke).toBeDefined();
+    expect(complete).toBeDefined();
+    expect(invoke!.details).toMatchObject({
+      mcp_name: 'Stripe',
+      tool_name: 'mcp__stripe__search_prices',
+    });
+    expect(invoke!.details!.invocation_id).toBe(complete!.details!.invocation_id);
+    expect(invoke!.brainId).toBe('22222222-2222-2222-2222-222222222222');
+  });
+
+  it('emits invoke + error when the MCP tool throws', async () => {
+    const { dynamicTool, jsonSchema } = await import('ai');
+    const externalTools = {
+      'mcp__stripe__boom': dynamicTool({
+        description: 'Always fails',
+        inputSchema: jsonSchema({ type: 'object', properties: {} }),
+        execute: async () => { throw new Error('stripe exploded'); },
+      }),
+    };
+    const externalToolMeta = {
+      'mcp__stripe__boom': { mcpConnectionId: 'm-stripe', mcpName: 'Stripe' },
+    };
+
+    const tools = buildToolSet(makeMcpCtx(), externalTools, externalToolMeta);
+    await expect(tools['mcp__stripe__boom'].execute!({}, {} as never)).rejects.toThrow('stripe exploded');
+
+    const mcpCalls = vi.mocked(logEvent).mock.calls
+      .map((c) => c[0])
+      .filter((e) => e.category === 'mcp_invocation');
+    expect(mcpCalls.map((e) => e.eventType).sort()).toEqual(['error', 'invoke']);
+    const error = mcpCalls.find((e) => e.eventType === 'error');
+    expect(error!.details!.error_message).toBe('stripe exploded');
+  });
+
+  it('does NOT emit mcp_invocation for external tools without metadata', async () => {
+    const { dynamicTool, jsonSchema } = await import('ai');
+    const externalTools = {
+      'some_unlisted_tool': dynamicTool({
+        description: 'Not MCP',
+        inputSchema: jsonSchema({ type: 'object', properties: {} }),
+        execute: async () => ({ ok: true }),
+      }),
+    };
+    const tools = buildToolSet(makeMcpCtx(), externalTools, {});
+    await tools['some_unlisted_tool'].execute!({}, {} as never);
+
+    const mcpCalls = vi.mocked(logEvent).mock.calls
+      .map((c) => c[0])
+      .filter((e) => e.category === 'mcp_invocation');
+    expect(mcpCalls).toHaveLength(0);
   });
 });

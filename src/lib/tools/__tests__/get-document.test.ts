@@ -198,10 +198,13 @@ describe('get_document', () => {
       { path: `${MAIN_PATH_BASE}-${fixtures.suffix}` },
       fixtures.context,
     );
-    expect(logEvent).toHaveBeenCalledTimes(1);
+    // Executor fires a tool-level event (targetType=brain) plus one
+    // per-doc event per documentsAccessed entry — don't pin the count.
+    expect(logEvent).toHaveBeenCalled();
     const event = vi.mocked(logEvent).mock.calls[0]?.[0];
     expect(event?.category).toBe('document_access');
     expect(event?.eventType).toBe('tool.get_document');
+    expect(event?.targetType).toBe('brain');
     expect(event?.details).toMatchObject({
       tool: 'get_document',
       eventType: 'document.read',

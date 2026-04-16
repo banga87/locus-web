@@ -35,11 +35,11 @@ import {
  * list surface) would reach `executeTool` and succeed for a write tool
  * if scope + role gates passed. This allowlist prevents that.
  *
- * Keep in sync with the 4 `server.tool(...)` calls in `./tools.ts`. If
- * MCP IN is ever expanded to expose more tools, add their names here and
- * there, and add them to the read-only contract tests.
+ * Exported so `./tools.ts` can assert that every `server.tool(...)`
+ * registration is covered — compile-time link between the two lists,
+ * so growth/drift requires updating both sides.
  */
-const MCP_ALLOWED_TOOLS = new Set([
+export const MCP_ALLOWED_TOOLS = new Set<string>([
   'search_documents',
   'get_document',
   'get_document_diff',

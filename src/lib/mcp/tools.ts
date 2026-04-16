@@ -12,7 +12,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import { handleToolCall } from './handler';
+import { handleToolCall, MCP_ALLOWED_TOOLS } from './handler';
 
 /**
  * Register the four Pre-MVP read tools on an MCP server instance. Called
@@ -26,6 +26,12 @@ export function registerMcpTools(
   server: McpServer,
   request: Request,
 ): void {
+  // Track names as we register them. After the four `server.tool(...)`
+  // calls we assert exact parity with `MCP_ALLOWED_TOOLS` so the two
+  // lists cannot drift: adding a tool to one side without the other
+  // crashes a dev / CI build before it ships.
+  const registered = new Set<string>();
+
   server.tool(
     'search_documents',
     'Full-text search across brain documents. Returns ranked results with snippets. ' +
@@ -43,6 +49,7 @@ export function registerMcpTools(
         request,
       }),
   );
+  registered.add('search_documents');
 
   server.tool(
     'get_document',
@@ -61,6 +68,7 @@ export function registerMcpTools(
         request,
       }),
   );
+  registered.add('get_document');
 
   server.tool(
     'get_document_diff',
@@ -77,6 +85,7 @@ export function registerMcpTools(
         request,
       }),
   );
+  registered.add('get_document_diff');
 
   server.tool(
     'get_diff_history',
@@ -94,4 +103,24 @@ export function registerMcpTools(
         request,
       }),
   );
+  registered.add('get_diff_history');
+
+  // Compile-time link to `MCP_ALLOWED_TOOLS` — the gate in `./handler.ts`
+  // rejects any tool name not in that set with `unknown_tool`, so a name
+  // registered here but missing from the set would be unreachable, and
+  // vice versa. Assert exact parity.
+  for (const name of MCP_ALLOWED_TOOLS) {
+    if (!registered.has(name)) {
+      throw new Error(
+        `[mcp] MCP_ALLOWED_TOOLS includes "${name}" but registerMcpTools does not register it. Update src/lib/mcp/tools.ts.`,
+      );
+    }
+  }
+  for (const name of registered) {
+    if (!MCP_ALLOWED_TOOLS.has(name)) {
+      throw new Error(
+        `[mcp] registerMcpTools registered "${name}" but MCP_ALLOWED_TOOLS does not permit it. Update src/lib/mcp/handler.ts.`,
+      );
+    }
+  }
 }

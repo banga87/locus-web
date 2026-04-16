@@ -48,7 +48,7 @@ import { workflowRunEvents } from '@/db/schema/workflow-run-events';
 
 import { registerLocusTools, __resetLocusToolsRegistered } from '@/lib/tools';
 import { __resetRegistryForTests } from '@/lib/tools/executor';
-import { clearHooks } from '@/lib/agent/hooks';
+import { clearHooks, registerHook } from '@/lib/agent/hooks';
 
 import { runWorkflow } from '../run';
 
@@ -387,6 +387,39 @@ describe('runWorkflow — LLM error', () => {
     const events = await getEvents(runId);
     const errorEvent = events.find((e) => e.eventType === 'run_error');
     expect(errorEvent).toBeDefined();
+  });
+});
+
+describe('runWorkflow — hook deny', () => {
+  it('marks the run as failed when SessionStart denies the turn', async () => {
+    // The model would produce output if reached, but SessionStart deny
+    // short-circuits before streamText. runAgentTurn still yields a
+    // turn_complete with finishReason='denied' — the runner must treat
+    // this as a failure so the row doesn't silently land in 'completed'.
+    mockProvider.setModel(
+      makeStreamModel([
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: 'should not reach' },
+        { type: 'text-end', id: 't1' },
+      ]),
+    );
+    registerHook('SessionStart', () => ({
+      decision: 'deny',
+      reason: 'policy_block_test',
+    }));
+
+    const runId = await seedRun(fix);
+    await runWorkflow(runId);
+
+    const run = await getRun(runId);
+    expect(run!.status).toBe('failed');
+    expect(run!.errorMessage).toBeTruthy();
+
+    const events = await getEvents(runId);
+    const errorEvent = events.find((e) => e.eventType === 'run_error');
+    expect(errorEvent).toBeDefined();
+    const payload = errorEvent!.payload as Record<string, unknown>;
+    expect(payload.reason).toBe('denied');
   });
 });
 

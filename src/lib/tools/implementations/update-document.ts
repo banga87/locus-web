@@ -17,7 +17,7 @@
 // On doc-not-found the tool returns { error: { code: 'DOCUMENT_NOT_FOUND' } }
 // rather than throwing — mirrors the create tool's non-throwing error contract.
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { documents, documentVersions } from '@/db/schema';
@@ -242,7 +242,13 @@ export const updateDocumentTool: LocusTool<
           ...typeUpdate,
           ...metadataUpdate,
           version: nextVersion,
-          updatedAt: new Date(),
+          // Use DB clock (now()) rather than app-clock new Date() — same
+          // discipline as status.ts. `documents.createdAt`/`updatedAt` are
+          // defaultNow() on insert, so reads in either direction end up
+          // comparing like-clock timestamps. Scope: only this one field
+          // in this one file — other updatedAt writes elsewhere in the
+          // codebase are unchanged by this fix.
+          updatedAt: sql`now()`,
         })
         .where(eq(documents.id, existing.id))
         .returning();

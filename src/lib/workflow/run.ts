@@ -71,6 +71,21 @@ async function getWorkflowDoc(documentId: string) {
   return row ?? null;
 }
 
+// Every AgentEvent type maps 1:1 onto a workflowEventTypeEnum value.
+// AgentEvent union: turn_start | llm_delta | reasoning | tool_start |
+//                   tool_result | turn_complete
+// workflowEventTypeEnum adds `run_error` and `run_complete` which are
+// emitted by the runner itself, not by the agent harness.
+type WorkflowEventType =
+  | 'turn_start'
+  | 'llm_delta'
+  | 'tool_start'
+  | 'tool_result'
+  | 'reasoning'
+  | 'turn_complete'
+  | 'run_error'
+  | 'run_complete';
+
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
@@ -200,10 +215,13 @@ export async function runWorkflow(runId: string): Promise<void> {
     await markRunning(runId);
 
     // Re-check cancellation after markRunning — a race between the trigger
-    // and the actual start is possible.
+    // and the actual start is possible. Mirror the in-loop turn_start path:
+    // emit run_error AND call markCancelled so the row lands in a terminal
+    // state (otherwise it stays 'running' until the zombie sweeper).
     const statusAfterStart = await getRunStatus(runId);
     if (statusAfterStart === 'cancelled') {
       await insertEvent(runId, sequence++, 'run_error', { reason: 'cancelled' });
+      await markCancelled(runId);
       return;
     }
 
@@ -227,17 +245,6 @@ export async function runWorkflow(runId: string): Promise<void> {
         }
       }
 
-      // Map AgentEvent types to workflowEventTypeEnum values.
-      // AgentEvent union: turn_start | llm_delta | reasoning | tool_start |
-      //                   tool_result | turn_complete
-      // workflowEventTypeEnum: turn_start | llm_delta | tool_start |
-      //                        tool_result | reasoning | turn_complete |
-      //                        run_error | run_complete
-      // All AgentEvent types map 1:1 to workflow event types.
-      type WorkflowEventType =
-        | 'turn_start' | 'llm_delta' | 'tool_start' | 'tool_result'
-        | 'reasoning' | 'turn_complete' | 'run_error' | 'run_complete';
-
       const eventType = ev.type as WorkflowEventType;
 
       // Build a plain payload from the event — strip the `type` field
@@ -249,14 +256,30 @@ export async function runWorkflow(runId: string): Promise<void> {
         totalIn += ev.usage?.inputTokens ?? 0;
         totalOut += ev.usage?.outputTokens ?? 0;
 
-        // If the LLM stream errored, finishReason is 'error'. Treat as a
-        // run failure — the model didn't complete normally.
+        // Terminal finishReason handling. Order matters: check specific
+        // terminal states first, then fall through to normal accumulation.
+        //   - 'error'  → LLM stream-level error (onError fired). The run
+        //                cannot complete normally.
+        //   - 'denied' → a SessionStart or UserPromptSubmit hook denied
+        //                the turn. No hook registers a deny today, but
+        //                the hook bus is public and workflows are a
+        //                long-lived execution surface — closing the gap
+        //                now avoids silent "completed with 0 tokens" runs
+        //                when a handler is added later.
         if (ev.finishReason === 'error') {
           await insertEvent(runId, sequence++, 'run_error', {
             message: 'LLM stream finished with error',
             finishReason: ev.finishReason,
           });
           await markFailed(runId, 'LLM stream finished with error');
+          return;
+        }
+        if (ev.finishReason === 'denied') {
+          await insertEvent(runId, sequence++, 'run_error', {
+            reason: 'denied',
+            finishReason: ev.finishReason,
+          });
+          await markFailed(runId, 'Agent turn denied by hook');
           return;
         }
       }

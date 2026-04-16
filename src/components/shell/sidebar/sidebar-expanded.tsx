@@ -46,6 +46,7 @@ export function SidebarExpanded({ companyName, user, tree, pinned }: SidebarExpa
             onClick={toggleCollapsed}
             aria-label="Collapse sidebar"
             className="brand-collapse"
+            aria-expanded={true}
           >
             <PanelLeftClose size={16} />
           </button>

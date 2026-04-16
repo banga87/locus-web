@@ -22,6 +22,7 @@ export function SidebarRail() {
         className="rail-btn"
         onClick={toggleCollapsed}
         aria-label="Expand sidebar"
+        aria-expanded={false}
       >
         <PanelLeft size={18} />
       </button>

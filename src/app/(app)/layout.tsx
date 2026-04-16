@@ -78,6 +78,9 @@ export default async function AppLayout({
 
   return (
     <>
+      {/* Must mount alongside (not inside) NewAppShell: hydrates the
+          sidebar store so children can read persisted state on first
+          render and binds the global Cmd/Ctrl+\ keyboard shortcut. */}
       <SidebarLayoutBoot />
       <NewAppShell
         companyName={companyName}

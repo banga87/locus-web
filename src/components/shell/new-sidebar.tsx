@@ -7,6 +7,7 @@
 // that uses `usePathname()` to drive the `[data-active="true"]` node and
 // holds per-folder expand/collapse state locally.
 
+import type React from 'react';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -21,6 +22,8 @@ interface NewSidebarProps {
   user: { email: string; fullName: string | null; role: string };
   tree: ManifestFolder[];
   pinned: Array<{ id: string; title: string; path: string }>;
+  /** GlobalRunBadge server component slotted in from the layout. */
+  workflowsBadge?: React.ReactNode;
 }
 
 function countDocs(folders: ManifestFolder[]): number {
@@ -36,6 +39,7 @@ export function NewSidebar({
   user,
   tree,
   pinned,
+  workflowsBadge,
 }: NewSidebarProps) {
   const docCount = countDocs(tree);
   // Top-level "New folder" dialog. Sibling to BrainTree's own dialog state —
@@ -84,10 +88,15 @@ export function NewSidebar({
           <NeuronsIcon />
           Neurons
         </Link>
-        <Link href="/workflows" className="quick-item">
-          <WorkflowsIcon />
-          Workflows
-        </Link>
+        {/* GlobalRunBadge replaces the static Workflows link when present.
+            Falls back to a plain link when the badge isn't provided (e.g.
+            in tests or layouts that don't wire it yet). */}
+        {workflowsBadge ?? (
+          <Link href="/workflows" className="quick-item">
+            <WorkflowsIcon />
+            Workflows
+          </Link>
+        )}
       </div>
 
       <div className="side-body">

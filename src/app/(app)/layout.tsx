@@ -18,6 +18,7 @@ import {
   getPinnedDocuments,
 } from '@/lib/brain/queries';
 import { NewAppShell } from '@/components/shell/new-app-shell';
+import { GlobalRunBadge } from '@/components/layout/global-run-badge';
 
 export default async function AppLayout({
   children,
@@ -81,6 +82,7 @@ export default async function AppLayout({
       user={{ email: ctx.email, fullName: ctx.fullName, role: ctx.role }}
       tree={tree}
       pinned={pinned}
+      workflowsBadge={<GlobalRunBadge auth={ctx} />}
     >
       {children}
     </NewAppShell>

@@ -48,7 +48,7 @@
   --paper-2: #f1ede2;
   --ink: #1a1a17;
   --ink-2: #4b4a44;
-  --ink-3: #76746a;
+  --ink-3: #6e6c62;
   --rule: #e0dccf;
   --rule-soft: #ecebe0;
   --hover: #efeadb;
@@ -773,6 +773,7 @@
   background: var(--paper);
   border: 1px solid var(--rule);
   border-radius: 6px;
+  cursor: pointer;
   z-index: 40;
 }
 @media (max-width: 767px) {

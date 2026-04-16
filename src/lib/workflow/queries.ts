@@ -177,6 +177,11 @@ export interface SweepZombiesParams {
  */
 export async function sweepZombies(params: SweepZombiesParams): Promise<number> {
   const { inactivityMinutes } = params;
+  // Multiplication form keeps `inactivityMinutes` parameterized —
+  // `sql.raw(String(...))` would bypass parameter binding, which is safe
+  // today (caller passes a literal 15) but becomes an injection point the
+  // moment the signature takes dynamic input. This is defense in depth:
+  // equivalent semantics, safer shape.
   const rows = await db
     .update(workflowRuns)
     .set({
@@ -187,7 +192,7 @@ export async function sweepZombies(params: SweepZombiesParams): Promise<number> 
     .where(
       and(
         eq(workflowRuns.status, 'running'),
-        sql`${workflowRuns.updatedAt} < now() - interval '${sql.raw(String(inactivityMinutes))} minutes'`,
+        sql`${workflowRuns.updatedAt} < now() - (${inactivityMinutes} * interval '1 minute')`,
       ),
     )
     .returning({ id: workflowRuns.id });

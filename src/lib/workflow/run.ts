@@ -115,7 +115,16 @@ export async function runWorkflow(runId: string): Promise<void> {
 
   const workflowDoc = await getWorkflowDoc(run.workflowDocumentId);
   if (!workflowDoc) {
-    await markFailed(runId, `Workflow document ${run.workflowDocumentId} not found`);
+    // Emit a run_error event before marking failed so the run view's event
+    // log has a record of why the run aborted — otherwise post-mortem
+    // debugging has to fall back to workflow_runs.error_message alone.
+    // Matches the shape used by the triggering-user-missing path below.
+    const message = `Workflow document ${run.workflowDocumentId} not found`;
+    await insertEvent(runId, 0, 'run_error', {
+      reason: 'workflow_doc_missing',
+      message,
+    });
+    await markFailed(runId, message);
     return;
   }
 
@@ -124,6 +133,10 @@ export async function runWorkflow(runId: string): Promise<void> {
   const fmResult = validateWorkflowFrontmatter(workflowDoc.metadata);
   if (!fmResult.ok) {
     const msg = `Invalid workflow frontmatter: ${fmResult.errors.map((e) => `${e.field} ${e.message}`).join(', ')}`;
+    await insertEvent(runId, 0, 'run_error', {
+      reason: 'invalid_frontmatter',
+      message: msg,
+    });
     await markFailed(runId, msg);
     return;
   }

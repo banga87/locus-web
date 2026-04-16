@@ -242,12 +242,16 @@ async function teardownRunFixtures(f: RunFixtures): Promise<void> {
  *                     Pass `f.viewerUserId` for permission-denial tests.
  */
 async function seedRun(f: RunFixtures, triggeredBy?: string): Promise<string> {
+  // Insert with status='running' to mirror the production path —
+  // createWorkflowRun (queries.ts) always inserts 'running'; v0 has no
+  // 'queued' state (spec Section 6). The runner's markRunning call
+  // becomes a no-op UPDATE in this shape, matching real execution order.
   const [run] = await db
     .insert(workflowRuns)
     .values({
       workflowDocumentId: f.workflowDocId,
       triggeredBy: triggeredBy ?? f.userId,
-      status: 'queued',
+      status: 'running',
     })
     .returning({ id: workflowRuns.id });
   return run!.id;

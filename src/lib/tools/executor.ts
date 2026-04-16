@@ -267,8 +267,13 @@ function fireAuditEvent(
   context: ToolContext,
   extraDetails: Record<string, unknown>,
 ): void {
-  const event: AuditEvent = {
+  const docsAccessed = result.metadata.documentsAccessed ?? [];
+
+  // Tool-level audit trail: one row per tool call, scoped to the brain.
+  // Carries the full stats (executionMs, responseTokens, errorCode, ...).
+  const toolLevel: AuditEvent = {
     companyId: context.companyId,
+    brainId: context.brainId,
     category: 'document_access',
     eventType: `tool.${tool.name}`,
     actorType: context.actor.type,
@@ -281,7 +286,7 @@ function fireAuditEvent(
       success: result.success,
       executionMs: result.metadata.executionMs,
       responseTokens: result.metadata.responseTokens,
-      documentsAccessed: result.metadata.documentsAccessed ?? [],
+      documentsAccessed: docsAccessed,
       // Surface error code when the call failed — invaluable for
       // debugging "why is this token getting denied?" from the audit
       // trail alone.
@@ -300,7 +305,29 @@ function fireAuditEvent(
   // `result.metadata.details` with the specific (non-sensitive) fields.
   void input;
 
-  logEvent(event);
+  logEvent(toolLevel);
+
+  // Per-document fan-out: one event per touched doc so the /neurons
+  // feature can render a pulse on the specific node. Only on success —
+  // a failed tool that reports documentsAccessed shouldn't produce
+  // pulses for an action that didn't land.
+  if (!result.success) return;
+  for (const documentId of docsAccessed) {
+    logEvent({
+      companyId: context.companyId,
+      brainId: context.brainId,
+      category: 'document_access',
+      eventType: `tool.${tool.name}`,
+      actorType: context.actor.type,
+      actorId: context.actor.id,
+      actorName: context.actor.name,
+      targetType: 'document',
+      targetId: documentId,
+      details: { tool: tool.name },
+      sessionId: context.sessionId,
+      tokenId: context.tokenId,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -136,7 +136,8 @@ describe('search_documents', () => {
       fixtures.context,
     );
 
-    expect(logEvent).toHaveBeenCalledTimes(1);
+    // Executor fans out per-doc events; calls[0] is the tool-level one.
+    expect(logEvent).toHaveBeenCalled();
     const event = vi.mocked(logEvent).mock.calls[0]?.[0];
     expect(event?.category).toBe('document_access');
     expect(event?.eventType).toBe('tool.search_documents');

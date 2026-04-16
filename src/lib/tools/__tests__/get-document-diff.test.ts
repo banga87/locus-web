@@ -166,9 +166,11 @@ describe('get_document_diff', () => {
       { document_id: versionedDocId },
       fixtures.context,
     );
-    expect(logEvent).toHaveBeenCalledTimes(1);
+    // Executor fans out per-doc events; calls[0] is the tool-level one.
+    expect(logEvent).toHaveBeenCalled();
     const event = vi.mocked(logEvent).mock.calls[0]?.[0];
     expect(event?.eventType).toBe('tool.get_document_diff');
+    expect(event?.targetType).toBe('brain');
     expect(event?.details).toMatchObject({
       tool: 'get_document_diff',
       eventType: 'document.diff',

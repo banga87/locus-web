@@ -31,6 +31,7 @@ describe('<Section>', () => {
     // aria-expanded reflects state; body element is hidden via hidden attr or aria
     const header = screen.getByRole('button', { name: /brain/i });
     expect(header.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('body')).not.toBeInTheDocument();
   });
 
   it('calls onToggle when header is clicked', () => {

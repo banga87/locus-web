@@ -48,8 +48,8 @@ export function Section({
             aria-hidden="true"
           />
           <Icon size={14} aria-hidden="true" />
-          <span className="label">{label}</span>
-          {typeof count === 'number' && <span className="count">{count}</span>}
+          <span className="sidebar-section-header__label">{label}</span>
+          {typeof count === 'number' && <span className="sidebar-section-header__count">{count}</span>}
         </button>
         {headerAction && <span className="sidebar-section-action">{headerAction}</span>}
       </div>

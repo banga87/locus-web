@@ -28,6 +28,12 @@ interface WorkflowRow {
 
 interface Props {
   workflows: WorkflowRow[];
+  /**
+   * Whether the current user can trigger workflow runs. Viewers cannot —
+   * hiding the button avoids the misleading 403 flow where the API slaps
+   * them with a forbidden message after a click.
+   */
+  canRun: boolean;
 }
 
 function statusVariant(
@@ -76,7 +82,7 @@ function relativeTime(date: Date): string {
   return `${days}d ago`;
 }
 
-export function WorkflowList({ workflows }: Props) {
+export function WorkflowList({ workflows, canRun }: Props) {
   if (workflows.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-secondary px-6 py-12 text-center">
@@ -92,11 +98,11 @@ export function WorkflowList({ workflows }: Props) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border bg-secondary text-left">
-            <th className="px-4 py-3 font-medium text-muted-foreground">Name</th>
-            <th className="px-4 py-3 font-medium text-muted-foreground">Output</th>
-            <th className="px-4 py-3 font-medium text-muted-foreground">Category</th>
-            <th className="px-4 py-3 font-medium text-muted-foreground">Last run</th>
-            <th className="px-4 py-3 font-medium text-muted-foreground" />
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Name</th>
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Output</th>
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Category</th>
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Last run</th>
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground" />
           </tr>
         </thead>
         <tbody>
@@ -134,7 +140,7 @@ export function WorkflowList({ workflows }: Props) {
                 )}
               </td>
               <td className="px-4 py-3 text-right">
-                <RunButton workflowDocumentId={wf.id} />
+                {canRun && <RunButton workflowDocumentId={wf.id} />}
               </td>
             </tr>
           ))}

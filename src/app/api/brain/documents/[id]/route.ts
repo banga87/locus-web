@@ -224,9 +224,19 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
       const existingMetadata =
         (existing.metadata as Record<string, unknown> | null) ?? {};
 
+      // Silent-skip preserves existingMetadata on any invalid/missing frontmatter.
+      // Consequence: removing a required field (e.g. requires_mcps) from the body
+      // does NOT clear it from metadata — trigger-time preflight will still enforce
+      // the stale value until the user either restores the field with a new value
+      // or the doc is saved with a valid frontmatter block. This is intentional:
+      // we don't want to clobber metadata on every half-edited save.
       let workflowMetadata: Record<string, unknown> = {};
       if (newType === 'workflow') {
-        const fmMatch = patch.content.match(/^---\n([\s\S]*?)\n---/);
+        // CRLF-safe: \r? handles Windows line endings. Content pasted from
+        // Windows editors uses \r\n; without \r? the match silently fails and
+        // the sync no-ops even though the frontmatter block is structurally
+        // valid.
+        const fmMatch = patch.content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
         if (fmMatch) {
           try {
             const parsed = yaml.load(fmMatch[1]) as unknown;

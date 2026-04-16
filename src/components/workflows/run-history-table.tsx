@@ -97,12 +97,12 @@ export function RunHistoryTable({ runs, workflowSlug }: Props) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border bg-secondary text-left">
-            <th className="px-4 py-3 font-medium text-muted-foreground">Status</th>
-            <th className="px-4 py-3 font-medium text-muted-foreground">Started</th>
-            <th className="px-4 py-3 font-medium text-muted-foreground">Duration</th>
-            <th className="px-4 py-3 font-medium text-muted-foreground">Cost</th>
-            <th className="px-4 py-3 font-medium text-muted-foreground">Summary</th>
-            <th className="px-4 py-3 font-medium text-muted-foreground" />
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Status</th>
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Started</th>
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Duration</th>
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Cost</th>
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Summary</th>
+            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground" />
           </tr>
         </thead>
         <tbody>

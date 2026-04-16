@@ -52,14 +52,8 @@ interface DocumentData {
   ownerId: string | null;
 }
 
-interface UserOption {
-  id: string;
-  label: string;
-}
-
 interface Props {
   document: DocumentData;
-  owners: UserOption[];
   runs: RunRow[];
   workflowSlug: string;
   frontmatter: WorkflowFrontmatterValue;
@@ -112,7 +106,6 @@ function DefinitionEditor({
 }: {
   document: DocumentData;
   frontmatter: WorkflowFrontmatterValue;
-  owners: UserOption[];
   canEdit: boolean;
 }) {
   const initialHtml = useMemo(
@@ -226,7 +219,6 @@ function DefinitionEditor({
 
 export function WorkflowDetailTabs({
   document,
-  owners,
   runs,
   workflowSlug,
   frontmatter,
@@ -281,7 +273,6 @@ export function WorkflowDetailTabs({
         <div className="flex-1 overflow-auto">
           <DefinitionEditor
             document={document}
-            owners={owners}
             frontmatter={frontmatter}
             canEdit={canEdit}
           />

@@ -95,6 +95,9 @@ export default async function WorkflowsIndexPage() {
   const seededChatUrl = `/chat?prompt=${encodeURIComponent("I\u2019d like to create a workflow that\u2026")}`;
 
   const canCreate = ['owner', 'admin', 'editor'].includes(ctx.role);
+  // Viewers cannot trigger workflows (matches the trigger route's 403 gate).
+  // Hide the per-row Run buttons rather than letting viewers click into a 403.
+  const canRun = ['owner', 'admin', 'editor'].includes(ctx.role);
 
   return (
     <>
@@ -130,7 +133,7 @@ export default async function WorkflowsIndexPage() {
             </p>
           </header>
 
-          <WorkflowList workflows={workflows} />
+          <WorkflowList workflows={workflows} canRun={canRun} />
         </div>
       </div>
     </>

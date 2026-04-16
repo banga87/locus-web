@@ -3,8 +3,10 @@
 // Task 8 builds the full reattachable run view. This stub exists so that
 // RunButton's redirect to view_url has a valid target.
 //
-// We do a minimal tenant-isolation check (run belongs to this company)
-// so the stub doesn't leak run IDs across tenants.
+// ACL: delegates to Task 6's getWorkflowRunById + canAccessRun helpers so
+// the stub enforces the full rule set (tenant + triggered-by + owner/admin)
+// rather than the lighter tenant-only check it originally shipped with.
+// This also puts Task 8 on the right foundation.
 
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -12,9 +14,9 @@ import { and, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { documents } from '@/db/schema/documents';
-import { workflowRuns } from '@/db/schema/workflow-runs';
 import { requireAuth } from '@/lib/api/auth';
-import { getBrainForCompany } from '@/lib/brain/queries';
+import { canAccessRun } from '@/lib/workflow/access';
+import { getWorkflowRunById } from '@/lib/workflow/queries';
 import { ThemeToggle } from '@/components/shell/theme-toggle';
 
 interface PageProps {
@@ -27,16 +29,37 @@ export default async function RunViewStubPage({ params }: PageProps) {
   const ctx = await requireAuth();
   if (!ctx.companyId) return notFound();
 
-  const brain = await getBrainForCompany(ctx.companyId);
+  // getWorkflowRunById joins documents to surface the run's companyId,
+  // which canAccessRun uses for tenant isolation. Returning 404 (not 403)
+  // mirrors the API routes' policy — we don't leak whether a run UUID
+  // exists across tenants.
+  const run = await getWorkflowRunById(id);
+  if (
+    !run ||
+    !canAccessRun(run, {
+      userId: ctx.userId,
+      companyId: ctx.companyId,
+      role: ctx.role,
+    })
+  ) {
+    return notFound();
+  }
 
-  // Load the workflow doc to verify it exists in this brain.
+  // Fetch the workflow doc for the breadcrumb title/slug. Tenant is already
+  // confirmed via canAccessRun, but we still filter by slug + brain-adjacent
+  // criteria (type=workflow, not deleted) to make sure the URL's slug param
+  // matches the run's actual workflow doc — a mismatched slug is a 404.
   const [doc] = await db
-    .select({ id: documents.id, title: documents.title })
+    .select({
+      id: documents.id,
+      slug: documents.slug,
+      title: documents.title,
+    })
     .from(documents)
     .where(
       and(
+        eq(documents.id, run.workflowDocumentId),
         eq(documents.slug, slug),
-        eq(documents.brainId, brain.id),
         eq(documents.type, 'workflow'),
         isNull(documents.deletedAt),
       ),
@@ -44,24 +67,6 @@ export default async function RunViewStubPage({ params }: PageProps) {
     .limit(1);
 
   if (!doc) return notFound();
-
-  // Load the run row and verify it belongs to the workflow doc.
-  const [run] = await db
-    .select({
-      id: workflowRuns.id,
-      status: workflowRuns.status,
-      startedAt: workflowRuns.startedAt,
-    })
-    .from(workflowRuns)
-    .where(
-      and(
-        eq(workflowRuns.id, id),
-        eq(workflowRuns.workflowDocumentId, doc.id),
-      ),
-    )
-    .limit(1);
-
-  if (!run) return notFound();
 
   return (
     <>
@@ -90,7 +95,10 @@ export default async function RunViewStubPage({ params }: PageProps) {
             Run view coming in Task 8
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
-            Run ID: <code className="rounded bg-secondary px-1.5 py-0.5 text-xs">{run.id}</code>
+            Run ID:{' '}
+            <code className="rounded bg-secondary px-1.5 py-0.5 text-xs">
+              {run.id}
+            </code>
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             Status:{' '}

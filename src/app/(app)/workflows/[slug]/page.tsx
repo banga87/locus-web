@@ -14,14 +14,12 @@ import Link from 'next/link';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { documents, users } from '@/db/schema';
+import { documents } from '@/db/schema';
 import { workflowRuns } from '@/db/schema/workflow-runs';
 import { requireAuth } from '@/lib/api/auth';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { ThemeToggle } from '@/components/shell/theme-toggle';
 import { RunButton } from '@/components/workflows/run-button';
-import { RunHistoryTable } from '@/components/workflows/run-history-table';
-import { WorkflowFrontmatterFields } from '@/components/workflows/workflow-frontmatter-fields';
 import { WorkflowDetailTabs } from '@/components/workflows/workflow-detail-tabs';
 
 interface PageProps {
@@ -67,18 +65,6 @@ export default async function WorkflowDetailPage({
 
   if (!row) return notFound();
 
-  // Owner list for the editor sidebar (only the caller for now — matches
-  // the brain editor pattern).
-  const [self] = await db
-    .select({ id: users.id, fullName: users.fullName, email: users.email })
-    .from(users)
-    .where(eq(users.id, ctx.userId))
-    .limit(1);
-
-  const owners = self
-    ? [{ id: self.id, label: self.fullName ?? self.email }]
-    : [];
-
   // Run history
   const runs = await db
     .select({
@@ -110,6 +96,10 @@ export default async function WorkflowDetailPage({
   };
 
   const canEdit = ['owner', 'admin', 'editor'].includes(ctx.role);
+  // Viewers cannot trigger workflows (matches the trigger route's 403 gate).
+  // Hide the button rather than rendering it and having the API slap them
+  // with a misleading error — same set as canEdit at present.
+  const canRun = ['owner', 'admin', 'editor'].includes(ctx.role);
 
   const typedRuns = runs.map((r) => ({
     ...r,
@@ -133,7 +123,7 @@ export default async function WorkflowDetailPage({
           <span className="cur">{row.title}</span>
         </nav>
         <div className="topbar-spacer" />
-        <RunButton workflowDocumentId={row.id} />
+        {canRun && <RunButton workflowDocumentId={row.id} />}
         <ThemeToggle />
       </div>
 
@@ -147,7 +137,6 @@ export default async function WorkflowDetailPage({
             confidenceLevel: row.confidenceLevel,
             ownerId: row.ownerId ?? null,
           }}
-          owners={owners}
           runs={typedRuns}
           workflowSlug={row.slug}
           frontmatter={frontmatter}

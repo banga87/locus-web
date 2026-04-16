@@ -181,9 +181,19 @@ export const POST = (req: Request) =>
     // Silent-skip policy: invalid YAML or an invalid workflow frontmatter
     // shape does not block creation. Trigger-time validation catches bad
     // shapes at run time.
+    //
+    // Silent-skip preserves empty workflowMetadata on any invalid/missing
+    // frontmatter. Consequence: a new workflow doc with malformed frontmatter
+    // will have no workflow fields in metadata until the next save with a
+    // valid block. Trigger-time preflight will fail loudly rather than
+    // running with stale or missing values — this is intentional for POST
+    // (no existing metadata to preserve) and mirrors the PATCH semantics.
     let workflowMetadata: Record<string, unknown> = {};
     if (documentType === 'workflow') {
-      const fmMatch = input.content.match(/^---\n([\s\S]*?)\n---/);
+      // CRLF-safe: \r? handles Windows line endings. Without it, content
+      // pasted from a Windows editor silently skips the sync even when the
+      // frontmatter block is structurally valid.
+      const fmMatch = input.content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
       if (fmMatch) {
         try {
           const parsed = yaml.load(fmMatch[1]) as unknown;

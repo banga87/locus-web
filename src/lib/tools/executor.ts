@@ -179,7 +179,7 @@ export async function executeTool(
     try {
       evaluate(
         { actor: { role: context.actor.role }, brainId: context.brainId },
-        { action: tool.action, resourceType: 'document' },
+        { action: tool.action, resourceType: tool.resourceType },
       );
     } catch (err) {
       if (err instanceof PermissionDeniedError) {

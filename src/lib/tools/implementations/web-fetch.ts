@@ -45,6 +45,7 @@ export const webFetchTool: LocusTool<WebFetchInput, WebFetchOutput> = {
   capabilities: ['web'],
 
   action: 'read' as const,
+  resourceType: 'document' as const,
 
   isReadOnly() { return true; },
 

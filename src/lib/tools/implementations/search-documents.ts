@@ -59,6 +59,7 @@ export const searchDocumentsTool: LocusTool<
   },
 
   action: 'read' as const,
+  resourceType: 'document' as const,
 
   isReadOnly() {
     return true;

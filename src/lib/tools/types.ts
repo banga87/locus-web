@@ -171,6 +171,18 @@ export interface LocusTool<I = unknown, O = unknown> {
    */
   readonly action: 'read' | 'write';
 
+  /**
+   * The resource type this tool operates on. Passed to the permission
+   * evaluator's `EvalRequest.resourceType`. All current tools operate on
+   * documents; workflow + session tools will declare their own type once
+   * those resources land.
+   *
+   * Having this on the tool (rather than hardcoded in the executor) means
+   * future tool types (e.g. 'workflow') automatically get the right
+   * permission check without a change to the executor.
+   */
+  readonly resourceType: 'document' | 'workflow' | 'session';
+
   /** True if the tool does not modify brain state. */
   isReadOnly(): boolean;
 

@@ -53,6 +53,7 @@ function buildWriteTool(overrides: Partial<LocusTool> = {}): LocusTool {
       additionalProperties: false,
     },
     action: 'write',
+    resourceType: 'document' as const,
     isReadOnly: () => false,
     call: vi.fn(async () => {
       return {
@@ -137,6 +138,7 @@ describe('executor — role-based permission gate', () => {
         additionalProperties: false,
       },
       action: 'read',
+      resourceType: 'document' as const,
       isReadOnly: () => true,
       call: vi.fn(async () => ({
         success: true,

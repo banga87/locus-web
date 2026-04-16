@@ -59,6 +59,7 @@ export const getDocumentTool: LocusTool<GetDocumentInput, GetDocumentOutput> = {
   },
 
   action: 'read' as const,
+  resourceType: 'document' as const,
 
   isReadOnly() {
     return true;

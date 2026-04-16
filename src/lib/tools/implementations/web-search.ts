@@ -30,6 +30,7 @@ export const webSearchTool: LocusTool<WebSearchInput, WebSearchOutput> = {
   capabilities: ['web'],
 
   action: 'read' as const,
+  resourceType: 'document' as const,
 
   isReadOnly() { return true; },
 

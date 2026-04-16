@@ -649,6 +649,32 @@
 }
 .sidebar-section-body[hidden] { display: none; }
 
+.sidebar-resize-handle {
+  position: relative;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+.sidebar-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset: 0 -4px; /* 12px total hit zone (4 visible + 8 hover overflow) */
+}
+.sidebar-resize-handle:hover {
+  background: var(--rule-soft);
+}
+.sidebar-resize-handle:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+.sidebar-resize-handle[data-collapsed] {
+  display: none;
+}
+
+.app[data-sidebar-collapsed="true"] {
+  grid-template-columns: var(--sidebar-width, 56px) 0 1fr;
+}
+
 /* === End app shell === */
 
 /* Chat streaming-indicator dot bounce. Staggered via inline

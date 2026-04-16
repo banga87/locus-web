@@ -272,7 +272,10 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('runWorkflow — happy path', () => {
-  it('executes end-to-end: creates a document, marks completed, emits events', async () => {
+  // Longer timeout — this test hits the real DB for workflow_run + events
+  // + document queries, and the mock LLM stream has a few internal awaits.
+  // The per-suite default is too tight under parallel test load.
+  it('executes end-to-end: creates a document, marks completed, emits events', { timeout: 15_000 }, async () => {
     // Model: emits one text chunk then stops (no tool calls in this test —
     // we verify the full event sequence without needing a real tool call,
     // since tool execution is tested by stamp-middleware tests).

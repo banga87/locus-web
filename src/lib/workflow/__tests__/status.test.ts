@@ -126,8 +126,18 @@ afterAll(async () => {
 });
 
 describe('markRunning', () => {
-  it('sets status=running and sets updated_at', async () => {
+  it('sets status=running and bumps updated_at', async () => {
     const runId = await seedRun(fix);
+    const [before] = await db
+      .select({ updatedAt: workflowRuns.updatedAt })
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, runId));
+    const tBefore = before!.updatedAt;
+
+    // Ensure DB clock has advanced before the status update.
+    const deadline = Date.now() + 10;
+    while (Date.now() < deadline) { /* spin */ }
+
     await markRunning(runId);
 
     const [row] = await db
@@ -136,11 +146,9 @@ describe('markRunning', () => {
       .where(eq(workflowRuns.id, runId));
 
     expect(row!.status).toBe('running');
-    // updated_at is set (not null, not epoch) — the exact value is
-    // non-deterministic across DB/app clock skew, so we just assert it
-    // is a recent timestamp rather than comparing before/after.
-    expect(row!.updatedAt).toBeInstanceOf(Date);
-    expect(row!.updatedAt.getFullYear()).toBeGreaterThanOrEqual(2025);
+    // Zombie sweeper depends on updated_at advancing — see JSDoc on
+    // workflow_runs.updatedAt.
+    expect(row!.updatedAt.getTime()).toBeGreaterThan(tBefore.getTime());
 
     await db.delete(workflowRuns).where(eq(workflowRuns.id, runId));
   });
@@ -149,6 +157,15 @@ describe('markRunning', () => {
 describe('markCompleted', () => {
   it('sets status=completed, records token counts, and bumps updated_at', async () => {
     const runId = await seedRun(fix);
+    const [before] = await db
+      .select({ updatedAt: workflowRuns.updatedAt })
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, runId));
+    const tBefore = before!.updatedAt;
+
+    // Ensure DB clock has advanced before the status update.
+    const deadline = Date.now() + 10;
+    while (Date.now() < deadline) { /* spin */ }
 
     await markCompleted(runId, {
       summary: 'Done in 2 steps.',
@@ -163,6 +180,9 @@ describe('markCompleted', () => {
       .where(eq(workflowRuns.id, runId));
 
     expect(row!.status).toBe('completed');
+    // Zombie sweeper depends on updated_at advancing — see JSDoc on
+    // workflow_runs.updatedAt.
+    expect(row!.updatedAt.getTime()).toBeGreaterThan(tBefore.getTime());
     expect(row!.summary).toBe('Done in 2 steps.');
     expect(row!.totalInputTokens).toBe(1500);
     expect(row!.totalOutputTokens).toBe(300);
@@ -187,6 +207,16 @@ describe('markCompleted', () => {
 describe('markFailed', () => {
   it('sets status=failed with errorMessage and bumps updated_at', async () => {
     const runId = await seedRun(fix);
+    const [before] = await db
+      .select({ updatedAt: workflowRuns.updatedAt })
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, runId));
+    const tBefore = before!.updatedAt;
+
+    // Ensure DB clock has advanced before the status update.
+    const deadline = Date.now() + 10;
+    while (Date.now() < deadline) { /* spin */ }
+
     await markFailed(runId, 'LLM quota exceeded');
 
     const [row] = await db
@@ -196,6 +226,9 @@ describe('markFailed', () => {
 
     expect(row!.status).toBe('failed');
     expect(row!.errorMessage).toBe('LLM quota exceeded');
+    // Zombie sweeper depends on updated_at advancing — see JSDoc on
+    // workflow_runs.updatedAt.
+    expect(row!.updatedAt.getTime()).toBeGreaterThan(tBefore.getTime());
 
     await db.delete(workflowRuns).where(eq(workflowRuns.id, runId));
   });
@@ -204,14 +237,25 @@ describe('markFailed', () => {
 describe('markCancelled', () => {
   it('sets status=cancelled and bumps updated_at', async () => {
     const runId = await seedRun(fix);
+    const [before] = await db
+      .select({ updatedAt: workflowRuns.updatedAt })
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, runId));
+    const tBefore = before!.updatedAt;
+
+    // Ensure DB clock has advanced before the status update.
+    const deadline = Date.now() + 10;
+    while (Date.now() < deadline) { /* spin */ }
+
     await markCancelled(runId);
 
     const [row] = await db
-      .select({ status: workflowRuns.status })
+      .select({ status: workflowRuns.status, updatedAt: workflowRuns.updatedAt })
       .from(workflowRuns)
       .where(eq(workflowRuns.id, runId));
 
     expect(row!.status).toBe('cancelled');
+    expect(row!.updatedAt.getTime()).toBeGreaterThan(tBefore.getTime());
 
     await db.delete(workflowRuns).where(eq(workflowRuns.id, runId));
   });

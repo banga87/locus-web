@@ -17,10 +17,9 @@
 import { dynamicTool, jsonSchema } from 'ai';
 import type { Tool } from 'ai';
 import type { JSONSchema7 } from '@ai-sdk/provider';
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { workflowRuns } from '@/db/schema/workflow-runs';
 import { bridgeLocusTool } from '@/lib/agent/tool-bridge';
 import { createDocumentTool } from '@/lib/tools/implementations/create-document';
 import { updateDocumentTool } from '@/lib/tools/implementations/update-document';
@@ -37,31 +36,39 @@ const WRITE_TOOL_NAMES = new Set(['create_document', 'update_document']);
 
 /**
  * Append a documentId to workflow_runs.output_document_ids, skipping
- * duplicates. Uses a Postgres array concatenation expression that only
- * appends when the element is not already present.
+ * duplicates. Uses a CASE expression so the append is a single UPDATE —
+ * no read-then-write race.
  *
  * Single-writer invariant: only the runner for this runId ever calls this.
+ * Fire-and-forget from the stamp middleware by design — the events log is
+ * the authoritative record of what tools ran. If this write fails, the
+ * output_document_ids array may be incomplete; reconciliation from the
+ * events log is a Phase 2 concern (autonomous-loop replay tooling).
+ *
  * Exported for test access.
  */
 export async function appendOutputDocumentId(
   runId: string,
   documentId: string,
 ): Promise<void> {
-  // Conditional append: extend the array only if the UUID is not already in it.
-  // `= ANY(output_document_ids)` is the idiomatic Postgres "contains" check.
-  await db
-    .update(workflowRuns)
-    .set({
-      outputDocumentIds: sql`
-        CASE
-          WHEN ${sql.raw(`'${documentId}'::uuid`)} = ANY(output_document_ids)
-          THEN output_document_ids
-          ELSE output_document_ids || ${sql.raw(`ARRAY['${documentId}'::uuid]`)}
-        END
-      `,
-      updatedAt: new Date(),
-    })
-    .where(eq(workflowRuns.id, runId));
+  // Parameterised UUID — Drizzle serialises both `documentId` and `runId`
+  // as bound parameters. No string interpolation of user-controlled values
+  // into SQL. `array_append` is used in the ELSE branch; the CASE handles
+  // deduplication without requiring DISTINCT/unnest round-trips.
+  //
+  // updated_at MUST be bumped on every workflow_runs write — the zombie
+  // sweeper (Task 6) reads it to detect stuck runs. See the JSDoc on
+  // workflow_runs.updatedAt.
+  const docId = sql`${documentId}::uuid`;
+  await db.execute(sql`
+    UPDATE workflow_runs
+    SET output_document_ids = CASE
+      WHEN ${docId} = ANY(output_document_ids) THEN output_document_ids
+      ELSE array_append(output_document_ids, ${docId})
+    END,
+    updated_at = now()
+    WHERE id = ${runId}::uuid
+  `);
 }
 
 /**

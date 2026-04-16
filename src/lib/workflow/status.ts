@@ -6,10 +6,20 @@
 // no DB trigger to auto-bump this column — forgetting to set it causes false-
 // positive zombie sweeps. See the JSDoc on workflowRuns.updatedAt.
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { workflowRuns } from '@/db/schema/workflow-runs';
+
+// All UPDATE statements use `now()` rather than `new Date()` for the
+// `updatedAt` column. Two reasons:
+//   1. `workflow_runs.createdAt` / `updatedAt` are populated with DB-clock
+//      `defaultNow()` on insert. Using DB clock consistently avoids subtle
+//      bugs when the zombie sweeper (Task 6) compares app-clock-written
+//      timestamps against DB-clock `now()`.
+//   2. Avoids cross-clock skew that makes tests flaky when asserting that
+//      `updatedAt` advanced after a status write.
+const nowSql = sql`now()`;
 
 // ---------------------------------------------------------------------------
 // Status transition helpers
@@ -19,7 +29,7 @@ import { workflowRuns } from '@/db/schema/workflow-runs';
 export async function markRunning(runId: string): Promise<void> {
   await db
     .update(workflowRuns)
-    .set({ status: 'running', updatedAt: new Date() })
+    .set({ status: 'running', updatedAt: nowSql })
     .where(eq(workflowRuns.id, runId));
 }
 
@@ -44,8 +54,8 @@ export async function markCompleted(
       totalInputTokens: params.inputTokens,
       totalOutputTokens: params.outputTokens,
       totalCostUsd: String(params.costUsd ?? 0),
-      completedAt: new Date(),
-      updatedAt: new Date(),
+      completedAt: nowSql,
+      updatedAt: nowSql,
     })
     .where(eq(workflowRuns.id, runId));
 }
@@ -60,7 +70,7 @@ export async function markFailed(
     .set({
       status: 'failed',
       errorMessage,
-      updatedAt: new Date(),
+      updatedAt: nowSql,
     })
     .where(eq(workflowRuns.id, runId));
 }
@@ -69,7 +79,7 @@ export async function markFailed(
 export async function markCancelled(runId: string): Promise<void> {
   await db
     .update(workflowRuns)
-    .set({ status: 'cancelled', updatedAt: new Date() })
+    .set({ status: 'cancelled', updatedAt: nowSql })
     .where(eq(workflowRuns.id, runId));
 }
 

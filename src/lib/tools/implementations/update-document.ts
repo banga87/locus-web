@@ -191,15 +191,34 @@ export const updateDocumentTool: LocusTool<
       input.body !== undefined ? { type: newType } : {};
 
     // Recompute outbound links when content changes; preserve other metadata.
+    // Also merge workflow last-touched stamps if this call originates from a
+    // workflow run. Stamps are written inside the transaction for atomicity.
+    // The stamp fields are intentionally NOT in the user-facing input schema
+    // (additionalProperties: false) — they travel via ToolContext.workflowRunContext.
+    const workflowStamp = context.workflowRunContext
+      ? {
+          last_touched_by_workflow: context.workflowRunContext.workflowDocRef,
+          last_touched_by_workflow_run_id: context.workflowRunContext.runId,
+        }
+      : {};
+
     const metadataUpdate =
       input.body !== undefined
         ? {
             metadata: {
               ...((existing.metadata as Record<string, unknown> | null) ?? {}),
               outbound_links: parseOutboundLinks(input.body),
+              ...workflowStamp,
             },
           }
-        : {};
+        : Object.keys(workflowStamp).length > 0
+          ? {
+              metadata: {
+                ...((existing.metadata as Record<string, unknown> | null) ?? {}),
+                ...workflowStamp,
+              },
+            }
+          : {};
 
     const changeSummary = `updated by agent: ${editableKeys.join(', ')}`;
 

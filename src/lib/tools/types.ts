@@ -82,6 +82,20 @@ export interface ToolContext {
    * increment. Used to enforce the 15-call safety rail.
    */
   webCallsThisTurn: number;
+
+  /**
+   * Workflow run context — present when a tool is being called from inside
+   * a workflow run. Write tools read this to stamp provenance into
+   * documents.metadata within their own transaction. Never set for
+   * interactive (chat) tool calls.
+   *
+   * `workflowDocRef` is the human-legible path of the workflow document
+   * (e.g. "workflows/my-workflow") written into the stamp, NOT the UUID.
+   */
+  workflowRunContext?: {
+    runId: string;
+    workflowDocRef: string;
+  };
 }
 
 /**

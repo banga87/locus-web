@@ -218,6 +218,19 @@ export const createDocumentTool: LocusTool<
     let doc: typeof documents.$inferSelect;
     try {
       doc = await db.transaction(async (tx) => {
+        // Merge workflow provenance stamps into metadata if this call
+        // originates from a workflow run. Stamps are written inside the
+        // transaction so they're atomic with the document insert — no
+        // separate UPDATE needed. The stamp fields are intentionally NOT
+        // in the user-facing input schema (additionalProperties: false),
+        // which is why they travel via ToolContext rather than input.
+        const workflowStamp = context.workflowRunContext
+          ? {
+              created_by_workflow: context.workflowRunContext.workflowDocRef,
+              created_by_workflow_run_id: context.workflowRunContext.runId,
+            }
+          : {};
+
         const [inserted] = await tx
           .insert(documents)
           .values({
@@ -234,7 +247,7 @@ export const createDocumentTool: LocusTool<
             isCore: false,
             ownerId,
             type: documentType,
-            metadata: { outbound_links: parseOutboundLinks(input.body) },
+            metadata: { outbound_links: parseOutboundLinks(input.body), ...workflowStamp },
             version: 1,
           })
           .returning();

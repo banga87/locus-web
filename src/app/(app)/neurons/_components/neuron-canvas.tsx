@@ -1,11 +1,12 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useMemo, useRef, useEffect, useCallback } from 'react';
+import { useMemo, useRef, useEffect, useCallback, useState } from 'react';
 import type { ForceGraphMethods, NodeObject } from 'react-force-graph-2d';
 import type { GraphResponse } from '@/lib/graph/derive-graph';
 import type { McpCallLine, GraphMcpConnection, Pulse } from '@/lib/brain-pulse/types';
 import { resolveAgentColor } from '@/lib/brain-pulse/agent-palette';
+import { folderClusterForce } from '@/lib/graph/forces';
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
 
@@ -32,7 +33,7 @@ function mcpOverlayStyle(index: number, total: number): React.CSSProperties {
 
 export function NeuronCanvas({ graph, pulses, mcpCallLines, mcpConnections, soloAgentId = null, onNodeClick }: Props) {
   const graphData = useMemo(() => ({
-    nodes: graph.nodes.map((n) => ({ id: n.id, name: n.title, path: n.path })),
+    nodes: graph.nodes.map((n) => ({ id: n.id, name: n.title, path: n.path, folder_id: n.folder_id })),
     links: graph.edges.map((e) => ({ source: e.source, target: e.target, type: e.type })),
   }), [graph]);
 
@@ -59,6 +60,13 @@ export function NeuronCanvas({ graph, pulses, mcpCallLines, mcpConnections, solo
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const mcpScreenPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
 
+  const [fgReady, setFgReady] = useState(false);
+  const hasCentredRef = useRef(false);
+  const setFgRef = useCallback((instance: ForceGraphMethods | null) => {
+    fgRef.current = instance;
+    setFgReady(Boolean(instance));
+  }, []);
+
   // Re-measure hex screen positions on resize + mount.
   useEffect(() => {
     const measure = () => {
@@ -80,7 +88,26 @@ export function NeuronCanvas({ graph, pulses, mcpCallLines, mcpConnections, solo
     return () => ro.disconnect();
   }, [mcpConnections.length]);
 
+  useEffect(() => {
+    if (!fgReady) return;
+    const fg = fgRef.current;
+    if (!fg) return;
+    fg.d3Force('charge')?.strength(-80);
+    fg.d3Force('link')?.distance(40).strength(0.4);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    fg.d3Force('cluster', folderClusterForce({ strength: 0.08, orphanStrength: 0.02 }) as any);
+    // No manual reheat: react-force-graph-2d reheats automatically when
+    // graphData identity changes, which covers the live-update case.
+  }, [fgReady]);
+
+  const onEngineStop = useCallback(() => {
+    if (hasCentredRef.current) return;
+    fgRef.current?.zoomToFit(400, 60);
+    hasCentredRef.current = true;
+  }, []);
+
   // Per-frame line drawing via onRenderFramePost.
+  // MCP lines: gradient stroke with shadowBlur glow; outbound solid, return dashed.
   const onRenderFramePost = useCallback((ctx: CanvasRenderingContext2D) => {
     const fg = fgRef.current;
     if (!fg) return;
@@ -88,13 +115,13 @@ export function NeuronCanvas({ graph, pulses, mcpCallLines, mcpConnections, solo
     const wrap = wrapRef.current;
     const wrapBox = wrap ? wrap.getBoundingClientRect() : null;
 
+    ctx.save();
     for (const line of mcpCallLines) {
       const mcpScreen = mcpScreenPositions.current.get(line.mcpConnectionId);
       if (!mcpScreen) continue;
 
       let originScreen: { x: number; y: number } | null = null;
       if (line.originNodeId) {
-        // graph2ScreenCoords needs world coords — look up current node position.
         const graphData = (fg as unknown as { graphData: () => { nodes: Array<{ id: string; x: number; y: number }> } }).graphData();
         const node = graphData.nodes.find((n) => n.id === line.originNodeId);
         originScreen = node ? fg.graph2ScreenCoords(node.x, node.y) : null;
@@ -108,73 +135,120 @@ export function NeuronCanvas({ graph, pulses, mcpCallLines, mcpConnections, solo
       const age = now - line.startedAt;
       const isComplete = line.completedAt !== null;
 
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = color;
+
       if (isComplete) {
         const returnAge = now - line.completedAt!;
         const alpha = Math.max(0, 1 - returnAge / 600);
         ctx.strokeStyle = color;
         ctx.globalAlpha = alpha;
         ctx.lineWidth = 1;
-        ctx.setLineDash([4, 3]);
+        ctx.setLineDash([5, 4]);
+        ctx.lineDashOffset = -(now - line.completedAt!) / 40;
         ctx.beginPath();
         ctx.moveTo(mcpScreen.x, mcpScreen.y);
         ctx.lineTo(originScreen.x, originScreen.y);
         ctx.stroke();
         ctx.setLineDash([]);
       } else {
-        const alpha = Math.max(0.3, 1 - age / 15_000);
-        ctx.strokeStyle = color;
+        const alpha = Math.max(0.4, 1 - age / 15_000);
+        const grad = ctx.createLinearGradient(originScreen.x, originScreen.y, mcpScreen.x, mcpScreen.y);
+        grad.addColorStop(0, color);
+        grad.addColorStop(1, 'rgba(255,200,87,0.9)');
+        ctx.strokeStyle = grad;
         ctx.globalAlpha = alpha;
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.8;
         ctx.beginPath();
         ctx.moveTo(originScreen.x, originScreen.y);
         ctx.lineTo(mcpScreen.x, mcpScreen.y);
         ctx.stroke();
       }
-      ctx.globalAlpha = 1;
     }
+    ctx.restore();
   }, [mcpCallLines]);
 
   return (
     <div className="neurons-canvas-wrap" ref={wrapRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
       <ForceGraph2D
-        ref={fgRef as never}
+        ref={setFgRef as never}
         graphData={graphData}
         nodeRelSize={nodeRelSize}
         cooldownTicks={cooldownTicks}
         d3AlphaDecay={0.04}
         d3VelocityDecay={0.4}
-        backgroundColor="var(--paper-2, #0d0f13)"
-        linkColor={() => 'rgba(255,255,255,0.08)'}
+        backgroundColor="transparent"
+        linkColor={() => 'rgba(164, 201, 169, 0.07)'}
         onNodeClick={(node: NodeObject) => onNodeClick?.(String(node.id))}
+        onEngineStop={onEngineStop}
         nodeCanvasObject={(node: NodeObject, ctx: CanvasRenderingContext2D) => {
           const x = node.x ?? 0;
           const y = node.y ?? 0;
-          const baseR = 4;
 
-          // Base node dot
-          ctx.fillStyle = '#3a3f4a';
+          // Pass 1: radial halo
+          const halo = ctx.createRadialGradient(x, y, 0, x, y, 11);
+          halo.addColorStop(0, 'rgba(168, 163, 151, 0.42)');
+          halo.addColorStop(1, 'rgba(168, 163, 151, 0)');
+          ctx.fillStyle = halo;
           ctx.beginPath();
-          ctx.arc(x, y, baseR, 0, 2 * Math.PI);
+          ctx.arc(x, y, 11, 0, 2 * Math.PI);
           ctx.fill();
 
-          // Pulse overlays
+          // Pass 2: warm-gray core
+          ctx.fillStyle = '#a8a397';
+          ctx.beginPath();
+          ctx.arc(x, y, 2.4, 0, 2 * Math.PI);
+          ctx.fill();
+
+          // Pass 3: pulse overlays — additive blend for glow
           const now = Date.now();
           const arr = pulsesByNode.get(String(node.id)) ?? [];
+          if (arr.length === 0) return;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
           for (const p of arr) {
             if (soloAgentId && p.agentId !== soloAgentId) continue;
             const age = now - p.createdAt;
             if (age > p.durationMs) continue;
-            const t = age / p.durationMs; // 0..1
             const isDelete = p.category === 'document_mutation' && p.eventType === 'delete';
-            const stroke = isDelete ? '#e57373' : resolveAgentColor(p.agentId).canvas;
-            ctx.globalAlpha = 1 - t;
-            ctx.strokeStyle = stroke;
-            ctx.lineWidth = Math.max(1, 2 * (1 - t));
-            ctx.beginPath();
-            ctx.arc(x, y, baseR + 10 * t, 0, 2 * Math.PI);
-            ctx.stroke();
+            const isBirth = p.category === 'document_mutation' && p.eventType === 'create';
+            const stroke = isDelete ? '#ff6b6b' : resolveAgentColor(p.agentId).canvas;
+
+            if (isBirth) {
+              // 3-ring expanding wave + brief core flash
+              for (let k = 0; k < 3; k++) {
+                const tk = (age - k * 300) / Math.max(1, p.durationMs - 600);
+                if (tk < 0 || tk > 1) continue;
+                ctx.globalAlpha = (1 - tk) * 0.85;
+                ctx.strokeStyle = '#5ef0c8';
+                ctx.lineWidth = 2.2 * (1 - tk);
+                ctx.beginPath();
+                ctx.arc(x, y, 4 + 28 * tk, 0, 2 * Math.PI);
+                ctx.stroke();
+              }
+              const flashT = age / p.durationMs;
+              if (flashT < 0.12) {
+                ctx.globalAlpha = (1 - flashT / 0.12) * 0.9;
+                ctx.fillStyle = '#5ef0c8';
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                ctx.fill();
+              }
+            } else {
+              // Standard pulse: double wave (two rings offset 100ms)
+              for (let k = 0; k < 2; k++) {
+                const tk = (age - k * 100) / Math.max(1, p.durationMs - 200);
+                if (tk < 0 || tk > 1) continue;
+                ctx.globalAlpha = (1 - tk) * 0.9;
+                ctx.strokeStyle = stroke;
+                ctx.lineWidth = 1.6 * (1 - tk);
+                ctx.beginPath();
+                ctx.arc(x, y, 3 + 14 * tk, 0, 2 * Math.PI);
+                ctx.stroke();
+              }
+            }
           }
-          ctx.globalAlpha = 1;
+          ctx.restore();
         }}
         nodeCanvasObjectMode={() => 'replace'}
         onRenderFramePost={onRenderFramePost}

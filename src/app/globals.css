@@ -651,14 +651,11 @@
 
 .sidebar-resize-handle {
   position: relative;
+  width: 12px;
+  margin: 0 -4px;
   background: transparent;
   cursor: col-resize;
   touch-action: none;
-}
-.sidebar-resize-handle::before {
-  content: "";
-  position: absolute;
-  inset: 0 -4px; /* 12px total hit zone (4 visible + 8 hover overflow) */
 }
 .sidebar-resize-handle:hover {
   background: var(--rule-soft);

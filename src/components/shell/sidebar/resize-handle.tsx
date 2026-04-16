@@ -8,6 +8,7 @@ const MIN = 220;
 const MAX = 480;
 const STEP = 8;
 const DEFAULT = 280;
+const RAIL_WIDTH = 56;
 
 export function ResizeHandle() {
   const { collapsed, width, setWidth } = useSidebarLayout();
@@ -65,7 +66,7 @@ export function ResizeHandle() {
       aria-label="Resize sidebar"
       aria-valuemin={MIN}
       aria-valuemax={MAX}
-      aria-valuenow={collapsed ? 56 : width}
+      aria-valuenow={collapsed ? RAIL_WIDTH : width}
       tabIndex={collapsed ? -1 : 0}
       className="sidebar-resize-handle"
       data-collapsed={collapsed || undefined}

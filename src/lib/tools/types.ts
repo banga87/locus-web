@@ -17,6 +17,7 @@
 
 import type { JSONSchemaType, SchemaObject } from 'ajv';
 import type { ActorType, AuditEvent } from '@/lib/audit/types';
+import type { Role } from '@/lib/agent/permissions/policy';
 
 /**
  * JSON Schema passed to ajv. Accepts either a typed schema (for compile-time
@@ -44,6 +45,13 @@ export interface Actor {
   name?: string;
   /** Scopes granted to this actor. Pre-MVP: `['read']`. */
   scopes: string[];
+  /**
+   * Role-based permission level. Populated by the Platform Agent route layer
+   * from the brain membership record. Absent for MCP token callers (those
+   * rely solely on `scopes`). When present, the permission evaluator enforces
+   * role-based write gates in addition to the scope check.
+   */
+  role?: Role;
 }
 
 /**
@@ -152,6 +160,15 @@ export interface LocusTool<I = unknown, O = unknown> {
    *   - 'web'   — web_search + web_fetch declare this
    */
   readonly capabilities?: string[];
+
+  /**
+   * The permission action this tool requires. All existing read tools
+   * declare 'read'. Write tools (Task 2) declare 'write'. The executor
+   * uses this to run the role-based permission evaluator before dispatch.
+   *
+   * When absent the executor falls back to inferring from `isReadOnly()`.
+   */
+  readonly action?: 'read' | 'write';
 
   /** True if the tool does not modify brain state. */
   isReadOnly(): boolean;

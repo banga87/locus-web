@@ -60,6 +60,8 @@ export const getDiffHistoryTool: LocusTool<
     additionalProperties: false,
   },
 
+  action: 'read' as const,
+
   isReadOnly() {
     return true;
   },

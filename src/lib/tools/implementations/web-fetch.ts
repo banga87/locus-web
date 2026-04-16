@@ -44,6 +44,8 @@ export const webFetchTool: LocusTool<WebFetchInput, WebFetchOutput> = {
   },
   capabilities: ['web'],
 
+  action: 'read' as const,
+
   isReadOnly() { return true; },
 
   async call(input, context): Promise<ToolResult<WebFetchOutput>> {

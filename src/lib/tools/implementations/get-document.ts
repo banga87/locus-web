@@ -58,6 +58,8 @@ export const getDocumentTool: LocusTool<GetDocumentInput, GetDocumentOutput> = {
     // same schema is forwarded to the AI SDK tool bridge.
   },
 
+  action: 'read' as const,
+
   isReadOnly() {
     return true;
   },

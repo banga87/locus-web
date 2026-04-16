@@ -29,6 +29,8 @@ export const webSearchTool: LocusTool<WebSearchInput, WebSearchOutput> = {
   },
   capabilities: ['web'],
 
+  action: 'read' as const,
+
   isReadOnly() { return true; },
 
   async call(input, context): Promise<ToolResult<WebSearchOutput>> {

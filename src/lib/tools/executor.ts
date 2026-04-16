@@ -24,6 +24,10 @@ import addFormats from 'ajv-formats';
 
 import { logEvent } from '@/lib/audit/logger';
 import type { AuditEvent } from '@/lib/audit/types';
+import {
+  evaluate,
+  PermissionDeniedError,
+} from '@/lib/agent/permissions/evaluator';
 
 import { TOOL_ACTION_MAP, type ToolAction } from './action-map';
 import { resolveResource } from './resource-resolver';
@@ -159,6 +163,37 @@ export async function executeTool(
     fireAuditEvent(tool, rawInput, denied, context, { denied: true });
 
     return denied;
+  }
+
+  // Role-based permission check. Runs when the actor carries a `role`
+  // (Platform Agent callers) and the tool declares an `action`. MCP token
+  // callers (no `role`) skip this gate and rely solely on `scopes` above.
+  if (context.actor.role !== undefined) {
+    const toolAction = tool.action ?? (tool.isReadOnly() ? 'read' : 'write');
+    try {
+      evaluate(
+        { actor: { role: context.actor.role }, brainId: context.brainId },
+        { action: toolAction, resourceType: 'document' },
+      );
+    } catch (err) {
+      if (err instanceof PermissionDeniedError) {
+        const denied = buildError(
+          'permission_denied',
+          err.message,
+          {
+            hint:
+              toolAction === 'write'
+                ? 'Your role does not permit write operations on this brain.'
+                : 'Your role does not permit this operation.',
+            retryable: false,
+          },
+          startMs,
+        );
+        fireAuditEvent(tool, rawInput, denied, context, { denied: true });
+        return denied;
+      }
+      throw err; // unexpected — propagate to the execution_error catch below
+    }
   }
 
   // ---- Step 4: Execute --------------------------------------------------

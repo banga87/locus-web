@@ -48,6 +48,8 @@ export const getDocumentDiffTool: LocusTool<
     additionalProperties: false,
   },
 
+  action: 'read' as const,
+
   isReadOnly() {
     return true;
   },

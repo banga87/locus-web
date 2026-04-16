@@ -93,6 +93,19 @@ export function useWorkflowRun(runId: string): UseWorkflowRunResult {
   const lastSeqRef = useRef<number>(-1);
   const cancelledRef = useRef(false);
 
+  // Mirror `meta` into a ref so the backfill setInterval callback reads
+  // the current value instead of the closure snapshot. The main effect
+  // runs once per `runId` — without this mirror, `meta` stays `null`
+  // inside the interval for the entire run lifetime, so the terminal-
+  // state self-cancel check never fires and polling runs forever.
+  // We deliberately don't add `meta` to the main effect's dep array
+  // because that would tear down + re-establish the Realtime channel
+  // on every status change.
+  const metaRef = useRef<RunMeta | null>(null);
+  useEffect(() => {
+    metaRef.current = meta;
+  }, [meta]);
+
   // ---------------------------------------------------------------------------
   // Fetch helpers
   // ---------------------------------------------------------------------------
@@ -191,12 +204,20 @@ export function useWorkflowRun(runId: string): UseWorkflowRunResult {
 
     // 3. Periodic backfill — recovers Realtime gaps while the run is active.
     //    Stops once the run reaches a terminal status.
+    //
+    //    IMPORTANT: reads `metaRef.current` (not `meta` from the outer
+    //    closure). The effect runs once per `runId`, so closing over `meta`
+    //    directly would freeze the value at `null` for the entire lifetime
+    //    of the interval and the self-cancel check would never fire —
+    //    polling would run until unmount. The ref mirror (declared above)
+    //    is updated on every render, so the interval always sees the
+    //    current status.
+    const terminalStatuses: RunStatus[] = ['completed', 'failed', 'cancelled'];
     backfillTimer = setInterval(() => {
       if (cancelledRef.current) return;
-      // Only backfill while we don't have a terminal status locally.
-      // meta might not be set yet on first tick, so treat null as running.
-      const terminalStatuses: RunStatus[] = ['completed', 'failed', 'cancelled'];
-      const isTerminal = meta !== null && terminalStatuses.includes(meta.status);
+      const currentMeta = metaRef.current;
+      const isTerminal =
+        currentMeta !== null && terminalStatuses.includes(currentMeta.status);
       if (isTerminal) {
         if (backfillTimer) clearInterval(backfillTimer);
         return;

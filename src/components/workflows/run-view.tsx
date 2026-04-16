@@ -39,6 +39,7 @@ import {
   type WorkflowRunEvent,
 } from '@/hooks/use-workflow-run';
 
+import { OutputCard } from './output-card';
 import { RunStatusBanner } from './run-status-banner';
 
 // ---------------------------------------------------------------------------
@@ -284,15 +285,15 @@ export function RunView({ runId, workflowSlug }: RunViewProps) {
         )}
       </div>
 
-      {/* Output card — lazy-loaded server component rendered via
-          the page after completion. We surface an anchor target here
-          so the banner's "View output ↓" link scrolls to it. The actual
-          <OutputCard> is rendered by the page as a Suspense boundary so
-          the client doesn't need to import server-only DB code.
-          When complete + output present, we show a placeholder anchor;
-          the page wraps <OutputCard> below the <RunView>. */}
+      {/* Output card — client-side, driven by the live hook state so it
+          appears the moment `run_complete` lands (no page refresh needed).
+          OutputCard itself batches a POST to /api/brain/documents/titles
+          to render titles + links. When documentIds is empty, the card
+          renders nothing, so this condition + the card's own guard are
+          belt-and-suspenders. The card's id="output" is the scroll target
+          for the banner's "View output ↓" link. */}
       {isComplete && outputDocumentIds.length > 0 && (
-        <div id="output-anchor" aria-hidden="true" />
+        <OutputCard documentIds={outputDocumentIds} />
       )}
     </div>
   );

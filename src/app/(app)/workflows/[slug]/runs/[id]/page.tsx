@@ -7,14 +7,14 @@
 //   2. Slug validation: confirm the URL slug matches the run's workflow doc.
 //   3. Render the app chrome (topbar + breadcrumbs).
 //   4. Pass runId down to <RunView> (client component — hooks + Realtime).
-//   5. Render <OutputCard> below <RunView> in a Suspense boundary so the
-//      server-side DB fetch for output doc titles doesn't block the initial
-//      HTML. OutputCard renders null when outputDocumentIds is empty.
+//
+// OutputCard is rendered from inside <RunView> based on live hook state
+// (not from this server component), so it appears without a page refresh
+// the moment `run_complete` lands. See notes in run-view.tsx.
 //
 // ACL note: returns 404 on denial (not 403) — same as the API routes —
 // so we don't leak whether a run UUID exists across tenants.
 
-import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -26,7 +26,6 @@ import { canAccessRun } from '@/lib/workflow/access';
 import { getWorkflowRunById } from '@/lib/workflow/queries';
 import { ThemeToggle } from '@/components/shell/theme-toggle';
 import { RunView } from '@/components/workflows/run-view';
-import { OutputCard } from '@/components/workflows/output-card';
 
 interface PageProps {
   params: Promise<{ slug: string; id: string }>;
@@ -73,8 +72,6 @@ export default async function RunViewPage({ params }: PageProps) {
 
   if (!doc) return notFound();
 
-  const outputDocumentIds = run.outputDocumentIds ?? [];
-
   return (
     <>
       <div className="topbar">
@@ -95,30 +92,10 @@ export default async function RunViewPage({ params }: PageProps) {
 
       <div className="article-wrap">
         <div className="mx-auto w-full max-w-3xl px-6 py-8">
-          {/* Client component — subscribes to Realtime, renders event stream */}
+          {/* Client component — subscribes to Realtime, renders event stream
+              plus the OutputCard (which fetches its own doc titles via
+              POST /api/brain/documents/titles once run_complete lands). */}
           <RunView runId={id} workflowSlug={slug} />
-
-          {/* Output card — server component in a Suspense boundary.
-              Renders null when outputDocumentIds is empty (completed with
-              no output, or run not yet complete).
-              The <RunView> renders an #output anchor when complete+output
-              present; the banner's "View output ↓" link targets that anchor.
-              We pass the IDs from the server-side run row (the point-in-time
-              snapshot); if the run hasn't completed yet, outputDocumentIds is
-              [] and this renders nothing. The client can refresh the page
-              after completion to see outputs, or follow the "View output ↓"
-              link that appears in the banner once complete. */}
-          {outputDocumentIds.length > 0 && (
-            <div className="mt-6" id="output">
-              <Suspense
-                fallback={
-                  <div className="h-20 animate-pulse rounded-lg bg-secondary/40" />
-                }
-              >
-                <OutputCard outputDocumentIds={outputDocumentIds} />
-              </Suspense>
-            </div>
-          )}
 
           {/* Back link */}
           <div className="mt-8 text-center">

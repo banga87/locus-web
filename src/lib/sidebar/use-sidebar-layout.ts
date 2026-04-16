@@ -169,6 +169,13 @@ export function ensureSidebarHydrated(): void {
   listeners.forEach((fn) => fn());
 }
 
+// Imperative API for global keyboard handler that lives outside the
+// React tree (installed in SidebarLayoutBoot). Mirrors toggleCollapsed
+// behavior from the hook.
+export function toggleSidebarCollapsedImperative() {
+  setState((prev) => ({ ...prev, collapsed: !prev.collapsed }));
+}
+
 // Test-only: reset module-level store. MUST be called in beforeEach for
 // any test that interacts with the hook, or state leaks between tests.
 // (The `useSyncExternalStore` pattern relies on a shared module-scoped

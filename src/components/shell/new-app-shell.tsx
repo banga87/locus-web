@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 
 import type { ManifestFolder } from '@/lib/brain/manifest';
 
-import { NewSidebar } from './new-sidebar';
+import { Sidebar } from './sidebar/sidebar';
 import { ResizeHandle } from './sidebar/resize-handle';
 
 interface NewAppShellProps {
@@ -22,7 +22,7 @@ interface NewAppShellProps {
 export function NewAppShell({ children, ...props }: NewAppShellProps) {
   return (
     <div className="app">
-      <NewSidebar {...props} />
+      <Sidebar {...props} />
       <ResizeHandle />
       <section className="main">{children}</section>
     </div>

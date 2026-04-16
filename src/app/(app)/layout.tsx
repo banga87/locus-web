@@ -18,6 +18,7 @@ import {
   getPinnedDocuments,
 } from '@/lib/brain/queries';
 import { NewAppShell } from '@/components/shell/new-app-shell';
+import { SidebarLayoutBoot } from '@/components/shell/sidebar/sidebar-layout-boot';
 
 export default async function AppLayout({
   children,
@@ -76,13 +77,16 @@ export default async function AppLayout({
   ]);
 
   return (
-    <NewAppShell
-      companyName={companyName}
-      user={{ email: ctx.email, fullName: ctx.fullName, role: ctx.role }}
-      tree={tree}
-      pinned={pinned}
-    >
-      {children}
-    </NewAppShell>
+    <>
+      <SidebarLayoutBoot />
+      <NewAppShell
+        companyName={companyName}
+        user={{ email: ctx.email, fullName: ctx.fullName, role: ctx.role }}
+        tree={tree}
+        pinned={pinned}
+      >
+        {children}
+      </NewAppShell>
+    </>
   );
 }

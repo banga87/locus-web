@@ -7,8 +7,10 @@
 // brand block identical to the legacy file so rendering is unchanged.
 
 import Link from 'next/link';
+import { PanelLeftClose } from 'lucide-react';
 
 import type { ManifestFolder } from '@/lib/brain/manifest';
+import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
 
 import { WorkspaceRow } from '../workspace-row';
 import { BrainSection } from './sections/brain-section';
@@ -22,6 +24,7 @@ interface SidebarExpandedProps {
 }
 
 export function SidebarExpanded({ companyName, user, tree, pinned }: SidebarExpandedProps) {
+  const { toggleCollapsed } = useSidebarLayout();
   const userInitials = (user.fullName ?? user.email)
     .split(/\s+/)
     .map((s) => s[0])
@@ -36,8 +39,17 @@ export function SidebarExpanded({ companyName, user, tree, pinned }: SidebarExpa
       <div className="brand">
         <span className="brand-name">Locus</span>
         <span className="brand-dot" aria-hidden="true" />
-        <span className="brand-tag">v0.1</span>
-        {/* Task 6 inserts the collapse toggle button here. */}
+        <div className="brand-right">
+          <span className="brand-tag">v0.1</span>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label="Collapse sidebar"
+            className="brand-collapse"
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        </div>
       </div>
 
       <WorkspaceRow companyName={companyName} />

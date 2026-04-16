@@ -214,7 +214,6 @@
   background: var(--accent);
 }
 .brand-tag {
-  margin-left: auto;
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--ink-3);
@@ -670,6 +669,79 @@
 
 .app[data-sidebar-collapsed="true"] {
   grid-template-columns: var(--sidebar-width, 56px) 0 1fr;
+}
+
+.brand-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.brand-collapse {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  background: transparent; border: 0;
+  border-radius: 4px; color: var(--ink-3);
+  cursor: pointer;
+}
+.brand-collapse:hover { background: var(--hover); color: var(--ink); }
+.brand-collapse:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+.side-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 4px;
+  gap: 6px;
+  background: var(--paper-2);
+  border-right: 1px solid var(--rule);
+  overflow: hidden;
+}
+.rail-brand {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+}
+.rail-quick, .rail-sections, .rail-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  align-items: center;
+}
+.rail-bottom { margin-top: auto; }
+.rail-btn {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ink-2);
+  cursor: pointer;
+  text-decoration: none;
+  position: relative;
+}
+.rail-btn:hover { background: var(--hover); color: var(--ink); }
+.rail-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.rail-btn[aria-current="true"] { color: var(--accent); }
+.rail-btn[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 2px;
 }
 
 /* === End app shell === */

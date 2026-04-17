@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   resolveAuthServerMetadataImpl: vi.fn(),
   performDcrImpl: vi.fn(),
   buildAuthorizeUrlImpl: vi.fn(),
+  exchangeCodeForTokensImpl: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', async () => {
@@ -61,6 +62,8 @@ vi.mock('@/lib/connectors/mcp-oauth', () => ({
     mocks.resolveAuthServerMetadataImpl(...args),
   performDcr: (...args: unknown[]) => mocks.performDcrImpl(...args),
   buildAuthorizeUrl: (...args: unknown[]) => mocks.buildAuthorizeUrlImpl(...args),
+  exchangeCodeForTokens: (...args: unknown[]) =>
+    mocks.exchangeCodeForTokensImpl(...args),
 }));
 
 // --- Subject -------------------------------------------------------------
@@ -71,8 +74,15 @@ import {
   PATCH,
   DELETE,
 } from '../[id]/route';
+import { GET as callbackGET } from '../oauth/callback/route';
 import { db } from '@/db';
 import { companies, mcpConnections } from '@/db/schema';
+import { __resetPkceStoreForTests } from '@/lib/connectors/pkce-store';
+import {
+  decryptCredential,
+  getConnection,
+} from '@/lib/mcp-out/connections';
+import { decodeCredentials } from '@/lib/connectors/credentials';
 
 // --- Setup ---------------------------------------------------------------
 
@@ -118,8 +128,11 @@ beforeEach(() => {
   mocks.resolveAuthServerMetadataImpl.mockReset();
   mocks.performDcrImpl.mockReset();
   mocks.buildAuthorizeUrlImpl.mockReset();
+  mocks.exchangeCodeForTokensImpl.mockReset();
   // kickoffOauthInstall throws if this is unset.
   process.env.CONNECTORS_STATE_SECRET = '0'.repeat(64);
+  // PKCE store is in-memory module state — isolate tests from each other.
+  __resetPkceStoreForTests();
 });
 
 function mockOwner() {
@@ -437,6 +450,158 @@ describeDb('POST /api/admin/connectors (catalog OAuth kickoff)', () => {
         }),
       }),
     );
+  });
+});
+
+// --- GET /api/admin/connectors/oauth/callback -----------------------
+
+describeDb('GET /api/admin/connectors/oauth/callback', () => {
+  // Drive a full kickoff so a real (signed) state + a real PKCE verifier
+  // land in the in-memory store, then call the callback handler. We
+  // assert the handler renders the postMessage HTML, flips the
+  // connection to active, and rewrites credentials with the new tokens.
+  it('exchanges the code, flips the row to active, and renders the postMessage HTML', async () => {
+    mockOwner();
+
+    const fakeMetadata = {
+      authorizationEndpoint: 'https://auth.example.test/oauth/authorize',
+      tokenEndpoint: 'https://auth.example.test/oauth/token',
+      registrationEndpoint: 'https://auth.example.test/oauth/register',
+      revocationEndpoint: null,
+      scopesSupported: ['read', 'write'],
+    };
+    mocks.resolveAuthServerMetadataImpl.mockResolvedValue({
+      ok: true,
+      metadata: fakeMetadata,
+    });
+    mocks.performDcrImpl.mockResolvedValue({
+      ok: true,
+      clientId: 'cid',
+      clientSecret: 'csecret',
+    });
+    // The kickoff route calls buildAuthorizeUrl with the real state the
+    // route just generated. Capture those args so we can pull the state
+    // out and hand it to the callback.
+    mocks.buildAuthorizeUrlImpl.mockImplementation(
+      (_meta: unknown, opts: { state: string }) =>
+        `https://auth.example.test/oauth/authorize?state=${encodeURIComponent(opts.state)}`,
+    );
+
+    const kickoffReq = bodyRequest(
+      'https://test.local/api/admin/connectors',
+      'POST',
+      { catalogId: 'linear' },
+    );
+    const kickoffRes = await POST(kickoffReq);
+    expect(kickoffRes.status).toBe(200);
+    const kickoffPayload = (await kickoffRes.json()) as {
+      connection: { id: string; status: string };
+      next: { authorizeUrl: string };
+    };
+    expect(kickoffPayload.connection.status).toBe('pending');
+    createdConnectionIds.push(kickoffPayload.connection.id);
+
+    // Extract the generated state from the authorize URL.
+    const state = new URL(kickoffPayload.next.authorizeUrl).searchParams.get(
+      'state',
+    );
+    expect(state).toBeTruthy();
+
+    // Callback-phase mock: exchangeCodeForTokens returns fresh tokens.
+    const futureIso = new Date(Date.now() + 3_600_000).toISOString();
+    mocks.exchangeCodeForTokensImpl.mockResolvedValue({
+      ok: true,
+      tokens: {
+        accessToken: 'new-at',
+        refreshToken: 'new-rt',
+        expiresAt: futureIso,
+        tokenType: 'Bearer',
+        scope: null,
+      },
+    });
+
+    const callbackReq = new Request(
+      `https://locus.local/api/admin/connectors/oauth/callback?code=abc&state=${encodeURIComponent(
+        state!,
+      )}`,
+    );
+    const callbackRes = await callbackGET(callbackReq);
+
+    expect(callbackRes.status).toBe(200);
+    expect(callbackRes.headers.get('content-type')).toBe(
+      'text/html; charset=utf-8',
+    );
+    const html = await callbackRes.text();
+    expect(html).toContain('window.opener.postMessage');
+    expect(html).toContain('connector-oauth-complete');
+
+    // Row flipped to active.
+    const latest = await getConnection(
+      kickoffPayload.connection.id,
+      TEST_COMPANY_ID,
+    );
+    expect(latest).not.toBeNull();
+    expect(latest!.status).toBe('active');
+    expect(latest!.credentialsEncrypted).not.toBeNull();
+
+    // Decrypted blob holds the new tokens + preserves DCR details.
+    const plaintext = await decryptCredential(latest!.credentialsEncrypted!);
+    const creds = decodeCredentials(plaintext);
+    expect(creds.kind).toBe('oauth');
+    if (creds.kind === 'oauth') {
+      expect(creds.accessToken).toBe('new-at');
+      expect(creds.refreshToken).toBe('new-rt');
+      expect(creds.expiresAt).toBe(futureIso);
+      expect(creds.dcrClientId).toBe('cid');
+      expect(creds.dcrClientSecret).toBe('csecret');
+      expect(creds.authServerMetadata.tokenEndpoint).toBe(
+        fakeMetadata.tokenEndpoint,
+      );
+    }
+
+    // The token exchange was called with the verifier the kickoff saved.
+    expect(mocks.exchangeCodeForTokensImpl).toHaveBeenCalledOnce();
+    const [, exchangeOpts] = mocks.exchangeCodeForTokensImpl.mock
+      .calls[0] as [unknown, { code: string; codeVerifier: string }];
+    expect(exchangeOpts.code).toBe('abc');
+    expect(typeof exchangeOpts.codeVerifier).toBe('string');
+    expect(exchangeOpts.codeVerifier.length).toBeGreaterThan(0);
+  });
+
+  it('returns 400 HTML when no PKCE verifier is stored for the state', async () => {
+    // Hand-craft a valid signed state with no matching entry in the
+    // verifier store. The handler must refuse to touch the DB.
+    const secret = '0'.repeat(64);
+    process.env.CONNECTORS_STATE_SECRET = secret;
+    const { signState } = await import('@/lib/connectors/pkce');
+    const unknownState = signState(
+      { connectionId: '00000000-0000-0000-0000-000000000000', csrf: 'nope' },
+      secret,
+      600,
+    );
+
+    const res = await callbackGET(
+      new Request(
+        `https://locus.local/api/admin/connectors/oauth/callback?code=abc&state=${encodeURIComponent(
+          unknownState,
+        )}`,
+      ),
+    );
+    expect(res.status).toBe(400);
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    const html = await res.text();
+    expect(html).toContain('"ok":false');
+    // Should not have attempted a token exchange.
+    expect(mocks.exchangeCodeForTokensImpl).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 HTML when required query params are missing', async () => {
+    const res = await callbackGET(
+      new Request('https://locus.local/api/admin/connectors/oauth/callback'),
+    );
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    expect(html).toContain('Missing code or state');
   });
 });
 

@@ -75,14 +75,20 @@ import {
   DELETE,
 } from '../[id]/route';
 import { GET as callbackGET } from '../oauth/callback/route';
+import { POST as RECONNECT_POST } from '../[id]/oauth/start/route';
+import { POST as DISCONNECT_POST } from '../[id]/disconnect/route';
 import { db } from '@/db';
 import { companies, mcpConnections } from '@/db/schema';
 import { __resetPkceStoreForTests } from '@/lib/connectors/pkce-store';
 import {
   decryptCredential,
+  encryptCredential,
   getConnection,
 } from '@/lib/mcp-out/connections';
-import { decodeCredentials } from '@/lib/connectors/credentials';
+import {
+  decodeCredentials,
+  encodeCredentials,
+} from '@/lib/connectors/credentials';
 
 // --- Setup ---------------------------------------------------------------
 
@@ -754,5 +760,340 @@ describeDb('GET /api/admin/connectors/[id]', () => {
     };
     expect(payload.connection.id).toBe(row.id);
     expect(payload.connection.hasCredential).toBe(false);
+  });
+});
+
+// --- POST /api/admin/connectors/[id]/oauth/start (reconnect) --------
+
+describeDb('POST /api/admin/connectors/[id]/oauth/start', () => {
+  /**
+   * Seed an already-authorised OAuth connection directly. We bypass the
+   * kickoff + callback flow so the reconnect test starts from the same
+   * shape the real system has after a successful first-time connect:
+   * status=active, a full OAuth credentials blob with real DCR client
+   * details + tokens.
+   */
+  async function seedOauthConnection() {
+    const fakeMetadata = {
+      authorizationEndpoint: 'https://auth.example.test/oauth/authorize',
+      tokenEndpoint: 'https://auth.example.test/oauth/token',
+      registrationEndpoint: 'https://auth.example.test/oauth/register',
+      revocationEndpoint: null,
+      scopesSupported: ['read', 'write'] as string[],
+    };
+
+    const plaintext = encodeCredentials({
+      kind: 'oauth',
+      accessToken: 'stored-at',
+      refreshToken: 'stored-rt',
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      tokenType: 'Bearer',
+      scope: null,
+      dcrClientId: 'stored-cid',
+      dcrClientSecret: 'stored-csecret',
+      authServerMetadata: fakeMetadata,
+    });
+    const credentialsEncrypted = await encryptCredential(plaintext);
+
+    const [row] = await db
+      .insert(mcpConnections)
+      .values({
+        companyId: TEST_COMPANY_ID,
+        name: 'reconnect-source',
+        serverUrl: 'https://reconnect.example.test/mcp',
+        authType: 'oauth',
+        status: 'active',
+        catalogId: 'linear',
+        credentialsEncrypted,
+      })
+      .returning();
+    createdConnectionIds.push(row.id);
+    return row;
+  }
+
+  it('flips the row to pending and returns an authorize URL without re-running DCR', async () => {
+    mockOwner();
+    const row = await seedOauthConnection();
+
+    // The shared handshake helper calls buildAuthorizeUrl directly. Echo
+    // the input state back into the returned URL so we can assert the
+    // flow produced a real signed state.
+    mocks.buildAuthorizeUrlImpl.mockImplementation(
+      (_meta: unknown, opts: { state: string; clientId: string }) =>
+        `https://auth.example.test/oauth/authorize?client_id=${encodeURIComponent(
+          opts.clientId,
+        )}&state=${encodeURIComponent(opts.state)}`,
+    );
+
+    const req = bodyRequest(
+      `https://test.local/api/admin/connectors/${row.id}/oauth/start`,
+      'POST',
+      {},
+    );
+    const res = await RECONNECT_POST(req, {
+      params: Promise.resolve({ id: row.id }),
+    });
+    expect(res.status).toBe(200);
+
+    const payload = (await res.json()) as { authorizeUrl: string };
+    expect(typeof payload.authorizeUrl).toBe('string');
+    expect(payload.authorizeUrl).toContain('https://auth.example.test/');
+    // Uses the stored DCR client id — not a freshly registered one.
+    expect(payload.authorizeUrl).toContain('client_id=stored-cid');
+
+    // Row flipped to pending.
+    const latest = await getConnection(row.id, TEST_COMPANY_ID);
+    expect(latest).not.toBeNull();
+    expect(latest!.status).toBe('pending');
+    // Credentials blob was preserved (we still need it during the
+    // callback exchange).
+    expect(latest!.credentialsEncrypted).not.toBeNull();
+
+    // Critical: performDcr must NOT be called on a reconnect — we reuse
+    // the DCR client id/secret the first install registered.
+    expect(mocks.performDcrImpl).not.toHaveBeenCalled();
+
+    expect(mocks.buildAuthorizeUrlImpl).toHaveBeenCalledOnce();
+
+    // Audit event emitted.
+    expect(mocks.logEventImpl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'mcp.connection.updated',
+        targetId: row.id,
+        details: expect.objectContaining({ via: 'reconnect' }),
+      }),
+    );
+  });
+
+  it('returns 404 for an id the caller does not own', async () => {
+    mockOwner();
+    const req = bodyRequest(
+      `https://test.local/api/admin/connectors/00000000-0000-0000-0000-000000000000/oauth/start`,
+      'POST',
+      {},
+    );
+    const res = await RECONNECT_POST(req, {
+      params: Promise.resolve({ id: '00000000-0000-0000-0000-000000000000' }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 when the connection is not OAuth', async () => {
+    mockOwner();
+    const [row] = await db
+      .insert(mcpConnections)
+      .values({
+        companyId: TEST_COMPANY_ID,
+        name: 'not-oauth',
+        serverUrl: 'https://plain.example.test/mcp',
+        authType: 'none',
+      })
+      .returning();
+    createdConnectionIds.push(row.id);
+
+    const req = bodyRequest(
+      `https://test.local/api/admin/connectors/${row.id}/oauth/start`,
+      'POST',
+      {},
+    );
+    const res = await RECONNECT_POST(req, {
+      params: Promise.resolve({ id: row.id }),
+    });
+    expect(res.status).toBe(400);
+    const payload = (await res.json()) as { error: string };
+    expect(payload.error).toBe('not_oauth');
+  });
+});
+
+// --- POST /api/admin/connectors/[id]/disconnect ---------------------
+
+describeDb('POST /api/admin/connectors/[id]/disconnect', () => {
+  it('revokes the refresh token and deletes the row', async () => {
+    mockOwner();
+
+    const fakeMetadata = {
+      authorizationEndpoint: 'https://auth.example.test/oauth/authorize',
+      tokenEndpoint: 'https://auth.example.test/oauth/token',
+      registrationEndpoint: 'https://auth.example.test/oauth/register',
+      revocationEndpoint: 'https://auth.example.test/oauth/revoke',
+      scopesSupported: ['read'] as string[],
+    };
+
+    const plaintext = encodeCredentials({
+      kind: 'oauth',
+      accessToken: 'at',
+      refreshToken: 'rt-to-revoke',
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      tokenType: 'Bearer',
+      scope: null,
+      dcrClientId: 'cid',
+      dcrClientSecret: 'csecret',
+      authServerMetadata: fakeMetadata,
+    });
+    const credentialsEncrypted = await encryptCredential(plaintext);
+
+    const [row] = await db
+      .insert(mcpConnections)
+      .values({
+        companyId: TEST_COMPANY_ID,
+        name: 'disconnect-target',
+        serverUrl: 'https://disc.example.test/mcp',
+        authType: 'oauth',
+        status: 'active',
+        catalogId: 'linear',
+        credentialsEncrypted,
+      })
+      .returning();
+    // Do NOT push to createdConnectionIds — we expect it gone.
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    try {
+      const req = bodyRequest(
+        `https://test.local/api/admin/connectors/${row.id}/disconnect`,
+        'POST',
+        {},
+      );
+      const res = await DISCONNECT_POST(req, {
+        params: Promise.resolve({ id: row.id }),
+      });
+      expect(res.status).toBe(200);
+      const payload = (await res.json()) as { ok: boolean };
+      expect(payload.ok).toBe(true);
+
+      // Best-effort revocation was attempted against the provider.
+      expect(fetchSpy).toHaveBeenCalled();
+      const [calledUrl, calledInit] = fetchSpy.mock.calls[0];
+      expect(String(calledUrl)).toBe('https://auth.example.test/oauth/revoke');
+      const body = String((calledInit as RequestInit | undefined)?.body ?? '');
+      expect(body).toContain('token=rt-to-revoke');
+      expect(body).toContain('token_type_hint=refresh_token');
+      expect(body).toContain('client_id=cid');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    // Row is gone.
+    const latest = await getConnection(row.id, TEST_COMPANY_ID);
+    expect(latest).toBeNull();
+
+    // Audit emitted.
+    expect(mocks.logEventImpl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'mcp.connection.deleted',
+        targetId: row.id,
+        details: expect.objectContaining({
+          via: 'disconnect',
+          authType: 'oauth',
+        }),
+      }),
+    );
+  });
+
+  it('deletes even when revocation fails', async () => {
+    mockOwner();
+
+    const fakeMetadata = {
+      authorizationEndpoint: 'https://auth.example.test/oauth/authorize',
+      tokenEndpoint: 'https://auth.example.test/oauth/token',
+      registrationEndpoint: 'https://auth.example.test/oauth/register',
+      revocationEndpoint: 'https://auth.example.test/oauth/revoke',
+      scopesSupported: null,
+    };
+
+    const plaintext = encodeCredentials({
+      kind: 'oauth',
+      accessToken: 'at',
+      refreshToken: 'rt',
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      tokenType: 'Bearer',
+      scope: null,
+      dcrClientId: 'cid',
+      dcrClientSecret: null,
+      authServerMetadata: fakeMetadata,
+    });
+    const credentialsEncrypted = await encryptCredential(plaintext);
+
+    const [row] = await db
+      .insert(mcpConnections)
+      .values({
+        companyId: TEST_COMPANY_ID,
+        name: 'disconnect-revoke-fail',
+        serverUrl: 'https://disc2.example.test/mcp',
+        authType: 'oauth',
+        status: 'active',
+        credentialsEncrypted,
+      })
+      .returning();
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new Error('network exploded'));
+
+    try {
+      const req = bodyRequest(
+        `https://test.local/api/admin/connectors/${row.id}/disconnect`,
+        'POST',
+        {},
+      );
+      const res = await DISCONNECT_POST(req, {
+        params: Promise.resolve({ id: row.id }),
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    const latest = await getConnection(row.id, TEST_COMPANY_ID);
+    expect(latest).toBeNull();
+  });
+
+  it('deletes a non-oauth connection without calling fetch', async () => {
+    mockOwner();
+
+    const [row] = await db
+      .insert(mcpConnections)
+      .values({
+        companyId: TEST_COMPANY_ID,
+        name: 'disconnect-plain',
+        serverUrl: 'https://plain-disc.example.test/mcp',
+        authType: 'none',
+      })
+      .returning();
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const req = bodyRequest(
+        `https://test.local/api/admin/connectors/${row.id}/disconnect`,
+        'POST',
+        {},
+      );
+      const res = await DISCONNECT_POST(req, {
+        params: Promise.resolve({ id: row.id }),
+      });
+      expect(res.status).toBe(200);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    const latest = await getConnection(row.id, TEST_COMPANY_ID);
+    expect(latest).toBeNull();
+  });
+
+  it('returns 404 for an id the caller does not own', async () => {
+    mockOwner();
+    const req = bodyRequest(
+      `https://test.local/api/admin/connectors/00000000-0000-0000-0000-000000000000/disconnect`,
+      'POST',
+      {},
+    );
+    const res = await DISCONNECT_POST(req, {
+      params: Promise.resolve({ id: '00000000-0000-0000-0000-000000000000' }),
+    });
+    expect(res.status).toBe(404);
   });
 });

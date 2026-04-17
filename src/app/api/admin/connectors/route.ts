@@ -52,11 +52,9 @@ import {
 import {
   resolveAuthServerMetadata,
   performDcr,
-  buildAuthorizeUrl,
 } from '@/lib/connectors/mcp-oauth';
-import { generatePkce, signState } from '@/lib/connectors/pkce';
-import { savePkceVerifier } from '@/lib/connectors/pkce-store';
 import { encodeCredentials } from '@/lib/connectors/credentials';
+import { buildOauthHandshake } from './_oauth-handshake';
 
 export const runtime = 'nodejs';
 
@@ -439,23 +437,11 @@ async function kickoffOauthInstall(
     initialStatus: 'pending',
   });
 
-  const secret = process.env.CONNECTORS_STATE_SECRET;
-  if (!secret) throw new Error('CONNECTORS_STATE_SECRET not set');
-
-  const { verifier, challenge } = generatePkce();
-  const state = signState(
-    { connectionId: connection.id, csrf: Math.random().toString(36).slice(2) },
-    secret,
-    600,
-  );
-  savePkceVerifier(state, verifier);
-
-  const authorizeUrl = buildAuthorizeUrl(meta.metadata, {
-    clientId: dcr.clientId,
+  const { authorizeUrl } = buildOauthHandshake({
+    connectionId: connection.id,
+    metadata: meta.metadata,
+    dcrClientId: dcr.clientId,
     redirectUri,
-    scope: meta.metadata.scopesSupported?.join(' ') ?? null,
-    state,
-    codeChallenge: challenge,
   });
 
   return { ok: true, connection, authorizeUrl };

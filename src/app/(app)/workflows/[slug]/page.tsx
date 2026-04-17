@@ -6,8 +6,9 @@
 //
 // The [slug] param resolves to the document's slug column (unique within
 // a brain). We do NOT reuse the brain editor edit page directly because
-// the sidebar here shows WorkflowFrontmatterFields rather than the generic
-// FrontmatterSidebar, and the topbar crumbs belong to /workflows not /brain.
+// the sidebar renders the schema-aware FrontmatterPanel rather than the
+// generic FrontmatterSidebar, and the topbar crumbs belong to /workflows
+// not /brain.
 
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -49,7 +50,6 @@ export default async function WorkflowDetailPage({
       status: documents.status,
       confidenceLevel: documents.confidenceLevel,
       ownerId: documents.ownerId,
-      metadata: documents.metadata,
       type: documents.type,
     })
     .from(documents)

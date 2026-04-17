@@ -1,22 +1,20 @@
 'use client';
 
-// Minimal connector list. Mirrors `mcp-connection-list.tsx` but:
-//   - Shows the catalog icon (or a Lucide `Plug` icon for custom rows).
-//   - Replaces Delete with a Disconnect button hitting the disconnect
-//     endpoint (clears credentials, keeps the row around).
-//   - Keeps the Enable/Disable toggle on PATCH status.
-//   - Composes `AddConnectorDialog` for the "+ Add connector" action.
+// Connector list — one row per configured connector. Rows are the
+// clickable surface: they open `ConnectorDetailsDialog` with the full
+// metadata and the Disconnect / Reconnect actions. Inline
+// Enable/Disable + Disconnect buttons from earlier iterations moved
+// into the details dialog; the list is now a clean icon-row layout.
 
-import { useEffect, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Plug } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getCatalogEntry } from '@/lib/connectors/catalog';
 
 import { AddConnectorDialog } from './add-connector-dialog';
+import { ConnectorDetailsDialog } from './connector-details-dialog';
 import type { ClientConnector } from './connector-types';
 
 const ADD_MODAL_DISMISSED_KEY = 'connectors.addModalDismissed';
@@ -32,13 +30,11 @@ interface Props {
 }
 
 export function ConnectorList({ connectors, autoOpenAddModal = false }: Props) {
-  const router = useRouter();
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  // Auto-open the Add dialog on empty state, but only if the user hasn't
-  // already dismissed it this session.
   const [sessionStickyOpen, setSessionStickyOpen] = useState(false);
+  const [selected, setSelected] = useState<ClientConnector | null>(null);
+
+  // Auto-open the Add dialog on empty state, but only if the user
+  // hasn't already dismissed it this session.
   useEffect(() => {
     if (
       autoOpenAddModal &&
@@ -54,42 +50,7 @@ export function ConnectorList({ connectors, autoOpenAddModal = false }: Props) {
     if (!open && autoOpenAddModal && typeof window !== 'undefined') {
       sessionStorage.setItem(ADD_MODAL_DISMISSED_KEY, '1');
     }
-  }
-
-  async function toggleStatus(c: ClientConnector) {
-    const nextStatus = c.status === 'active' ? 'disabled' : 'active';
-    setPendingId(c.id);
-    try {
-      const res = await fetch(`/api/admin/connectors/${c.id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      startTransition(() => router.refresh());
-    } catch (err) {
-      console.error('[connectors] toggle failed', err);
-      alert('Failed to update connector status.');
-    } finally {
-      setPendingId(null);
-    }
-  }
-
-  async function disconnect(c: ClientConnector) {
-    if (!confirm(`Disconnect "${c.name}"?`)) return;
-    setPendingId(c.id);
-    try {
-      const res = await fetch(`/api/admin/connectors/${c.id}/disconnect`, {
-        method: 'POST',
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      startTransition(() => router.refresh());
-    } catch (err) {
-      console.error('[connectors] disconnect failed', err);
-      alert('Failed to disconnect.');
-    } finally {
-      setPendingId(null);
-    }
+    if (!open) setSessionStickyOpen(false);
   }
 
   return (
@@ -107,101 +68,55 @@ export function ConnectorList({ connectors, autoOpenAddModal = false }: Props) {
           tools.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Auth</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Last used</th>
-                <th className="px-4 py-2 font-medium" />
-              </tr>
-            </thead>
-            <tbody>
-              {connectors.map((c) => {
-                const busy = pendingId === c.id || isPending;
-                const entry = c.catalogId ? getCatalogEntry(c.catalogId) : null;
-                return (
-                  <tr
-                    key={c.id}
-                    className="border-b border-border last:border-0"
-                  >
-                    <td className="px-4 py-3 font-medium">
-                      <div className="flex items-center gap-2">
-                        {entry ? (
-                          <Image
-                            src={entry.iconUrl}
-                            alt=""
-                            width={18}
-                            height={18}
-                          />
-                        ) : (
-                          <Plug size={16} aria-hidden="true" />
-                        )}
-                        <span>{c.name}</span>
+        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+          {connectors.map((c) => {
+            const entry = c.catalogId ? getCatalogEntry(c.catalogId) : null;
+            return (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelected(c)}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-accent"
+                >
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                    {entry ? (
+                      <Image
+                        src={entry.iconUrl}
+                        alt=""
+                        width={20}
+                        height={20}
+                      />
+                    ) : (
+                      <Plug size={18} aria-hidden="true" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{c.name}</div>
+                    {!entry && (
+                      <div
+                        className="truncate text-xs text-muted-foreground"
+                        title={c.serverUrl}
+                      >
+                        {c.serverUrl}
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {c.authType === 'oauth'
-                        ? 'OAuth'
-                        : c.authType === 'bearer'
-                          ? 'Bearer'
-                          : 'None'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={c.status} />
-                      {c.status === 'error' && c.lastErrorMessage && (
-                        <div
-                          className="mt-1 max-w-[32ch] truncate text-xs text-destructive"
-                          title={c.lastErrorMessage}
-                        >
-                          {c.lastErrorMessage}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {c.lastUsedAt
-                        ? new Date(c.lastUsedAt).toLocaleDateString()
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => toggleStatus(c)}
-                          disabled={
-                            busy ||
-                            c.status === 'error' ||
-                            c.status === 'pending'
-                          }
-                          title={
-                            c.status === 'error'
-                              ? 'Reconnect to fix the error first.'
-                              : c.status === 'pending'
-                                ? 'OAuth flow still in progress.'
-                                : undefined
-                          }
-                        >
-                          {c.status === 'active' ? 'Disable' : 'Enable'}
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => disconnect(c)}
-                          disabled={busy}
-                        >
-                          Disconnect
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    )}
+                  </div>
+                  <StatusBadge status={c.status} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {selected && (
+        <ConnectorDetailsDialog
+          connector={selected}
+          open={selected !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelected(null);
+          }}
+        />
       )}
     </div>
   );

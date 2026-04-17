@@ -36,15 +36,7 @@ import {
   getConnection,
   installFromCatalog,
   listConnections,
-  markConnectionError,
 } from '@/lib/mcp-out/connections';
-import {
-  connectToMcpServer,
-  discoverTools,
-  DEFAULT_CONNECT_TIMEOUT_MS,
-  DEFAULT_DISCOVER_TIMEOUT_MS,
-} from '@/lib/mcp-out/client';
-import type { McpConnection } from '@/lib/mcp-out/types';
 import {
   getCatalogEntry,
   type ConnectorCatalogEntry,
@@ -54,7 +46,9 @@ import {
   performDcr,
 } from '@/lib/connectors/mcp-oauth';
 import { encodeCredentials } from '@/lib/connectors/credentials';
+import type { McpConnection } from '@/lib/mcp-out/types';
 import { buildOauthHandshake } from './_oauth-handshake';
+import { serializeConnection, testConnection } from './_serialise';
 
 export const runtime = 'nodejs';
 
@@ -334,56 +328,6 @@ export async function POST(request: Request) {
     connection: latest ? serializeConnection(latest) : serializeConnection(created),
     test: testResult,
   });
-}
-
-// --- helpers -------------------------------------------------------------
-
-/**
- * Serialise a connection for the API response. We never expose the raw
- * ciphertext over the wire — the UI only needs to know whether a
- * credential is configured.
- */
-function serializeConnection(c: McpConnection) {
-  return {
-    id: c.id,
-    name: c.name,
-    serverUrl: c.serverUrl,
-    authType: c.authType,
-    hasCredential: c.credentialsEncrypted !== null,
-    status: c.status,
-    lastErrorMessage: c.lastErrorMessage,
-    catalogId: c.catalogId,
-    createdAt: c.createdAt,
-    lastUsedAt: c.lastUsedAt,
-  };
-}
-
-/**
- * Attempt `connectToMcpServer` + `discoverTools`. On failure, mark the
- * connection row as errored and return the sanitised message so the UI
- * can display it inline.
- *
- * Both stages run under their default 10-second per-call timeouts. A
- * TCP-responsive-but-dead external server will produce a timeout error
- * within the budget rather than hanging the entire HTTP request.
- */
-async function testConnection(
-  conn: McpConnection,
-): Promise<{ ok: true; toolCount: number } | { ok: false; error: string }> {
-  let client: Awaited<ReturnType<typeof connectToMcpServer>> | null = null;
-  try {
-    client = await connectToMcpServer(conn, DEFAULT_CONNECT_TIMEOUT_MS);
-    const tools = await discoverTools(client, DEFAULT_DISCOVER_TIMEOUT_MS);
-    return { ok: true, toolCount: tools.length };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Connection failed.';
-    await markConnectionError(conn.id, message).catch(() => {});
-    return { ok: false, error: message.slice(0, 500) };
-  } finally {
-    if (client) {
-      await client.close().catch(() => {});
-    }
-  }
 }
 
 /**

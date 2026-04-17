@@ -22,16 +22,9 @@ import { ApiAuthError } from '@/lib/api/errors';
 import {
   deleteConnection,
   getConnection,
-  markConnectionError,
   updateConnection,
 } from '@/lib/mcp-out/connections';
-import {
-  connectToMcpServer,
-  discoverTools,
-  DEFAULT_CONNECT_TIMEOUT_MS,
-  DEFAULT_DISCOVER_TIMEOUT_MS,
-} from '@/lib/mcp-out/client';
-import type { McpConnection } from '@/lib/mcp-out/types';
+import { serializeConnection, testConnection } from '../_serialise';
 
 export const runtime = 'nodejs';
 
@@ -76,20 +69,6 @@ async function requireOwner(): Promise<OwnerCtx | Response> {
 
 function isResponse(x: unknown): x is Response {
   return x instanceof Response;
-}
-
-function serializeConnection(c: McpConnection) {
-  return {
-    id: c.id,
-    name: c.name,
-    serverUrl: c.serverUrl,
-    authType: c.authType,
-    hasCredential: c.credentialsEncrypted !== null,
-    status: c.status,
-    lastErrorMessage: c.lastErrorMessage,
-    createdAt: c.createdAt,
-    lastUsedAt: c.lastUsedAt,
-  };
 }
 
 // --- GET /api/admin/connectors/[id] ---------------------------------
@@ -323,23 +302,3 @@ export async function DELETE(
   return Response.json({ ok: true });
 }
 
-// --- shared connection test ----------------------------------------------
-
-async function testConnection(
-  conn: McpConnection,
-): Promise<{ ok: true; toolCount: number } | { ok: false; error: string }> {
-  let client: Awaited<ReturnType<typeof connectToMcpServer>> | null = null;
-  try {
-    client = await connectToMcpServer(conn, DEFAULT_CONNECT_TIMEOUT_MS);
-    const tools = await discoverTools(client, DEFAULT_DISCOVER_TIMEOUT_MS);
-    return { ok: true, toolCount: tools.length };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Connection failed.';
-    await markConnectionError(conn.id, message).catch(() => {});
-    return { ok: false, error: message.slice(0, 500) };
-  } finally {
-    if (client) {
-      await client.close().catch(() => {});
-    }
-  }
-}

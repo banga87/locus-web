@@ -31,7 +31,7 @@ import {
   encodeCredentials,
 } from '@/lib/connectors/credentials';
 import { exchangeCodeForTokens } from '@/lib/connectors/mcp-oauth';
-import { verifyState } from '@/lib/connectors/pkce';
+import { getStateSecret, verifyState } from '@/lib/connectors/pkce';
 import { takePkceVerifier } from '@/lib/connectors/pkce-store';
 import {
   decryptCredential,
@@ -58,8 +58,10 @@ export async function GET(request: Request) {
     return renderResult({ ok: false, message: 'Missing code or state.' });
   }
 
-  const secret = process.env.CONNECTORS_STATE_SECRET;
-  if (!secret) {
+  let secret: string;
+  try {
+    secret = getStateSecret();
+  } catch {
     return renderResult({ ok: false, message: 'Server misconfigured.' });
   }
 

@@ -6,6 +6,26 @@
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
+/**
+ * Read + validate `CONNECTORS_STATE_SECRET`. Mirrors `getEncryptionKey` —
+ * format validation lives here so a misconfigured short value fails loudly
+ * instead of silently producing a weak MAC key.
+ */
+export function getStateSecret(): string {
+  const secret = process.env.CONNECTORS_STATE_SECRET;
+  if (!secret) {
+    throw new Error(
+      'CONNECTORS_STATE_SECRET is not set. Generate one with `openssl rand -hex 32`.',
+    );
+  }
+  if (!/^[0-9a-fA-F]{64}$/.test(secret)) {
+    throw new Error(
+      'CONNECTORS_STATE_SECRET must be a 32-byte hex string (64 hex chars).',
+    );
+  }
+  return secret;
+}
+
 export interface PkcePair {
   verifier: string;
   challenge: string;

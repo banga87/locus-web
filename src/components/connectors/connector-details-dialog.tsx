@@ -106,8 +106,7 @@ export function ConnectorDetailsDialog({
     }
   }
 
-  const canReconnect =
-    connector.authType === 'oauth' || connector.status === 'error';
+  const canReconnect = connector.authType === 'oauth';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

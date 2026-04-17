@@ -12,7 +12,7 @@
 // this file.
 
 import { buildAuthorizeUrl, type AuthServerMetadata } from '@/lib/connectors/mcp-oauth';
-import { generatePkce, signState } from '@/lib/connectors/pkce';
+import { generatePkce, getStateSecret, signState } from '@/lib/connectors/pkce';
 import { savePkceVerifier } from '@/lib/connectors/pkce-store';
 
 export interface HandshakeInput {
@@ -31,8 +31,7 @@ export interface HandshakeInput {
 export function buildOauthHandshake(
   input: HandshakeInput,
 ): { authorizeUrl: string } {
-  const secret = process.env.CONNECTORS_STATE_SECRET;
-  if (!secret) throw new Error('CONNECTORS_STATE_SECRET not set');
+  const secret = getStateSecret();
 
   const { verifier, challenge } = generatePkce();
   const state = signState(

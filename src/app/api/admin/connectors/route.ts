@@ -1,7 +1,7 @@
 // Admin MCP OUT connection endpoints — list + create.
 //
-// GET  /api/admin/mcp-connections  — list the caller's company's connections.
-// POST /api/admin/mcp-connections  — create a new connection, then test it.
+// GET  /api/admin/connectors  — list the caller's company's connections.
+// POST /api/admin/connectors  — create a new connection, then test it.
 //
 // Auth: Owner-only (MCP OUT controls live data flowing from sensitive
 // systems like email / CRM / accounting — only the company owner may
@@ -37,7 +37,7 @@ import type { McpConnection } from '@/lib/mcp-out/types';
 
 export const runtime = 'nodejs';
 
-// --- GET /api/admin/mcp-connections --------------------------------------
+// --- GET /api/admin/connectors --------------------------------------
 
 export async function GET() {
   let ctx;
@@ -67,7 +67,7 @@ export async function GET() {
   });
 }
 
-// --- POST /api/admin/mcp-connections -------------------------------------
+// --- POST /api/admin/connectors -------------------------------------
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(100),

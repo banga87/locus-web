@@ -1,7 +1,7 @@
 // MCP Connections settings page. Owner-only. Fetches active
 // connections server-side and renders the list component. Adding /
 // editing / deleting is handled client-side via the list + dialog
-// components and the /api/admin/mcp-connections endpoints.
+// components and the /api/admin/connectors endpoints.
 
 import { notFound } from 'next/navigation';
 

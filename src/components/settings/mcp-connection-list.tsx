@@ -26,7 +26,7 @@ export function McpConnectionList({ connections }: Props) {
     const nextStatus = conn.status === 'active' ? 'disabled' : 'active';
     setPendingId(conn.id);
     try {
-      const res = await fetch(`/api/admin/mcp-connections/${conn.id}`, {
+      const res = await fetch(`/api/admin/connectors/${conn.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -51,7 +51,7 @@ export function McpConnectionList({ connections }: Props) {
     }
     setPendingId(conn.id);
     try {
-      const res = await fetch(`/api/admin/mcp-connections/${conn.id}`, {
+      const res = await fetch(`/api/admin/connectors/${conn.id}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

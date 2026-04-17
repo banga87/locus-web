@@ -1,4 +1,4 @@
-// Route-level tests for /api/admin/mcp-connections.
+// Route-level tests for /api/admin/connectors.
 //
 // We mock the MCP client (so connection tests don't hit the network)
 // and the auth layer (so we can exercise both owner and non-owner
@@ -161,9 +161,9 @@ function bodyRequest(url: string, method: string, body: unknown): Request {
   });
 }
 
-// --- GET /api/admin/mcp-connections --------------------------------------
+// --- GET /api/admin/connectors --------------------------------------
 
-describeDb('GET /api/admin/mcp-connections', () => {
+describeDb('GET /api/admin/connectors', () => {
   it('returns 401/403 when the caller is not an owner', async () => {
     mockViewer();
     const res = await GET();
@@ -204,13 +204,13 @@ describeDb('GET /api/admin/mcp-connections', () => {
   });
 });
 
-// --- POST /api/admin/mcp-connections -------------------------------------
+// --- POST /api/admin/connectors -------------------------------------
 
-describeDb('POST /api/admin/mcp-connections', () => {
+describeDb('POST /api/admin/connectors', () => {
   it('requires owner role', async () => {
     mockViewer();
     const req = bodyRequest(
-      'https://test.local/api/admin/mcp-connections',
+      'https://test.local/api/admin/connectors',
       'POST',
       { name: 'x', serverUrl: 'https://x.test', authType: 'none' },
     );
@@ -221,7 +221,7 @@ describeDb('POST /api/admin/mcp-connections', () => {
   it('rejects an invalid URL', async () => {
     mockOwner();
     const req = bodyRequest(
-      'https://test.local/api/admin/mcp-connections',
+      'https://test.local/api/admin/connectors',
       'POST',
       { name: 'bad url', serverUrl: 'ftp://nope', authType: 'none' },
     );
@@ -232,7 +232,7 @@ describeDb('POST /api/admin/mcp-connections', () => {
   it('requires a bearerToken when authType is bearer', async () => {
     mockOwner();
     const req = bodyRequest(
-      'https://test.local/api/admin/mcp-connections',
+      'https://test.local/api/admin/connectors',
       'POST',
       {
         name: 'needs token',
@@ -249,7 +249,7 @@ describeDb('POST /api/admin/mcp-connections', () => {
     mockHappyTest(3);
 
     const req = bodyRequest(
-      'https://test.local/api/admin/mcp-connections',
+      'https://test.local/api/admin/connectors',
       'POST',
       {
         name: 'happy path',
@@ -283,7 +283,7 @@ describeDb('POST /api/admin/mcp-connections', () => {
     mockFailingTest('connection refused');
 
     const req = bodyRequest(
-      'https://test.local/api/admin/mcp-connections',
+      'https://test.local/api/admin/connectors',
       'POST',
       {
         name: 'sad path',
@@ -326,7 +326,7 @@ describeDb('POST /api/admin/mcp-connections', () => {
 
     const start = Date.now();
     const req = bodyRequest(
-      'https://test.local/api/admin/mcp-connections',
+      'https://test.local/api/admin/connectors',
       'POST',
       {
         name: 'hangs',
@@ -353,9 +353,9 @@ describeDb('POST /api/admin/mcp-connections', () => {
   });
 });
 
-// --- PATCH /api/admin/mcp-connections/[id] -------------------------------
+// --- PATCH /api/admin/connectors/[id] -------------------------------
 
-describeDb('PATCH /api/admin/mcp-connections/[id]', () => {
+describeDb('PATCH /api/admin/connectors/[id]', () => {
   async function seedConnection() {
     const [row] = await db
       .insert(mcpConnections)
@@ -375,7 +375,7 @@ describeDb('PATCH /api/admin/mcp-connections/[id]', () => {
     const row = await seedConnection();
 
     const req = bodyRequest(
-      `https://test.local/api/admin/mcp-connections/${row.id}`,
+      `https://test.local/api/admin/connectors/${row.id}`,
       'PATCH',
       { status: 'disabled' },
     );
@@ -397,7 +397,7 @@ describeDb('PATCH /api/admin/mcp-connections/[id]', () => {
   it('returns 404 for an id the caller does not own', async () => {
     mockOwner();
     const req = bodyRequest(
-      `https://test.local/api/admin/mcp-connections/00000000-0000-0000-0000-000000000000`,
+      `https://test.local/api/admin/connectors/00000000-0000-0000-0000-000000000000`,
       'PATCH',
       { name: 'hax' },
     );
@@ -417,7 +417,7 @@ describeDb('PATCH /api/admin/mcp-connections/[id]', () => {
     mockFailingTest('refused after url change');
 
     const req = bodyRequest(
-      `https://test.local/api/admin/mcp-connections/${row.id}`,
+      `https://test.local/api/admin/connectors/${row.id}`,
       'PATCH',
       { serverUrl: 'https://new.example.test/mcp' },
     );
@@ -449,9 +449,9 @@ describeDb('PATCH /api/admin/mcp-connections/[id]', () => {
   });
 });
 
-// --- DELETE /api/admin/mcp-connections/[id] ------------------------------
+// --- DELETE /api/admin/connectors/[id] ------------------------------
 
-describeDb('DELETE /api/admin/mcp-connections/[id]', () => {
+describeDb('DELETE /api/admin/connectors/[id]', () => {
   it('deletes and emits the audit event', async () => {
     mockOwner();
     const [row] = await db
@@ -476,9 +476,9 @@ describeDb('DELETE /api/admin/mcp-connections/[id]', () => {
   });
 });
 
-// --- GET /api/admin/mcp-connections/[id] ---------------------------------
+// --- GET /api/admin/connectors/[id] ---------------------------------
 
-describeDb('GET /api/admin/mcp-connections/[id]', () => {
+describeDb('GET /api/admin/connectors/[id]', () => {
   it('returns the detail payload for an owned connection', async () => {
     mockOwner();
     const [row] = await db

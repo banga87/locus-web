@@ -141,8 +141,8 @@ export function McpConnectionDialog({ mode, connection }: Props) {
 
       const url =
         mode === 'create'
-          ? '/api/admin/mcp-connections'
-          : `/api/admin/mcp-connections/${connection!.id}`;
+          ? '/api/admin/connectors'
+          : `/api/admin/connectors/${connection!.id}`;
       const method = mode === 'create' ? 'POST' : 'PATCH';
 
       const res = await fetch(url, {

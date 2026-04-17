@@ -1,10 +1,10 @@
 // Admin MCP OUT connection detail endpoints — detail / patch / delete.
 //
-// GET     /api/admin/mcp-connections/[id]   — read detail
-// PATCH   /api/admin/mcp-connections/[id]   — update (name, URL, auth,
+// GET     /api/admin/connectors/[id]   — read detail
+// PATCH   /api/admin/connectors/[id]   — update (name, URL, auth,
 //                                             toggle status). Optionally
 //                                             re-tests on URL/token change.
-// DELETE  /api/admin/mcp-connections/[id]   — delete.
+// DELETE  /api/admin/connectors/[id]   — delete.
 //
 // Auth: Owner-only. Cross-tenant id guesses return 404 (not 403) to
 // avoid leaking existence. Implementation: helpers already scope by
@@ -92,7 +92,7 @@ function serializeConnection(c: McpConnection) {
   };
 }
 
-// --- GET /api/admin/mcp-connections/[id] ---------------------------------
+// --- GET /api/admin/connectors/[id] ---------------------------------
 
 export async function GET(
   _request: Request,
@@ -112,7 +112,7 @@ export async function GET(
   return Response.json({ connection: serializeConnection(conn) });
 }
 
-// --- PATCH /api/admin/mcp-connections/[id] -------------------------------
+// --- PATCH /api/admin/connectors/[id] -------------------------------
 
 const patchSchema = z
   .object({
@@ -276,7 +276,7 @@ export async function PATCH(
   });
 }
 
-// --- DELETE /api/admin/mcp-connections/[id] ------------------------------
+// --- DELETE /api/admin/connectors/[id] ------------------------------
 
 export async function DELETE(
   _request: Request,

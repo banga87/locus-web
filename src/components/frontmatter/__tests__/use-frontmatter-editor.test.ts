@@ -94,4 +94,21 @@ describe('useFrontmatterEditor', () => {
     expect(result.current.panelState.rawYaml).toBe('::: not yaml :::');
     expect(result.current.panelState.error).toBeTruthy();
   });
+
+  it('falls back to raw mode with error when YAML parses but fails schema validation', () => {
+    // Parses as valid YAML, but `output: banana` fails workflowSchema.validate.
+    const badSchema =
+      '---\ntype: workflow\noutput: banana\noutput_category: null\nrequires_mcps: []\nschedule: null\n---\n\nBody\n';
+    const { result } = renderHook(() =>
+      useFrontmatterEditor({
+        documentId: 'doc-1',
+        initialContent: badSchema,
+        docType: 'workflow',
+        canEdit: true,
+      }),
+    );
+    expect(result.current.panelState.mode).toBe('raw');
+    expect(result.current.panelState.rawYaml).toContain('output: banana');
+    expect(result.current.panelState.error).toBeTruthy();
+  });
 });

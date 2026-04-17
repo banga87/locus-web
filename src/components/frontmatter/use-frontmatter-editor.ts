@@ -114,7 +114,13 @@ export function useFrontmatterEditor(params: Params) {
 
   const onPanelChange = useCallback(
     (patch: Record<string, unknown>) => {
-      setPanelState((prev) => ({ ...prev, value: { ...prev.value, ...patch } }));
+      setPanelState((prev) => {
+        const next = { ...prev, value: { ...prev.value, ...patch } };
+        // Keep panelRef in lock-step with the setState updater so flush-on-unmount
+        // (which fires before React's next render) always sees the patched state.
+        panelRef.current = next;
+        return next;
+      });
       schedule({}, /* touchContent */ true);
     },
     [schedule],
@@ -137,19 +143,31 @@ export function useFrontmatterEditor(params: Params) {
       } catch (e) {
         error = e instanceof Error ? e.message : String(e);
       }
-      setPanelState((prev) => ({ ...prev, rawYaml, value: parsed, error }));
+      setPanelState((prev) => {
+        const next = { ...prev, rawYaml, value: parsed, error };
+        panelRef.current = next;
+        return next;
+      });
       schedule({}, /* touchContent */ true);
     },
     [schedule, schema],
   );
 
+  /**
+   * Switch between fields and raw mode. Calling with mode='raw' while already
+   * in raw mode is idempotent for the mode itself, but re-serialises the
+   * current `value` into `rawYaml` — callers should not invoke this while the
+   * user has unsaved raw-YAML edits.
+   */
   const onModeChange = useCallback((mode: 'fields' | 'raw') => {
     setPanelState((prev) => {
       // Moving to raw: serialise current value to YAML so the textarea starts from a clean state.
-      if (mode === 'raw' && prev.schema) {
-        return { ...prev, mode, rawYaml: emitSchemaYaml(prev.value, prev.schema) };
-      }
-      return { ...prev, mode };
+      const next =
+        mode === 'raw' && prev.schema
+          ? { ...prev, mode, rawYaml: emitSchemaYaml(prev.value, prev.schema) }
+          : { ...prev, mode };
+      panelRef.current = next;
+      return next;
     });
   }, []);
 
@@ -199,7 +217,10 @@ function initialPanelState(
   schema: FrontmatterSchema | null,
 ): PanelState {
   if (!schema) {
-    return { schema, value: {}, rawYaml: frontmatterText ?? '', mode: 'raw', error: null };
+    // `rawYaml: string | null` — preserve null when there was no frontmatter
+    // so consumers can distinguish "no frontmatter" from "has raw frontmatter"
+    // without a trim() check. `buildContent` guards on trim().length > 0.
+    return { schema, value: {}, rawYaml: frontmatterText, mode: 'raw', error: null };
   }
 
   if (frontmatterText == null) {

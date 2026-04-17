@@ -57,13 +57,14 @@ export function DocumentEditor({ document, owners }: Props) {
     docType: document.type,
     canEdit: true,
   });
+  const { onFieldPatch } = editor;
 
   const onFrontmatterChange = useCallback(
     (patch: Partial<FrontmatterValue>) => {
       setFrontmatter((prev) => ({ ...prev, ...patch }));
-      editor.onFieldPatch(patch);
+      onFieldPatch(patch);
     },
-    [editor],
+    [onFieldPatch],
   );
 
   const breadcrumb = [

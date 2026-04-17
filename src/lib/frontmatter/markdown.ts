@@ -13,7 +13,7 @@
 // These match the existing canonical shape of WORKFLOW_FRONTMATTER so a
 // no-op save is byte-identical on disk.
 
-import type { FrontmatterSchema } from './schemas/types';
+import type { FrontmatterField, FrontmatterSchema } from './schemas/types';
 
 export interface SplitResult {
   /** YAML payload with the --- fences stripped, or null if none. */
@@ -55,6 +55,10 @@ export function emitSchemaYaml(
   for (const field of schema.fields) {
     const v = value[field.name];
     switch (field.kind) {
+      // Required scalar. Null here means the caller has a validation bug;
+      // we emit an empty scalar so downstream parses still succeed, but
+      // silent-empty is not a feature — schemas should declare
+      // nullable-string when null is a valid value.
       case 'enum':
       case 'string': {
         lines.push(`${field.name}: ${v == null ? '' : String(v)}`);
@@ -72,6 +76,12 @@ export function emitSchemaYaml(
           for (const item of v) lines.push(`  - ${String(item)}`);
         }
         break;
+      }
+      default: {
+        const _exhaustive: never = field;
+        throw new Error(
+          `emitSchemaYaml: unhandled field kind: ${(_exhaustive as FrontmatterField).kind}`,
+        );
       }
     }
   }

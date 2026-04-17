@@ -79,7 +79,24 @@ describe('emitSchemaYaml', () => {
       { schedule: null, output_category: 'Reports', requires_mcps: [], output: 'message' },
       fakeWorkflow,
     );
-    expect(out.startsWith('type: workflow\noutput: message\n')).toBe(true);
+    expect(out).toBe(
+      'type: workflow\noutput: message\noutput_category: Reports\nrequires_mcps: []\nschedule: null',
+    );
+  });
+});
+
+const fakeWithString: FrontmatterSchema = {
+  type: 'doc',
+  label: 'Doc',
+  fields: [{ kind: 'string', name: 'name', label: 'Name' }],
+  defaults: () => ({ name: '' }),
+  validate: () => ({ ok: true, value: {} }),
+};
+
+describe('emitSchemaYaml — string kind edge cases', () => {
+  it('emits empty scalar when a string value is null (documents silent-empty)', () => {
+    const out = emitSchemaYaml({ name: null }, fakeWithString);
+    expect(out).toBe('type: doc\nname: ');
   });
 });
 
@@ -98,6 +115,11 @@ describe('joinFrontmatter', () => {
   it('returns body unchanged when schema is null', () => {
     const joined = joinFrontmatter(null, '# No frontmatter\n', null);
     expect(joined).toBe('# No frontmatter\n');
+  });
+
+  it('returns body unchanged when value is null but schema is provided', () => {
+    const joined = joinFrontmatter(null, 'Body only\n', fakeWorkflow);
+    expect(joined).toBe('Body only\n');
   });
 
   it('is byte-stable: split→join with the same value reproduces the file', () => {

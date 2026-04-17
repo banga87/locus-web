@@ -10,8 +10,29 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-import { McpConnectionDialog } from './mcp-connection-dialog';
+import { CustomConnectorDialog } from '@/components/connectors/custom-connector-dialog';
+import type { ClientConnector } from '@/components/connectors/connector-types';
+
 import type { ClientMcpConnection } from './mcp-connection-types';
+
+// Task 18 deletes this legacy list. Until then, bridge the old
+// `ClientMcpConnection` shape over to the new `ClientConnector` the
+// relocated dialog expects. The legacy settings page never surfaces a
+// `catalogId` (all rows pre-date the catalog), so we default to `null`.
+function toClientConnector(c: ClientMcpConnection): ClientConnector {
+  return {
+    id: c.id,
+    catalogId: null,
+    name: c.name,
+    serverUrl: c.serverUrl,
+    authType: c.authType,
+    status: c.status,
+    hasCredential: c.hasCredential,
+    lastErrorMessage: c.lastErrorMessage,
+    createdAt: c.createdAt,
+    lastUsedAt: c.lastUsedAt,
+  };
+}
 
 interface Props {
   connections: ClientMcpConnection[];
@@ -118,7 +139,10 @@ export function McpConnectionList({ connections }: Props) {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1.5">
-                    <McpConnectionDialog mode="edit" connection={c} />
+                    <CustomConnectorDialog
+                      mode="edit"
+                      connection={toClientConnector(c)}
+                    />
                     <Button
                       variant="outline"
                       size="sm"

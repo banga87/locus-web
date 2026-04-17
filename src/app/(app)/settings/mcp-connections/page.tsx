@@ -8,7 +8,7 @@ import { notFound } from 'next/navigation';
 import { requireAuth } from '@/lib/api/auth';
 import { listConnections } from '@/lib/mcp-out/connections';
 import { McpConnectionList } from '@/components/settings/mcp-connection-list';
-import { McpConnectionDialog } from '@/components/settings/mcp-connection-dialog';
+import { CustomConnectorDialog } from '@/components/connectors/custom-connector-dialog';
 
 export default async function McpConnectionsPage() {
   const ctx = await requireAuth();
@@ -49,7 +49,7 @@ export default async function McpConnectionsPage() {
             endpoint.
           </p>
         </div>
-        <McpConnectionDialog mode="create" />
+        <CustomConnectorDialog mode="create" />
       </header>
       <McpConnectionList connections={clientRows} />
     </div>

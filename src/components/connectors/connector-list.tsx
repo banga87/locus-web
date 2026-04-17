@@ -5,12 +5,9 @@
 //   - Replaces Delete with a Disconnect button hitting the disconnect
 //     endpoint (clears credentials, keeps the row around).
 //   - Keeps the Enable/Disable toggle on PATCH status.
-//
-// The richer tile-picker / custom-connector dialog arrives in Task 16 —
-// until then `+ Add connector` surfaces a placeholder alert so the page
-// compiles and is clickable.
+//   - Composes `AddConnectorDialog` for the "+ Add connector" action.
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Plug } from 'lucide-react';
@@ -19,22 +16,45 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getCatalogEntry } from '@/lib/connectors/catalog';
 
+import { AddConnectorDialog } from './add-connector-dialog';
 import type { ClientConnector } from './connector-types';
+
+const ADD_MODAL_DISMISSED_KEY = 'connectors.addModalDismissed';
 
 interface Props {
   connectors: ClientConnector[];
   /**
-   * Reserved for Task 16: auto-open the Add dialog on empty state. The
-   * current placeholder button ignores this; it's accepted now so the
-   * server page doesn't need a follow-up change.
+   * Auto-open the Add dialog when the list is empty (no connectors
+   * configured). Once the user dismisses it we record that in
+   * sessionStorage so we don't pester them on every navigation.
    */
   autoOpenAddModal?: boolean;
 }
 
-export function ConnectorList({ connectors }: Props) {
+export function ConnectorList({ connectors, autoOpenAddModal = false }: Props) {
   const router = useRouter();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Auto-open the Add dialog on empty state, but only if the user hasn't
+  // already dismissed it this session.
+  const [sessionStickyOpen, setSessionStickyOpen] = useState(false);
+  useEffect(() => {
+    if (
+      autoOpenAddModal &&
+      typeof window !== 'undefined' &&
+      !sessionStorage.getItem(ADD_MODAL_DISMISSED_KEY)
+    ) {
+      setSessionStickyOpen(true);
+    }
+  }, [autoOpenAddModal]);
+
+  function handleAddDialogOpenChange(open: boolean) {
+    // Only mark dismissed on explicit close (not on open).
+    if (!open && autoOpenAddModal && typeof window !== 'undefined') {
+      sessionStorage.setItem(ADD_MODAL_DISMISSED_KEY, '1');
+    }
+  }
 
   async function toggleStatus(c: ClientConnector) {
     const nextStatus = c.status === 'active' ? 'disabled' : 'active';
@@ -75,9 +95,10 @@ export function ConnectorList({ connectors }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button onClick={() => alert('Add dialog lands in Task 16')}>
-          + Add connector
-        </Button>
+        <AddConnectorDialog
+          initiallyOpen={sessionStickyOpen}
+          onOpenChange={handleAddDialogOpenChange}
+        />
       </div>
 
       {connectors.length === 0 ? (

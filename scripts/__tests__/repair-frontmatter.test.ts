@@ -81,4 +81,10 @@ describe('stripCorruptionPreamble', () => {
       stripCorruptionPreamble('## type: workflow output: document\n\nBody\n'),
     ).toBeNull();
   });
+
+  it('tolerates multiple newlines between the `* * *` and the heading, and between the heading and the body', () => {
+    const corrupted =
+      '* * *\n\n\n## type: workflow output: document output\\_category: null requires\\_mcps: \\[\\] schedule: null\n\n\n\nBody after many newlines.\n';
+    expect(stripCorruptionPreamble(corrupted)).toBe('Body after many newlines.\n');
+  });
 });

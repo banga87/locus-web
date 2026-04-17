@@ -21,7 +21,14 @@ export function isCorruptedWorkflowDoc(row: DocRow): boolean {
   return Object.prototype.hasOwnProperty.call(meta, 'requires_mcps');
 }
 
-/** Compare two bodies with whitespace flattened, so migration doesn't block on formatting drift. */
+/**
+ * Compare two bodies with whitespace flattened.
+ *
+ * Not used by the current CLI (which uses `stripCorruptionPreamble` to
+ * preserve user edits rather than gating on body equivalence). Kept as a
+ * pure helper in the lib so a future migration against a different
+ * corruption shape can reuse it.
+ */
 export function bodiesEquivalent(a: string, b: string): boolean {
   return normalise(a) === normalise(b);
 }
@@ -52,15 +59,19 @@ export interface V1Workflow {
  * markdown-escape pass.
  *
  * The regex is intentionally strict — it matches only the exact shape the
- * corruption produces — so a user-authored `* * *` + `## …` combination
- * can never be mis-identified as corrupt.
+ * corruption produces, including the literal `output\\_category:` token
+ * that Turndown always emits. A user-authored heading like
+ * `## type: workflow Anything Here` will not match unless it also contains
+ * that escaped token, which is implausible in authored content.
  *
  * Returns the body with the preamble stripped when the pattern matches;
  * returns null when it doesn't (caller should skip — this doc doesn't
  * match the known corruption).
  */
 export function stripCorruptionPreamble(content: string): string | null {
-  const match = content.match(/^\* \* \*\n+## type: workflow [^\n]*\n+/);
+  const match = content.match(
+    /^\* \* \*\n+## type: workflow [^\n]*output\\_category:[^\n]*\n+/,
+  );
   if (!match) return null;
   return content.slice(match[0].length);
 }

@@ -40,8 +40,9 @@ async function main(): Promise<void> {
 
   let repaired = 0;
   let skippedNotCorrupt = 0;
-  let skippedUnknownShape = 0;
   let skippedNoV1 = 0;
+  let skippedV1Invalid = 0;
+  let skippedUnknownShape = 0;
 
   for (const row of candidates) {
     if (
@@ -68,7 +69,8 @@ async function main(): Promise<void> {
 
     const extracted = extractWorkflowFromVersion1(v1.content);
     if (!extracted) {
-      skippedNoV1 += 1;
+      console.warn(`[skip:v1-invalid] ${row.id}`);
+      skippedV1Invalid += 1;
       continue;
     }
 
@@ -107,7 +109,7 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `[migrate-repair-frontmatter] done: repaired=${repaired} skippedNotCorrupt=${skippedNotCorrupt} skippedNoV1=${skippedNoV1} skippedUnknownShape=${skippedUnknownShape}`,
+    `[migrate-repair-frontmatter] done: repaired=${repaired} skippedNotCorrupt=${skippedNotCorrupt} skippedNoV1=${skippedNoV1} skippedV1Invalid=${skippedV1Invalid} skippedUnknownShape=${skippedUnknownShape}`,
   );
 }
 

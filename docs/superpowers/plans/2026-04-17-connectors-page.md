@@ -1281,18 +1281,24 @@ cd locus-web && npx vitest run src/lib/connectors/__tests__/mcp-oauth.test.ts
 ```
 Expected: PASS.
 
-- [ ] **Step 5: Check harness boundary**
+- [ ] **Step 5: Extend the harness boundary check to `src/lib/connectors/`**
+
+Today `scripts/check-harness-boundary.sh` only scans `src/lib/agent/`. Extend it so `src/lib/connectors/` is also checked — same forbidden imports (`next/*`, `@vercel/functions`). Concretely, duplicate the `TARGET_DIR` check + grep block for a second target, or refactor into a loop over `("src/lib/agent" "src/lib/connectors")`. Commit the script change in the same commit as this task. Also extend the ESLint `no-restricted-imports` rule in `eslint.config.mjs` to cover `src/lib/connectors/**/*.ts`.
+
+Then run:
 
 ```bash
 cd locus-web && bash scripts/check-harness-boundary.sh
+cd locus-web && npm run lint
 ```
-Expected: pass. If the boundary script only checks `src/lib/agent/`, that's fine; open the script and if it's trivial to extend to also scan `src/lib/connectors/`, do so. If not, skip and accept the ESLint rule in Task 14 as the safety net.
+Expected: both pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/lib/connectors/mcp-oauth.ts src/lib/connectors/__tests__/mcp-oauth.test.ts
-git commit -m "feat(connectors): authorize URL + token exchange + refresh"
+git add src/lib/connectors/mcp-oauth.ts src/lib/connectors/__tests__/mcp-oauth.test.ts \
+        scripts/check-harness-boundary.sh eslint.config.mjs
+git commit -m "feat(connectors): authorize URL + token exchange + refresh + boundary check"
 ```
 
 ---
@@ -1400,13 +1406,19 @@ git commit -m "refactor(connectors): rename /api/admin/mcp-connections → /api/
 - Modify: `src/lib/mcp-out/connections.ts` (add `installFromCatalog`)
 - Modify: `src/app/api/admin/connectors/__tests__/route.test.ts`
 
+- [ ] **Step 0: Add `CONNECTORS_STATE_SECRET` to `.env.local`**
+
+```
+CONNECTORS_STATE_SECRET=<run: openssl rand -hex 32>
+```
+
+Document next to `MCP_CONNECTION_ENCRYPTION_KEY` in whatever env example file exists. The kickoff helper throws if this is unset, so any manual testing in Step 6 will fail without it.
+
 - [ ] **Step 1: Add `installFromCatalog` to `connections.ts`**
 
-In `src/lib/mcp-out/connections.ts`, add:
+In `src/lib/mcp-out/connections.ts`, add (no new imports needed — `encryptCredential` is defined in the same file, `mcpConnections` is already imported, `and`/`eq` are already imported):
 
 ```ts
-import { encryptCredential } from './connections'; // already in-file
-
 export interface InstallFromCatalogInput {
   companyId: string;
   catalogId: string;
@@ -1479,13 +1491,25 @@ const customInstallSchema = z.object({
   bearerToken: z.string().trim().min(1).max(4096).optional(),
 });
 
-const installSchema = z.union([catalogInstallSchema, customInstallSchema]);
+// z.union is NOT suitable here — `customInstallSchema` doesn't forbid
+// `catalogId`, so a body with BOTH catalogId and name/serverUrl would
+// silently match the custom arm. Branch on `'catalogId' in body` BEFORE
+// parsing:
+
+function isCatalogInstall(body: unknown): body is { catalogId: unknown } {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    'catalogId' in (body as object) &&
+    (body as { catalogId: unknown }).catalogId !== undefined
+  );
+}
 ```
 
 Inside `POST`, after auth, branch on whether `body.catalogId` is set:
 
-- Catalog install: look up `getCatalogEntry(catalogId)`. If not found, 400. If `authMode === 'oauth-dcr'`, run OAuth kickoff (next step). If `authMode === 'bearer'`, require `bearerToken`, encrypt as a `CredentialsBearer` JSON, call `installFromCatalog` with `initialStatus='active'`, then run the connect test (existing `testConnection`).
-- Custom: reuse the existing `createConnection` + `testConnection` path.
+- Catalog install (body matches `isCatalogInstall`): parse with `catalogInstallSchema`, look up `getCatalogEntry(catalogId)`. If not found, 400. If `authMode === 'oauth-dcr'`, run OAuth kickoff (next step). If `authMode === 'bearer'`, require `bearerToken`, encrypt as a `CredentialsBearer` JSON, call `installFromCatalog` with `initialStatus='active'`, then run the connect test (existing `testConnection`).
+- Custom (no `catalogId`): parse with `customInstallSchema` and reuse the existing `createConnection` + `testConnection` path.
 
 OAuth kickoff:
 
@@ -1494,7 +1518,7 @@ import { CONNECTOR_CATALOG, getCatalogEntry } from '@/lib/connectors/catalog';
 import { resolveAuthServerMetadata, performDcr, buildAuthorizeUrl } from '@/lib/connectors/mcp-oauth';
 import { generatePkce, signState } from '@/lib/connectors/pkce';
 import { savePkceVerifier } from '@/lib/connectors/pkce-store';
-import { installFromCatalog, updateConnection } from '@/lib/mcp-out/connections';
+import { installFromCatalog } from '@/lib/mcp-out/connections';
 import { encryptCredential } from '@/lib/mcp-out/connections';
 import { encodeCredentials } from '@/lib/connectors/credentials';
 
@@ -1565,30 +1589,20 @@ async function kickoffOauthInstall(
 
 The route reads `origin` from `new URL(request.url).origin`.
 
-- [ ] **Step 3: Add `CONNECTORS_STATE_SECRET` to `.env.local`**
-
-Add to `.env.local`:
-
-```
-CONNECTORS_STATE_SECRET=<openssl rand -hex 32 output>
-```
-
-Document in the README / env example file in the same style as `MCP_CONNECTION_ENCRYPTION_KEY`.
-
-- [ ] **Step 4: Add the route test — catalog OAuth kickoff**
+- [ ] **Step 3: Add the route test — catalog OAuth kickoff**
 
 Extend `src/app/api/admin/connectors/__tests__/route.test.ts`. Mock `@/lib/connectors/mcp-oauth`'s `resolveAuthServerMetadata`, `performDcr`, and `buildAuthorizeUrl`. Assert: given `{ catalogId: 'linear' }`, POST returns `{ connection: { status: 'pending', authType: 'oauth', catalogId: 'linear' }, next: { kind: 'oauth', authorizeUrl: <string> } }`, and the row is written with those fields.
 
 (Concrete test code follows the existing file's pattern — hoisted `vi.mock` for the oauth module, scratch company, owner auth stub.)
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 4: Run tests**
 
 ```bash
 cd locus-web && npx vitest run src/app/api/admin/connectors
 ```
 Expected: existing + new tests pass.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add src/app/api/admin/connectors src/lib/mcp-out/connections.ts
@@ -1618,6 +1632,10 @@ Add a describe block that POSTs a catalog install (with all oauth primitives moc
 // HTML page that posts a message to window.opener and closes — the
 // parent tab listens and refreshes the list.
 
+import { eq } from 'drizzle-orm';
+
+import { db } from '@/db';
+import { mcpConnections } from '@/db/schema';
 import { takePkceVerifier } from '@/lib/connectors/pkce-store';
 import { verifyState } from '@/lib/connectors/pkce';
 import { exchangeCodeForTokens } from '@/lib/connectors/mcp-oauth';
@@ -1625,7 +1643,6 @@ import { encodeCredentials, decodeCredentials } from '@/lib/connectors/credentia
 import {
   decryptCredential,
   encryptCredential,
-  getConnection,
   updateConnectionCredentials,
   markConnectionError,
 } from '@/lib/mcp-out/connections';
@@ -1698,12 +1715,15 @@ export async function GET(request: Request) {
 }
 
 async function findConnectionById(id: string) {
-  // Simple cross-tenant lookup — the MAC-verified state guarantees we
-  // only ever land here via a flow that the original owner started.
-  const { db } = await import('@/db');
-  const { mcpConnections } = await import('@/db/schema');
-  const { eq } = await import('drizzle-orm');
-  const [row] = await db.select().from(mcpConnections).where(eq(mcpConnections.id, id)).limit(1);
+  // Cross-tenant lookup — the MAC-verified state guarantees we only
+  // ever land here via a flow that the original owner started, so we
+  // don't scope by companyId (no session cookies arrive on the OAuth
+  // redirect from the provider).
+  const [row] = await db
+    .select()
+    .from(mcpConnections)
+    .where(eq(mcpConnections.id, id))
+    .limit(1);
   if (!row) return null;
   return {
     id: row.id,
@@ -1761,7 +1781,19 @@ git commit -m "feat(connectors): OAuth callback route"
 
 - [ ] **Step 1: Implement `POST /:id/oauth/start`**
 
-Extract the DCR / authorize-URL builder from Task 9 into a helper inside `src/app/api/admin/connectors/route.ts` (e.g. `async function createOauthHandshake(entry, origin, existingConnectionId?)`) and call it from both places. For reconnect, pass the existing `connectionId` and have the helper UPDATE the existing row's credentials blob + `status='pending'` instead of inserting a new row.
+Extract the authorize-URL build from Task 9 into a helper `async function buildOauthHandshake(connection, metadata, dcrClientId, dcrClientSecret, origin)` that returns `{ authorizeUrl }` and has no insert/update side-effects — it only generates state, saves the PKCE verifier, and builds the URL.
+
+For a fresh catalog install (Task 9), call `resolveAuthServerMetadata` + `performDcr` first, then `buildOauthHandshake`, then `installFromCatalog`.
+
+For reconnect, **reuse the existing DCR client credentials** stored in the row's encrypted blob (decoded via `decodeCredentials`). Do NOT re-register — re-registering would burn a fresh DCR client slot on the provider every reconnect. Steps:
+
+1. `requireOwner`, load the row via `getConnection(id, companyId)`.
+2. `decodeCredentials(await decryptCredential(row.credentialsEncrypted!))`. If the decoded blob isn't `kind: 'oauth'`, return 400 "Not an OAuth connection".
+3. Update the row to `status='pending'` (leave the credentials blob alone — its DCR client fields are what we need).
+4. Call `buildOauthHandshake(row, creds.authServerMetadata, creds.dcrClientId, creds.dcrClientSecret, origin)`.
+5. Return `{ authorizeUrl }`.
+
+The callback route (Task 10) already replaces the credentials blob with the fresh tokens on success — the placeholder tokens currently in the row get overwritten.
 
 Response: `{ authorizeUrl }`.
 
@@ -2011,6 +2043,8 @@ export interface ClientConnector {
 ```
 
 - [ ] **Step 2: Create the page**
+
+Follow the same auth pattern as the template being replaced (`src/app/(app)/settings/mcp-connections/page.tsx` — read it first). That page calls `await requireAuth()` without a try/catch because unauthenticated requests are short-circuited upstream by the `(app)` layout. If you see any divergence (e.g. a newer middleware pattern), follow the newer pattern — don't invent a new one here.
 
 ```tsx
 import { notFound } from 'next/navigation';

@@ -5,9 +5,8 @@
 // Split into two exports:
 //   - `CustomConnectorForm` — the form body only (fields + footer buttons).
 //     Used inline by `AddConnectorDialog` so we don't nest Radix dialogs.
-//   - `CustomConnectorDialog` — wraps the form in its own Dialog. Kept for
-//     the legacy `/settings/mcp-connections` page and for a future edit
-//     row action.
+//   - `CustomConnectorDialog` — wraps the form in its own Dialog. Kept
+//     for a future edit row action.
 //
 // Two modes:
 //   - `mode="create"` — POSTs a new connector. In `CustomConnectorDialog`

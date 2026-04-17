@@ -147,10 +147,11 @@ function FieldRow({
             type="text"
             value={str}
             disabled={!canEdit}
-            placeholder={field.kind === 'nullable-string' || field.kind === 'string' ? field.placeholder ?? '' : ''}
+            placeholder={field.placeholder ?? ''}
             onChange={(e) => {
               const next = e.target.value;
-              onChange(field.kind === 'nullable-string' && next === '' ? null : next);
+              const trimmed = next.trim();
+              onChange(field.kind === 'nullable-string' && trimmed === '' ? null : next);
             }}
             className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
           />
@@ -202,6 +203,7 @@ function StringArrayEditor({
         <div key={i} className="flex items-center gap-1">
           <input
             type="text"
+            aria-label={`${itemLabel} ${i + 1}`}
             value={item}
             disabled={!canEdit}
             onChange={(e) => {

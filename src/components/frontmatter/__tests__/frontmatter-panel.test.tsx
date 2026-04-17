@@ -159,4 +159,38 @@ describe('FrontmatterPanel', () => {
     );
     expect(screen.getByLabelText(/output/i)).toBeDisabled();
   });
+
+  it('disables the mode-toggle button when canEdit is false', () => {
+    render(
+      <FrontmatterPanel
+        schema={workflowSchema}
+        value={baseValue()}
+        rawYaml={null}
+        mode="fields"
+        canEdit={false}
+        onFieldsChange={() => {}}
+        onRawChange={() => {}}
+        onModeChange={() => {}}
+        error={null}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /view raw yaml/i })).toBeDisabled();
+  });
+
+  it('disables the raw textarea when canEdit is false', () => {
+    render(
+      <FrontmatterPanel
+        schema={workflowSchema}
+        value={baseValue()}
+        rawYaml={'type: workflow'}
+        mode="raw"
+        canEdit={false}
+        onFieldsChange={() => {}}
+        onRawChange={() => {}}
+        onModeChange={() => {}}
+        error={null}
+      />,
+    );
+    expect(screen.getByRole('textbox', { name: /yaml/i })).toBeDisabled();
+  });
 });

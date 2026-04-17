@@ -3,7 +3,7 @@
 // Follows the MCP auth spec (2025-03-26) + RFC 7591 (DCR) + RFC 8414
 // (authorization server metadata).
 
-import type { AuthServerMetadata as AuthServerMetadataType } from './credentials';
+import type { AuthServerMetadata as AuthServerMetadataType, CredentialsOAuth } from './credentials';
 
 export type AuthServerMetadata = AuthServerMetadataType;
 
@@ -139,5 +139,158 @@ export async function performDcr(
     ok: true,
     clientId,
     clientSecret: typeof body.client_secret === 'string' ? body.client_secret : null,
+  };
+}
+
+// --- buildAuthorizeUrl -------------------------------------------------
+
+export function buildAuthorizeUrl(
+  metadata: AuthServerMetadata,
+  opts: {
+    clientId: string;
+    redirectUri: string;
+    scope: string | null;
+    state: string;
+    codeChallenge: string;
+  },
+): string {
+  const u = new URL(metadata.authorizationEndpoint);
+  u.searchParams.set('client_id', opts.clientId);
+  u.searchParams.set('redirect_uri', opts.redirectUri);
+  u.searchParams.set('response_type', 'code');
+  u.searchParams.set('state', opts.state);
+  u.searchParams.set('code_challenge', opts.codeChallenge);
+  u.searchParams.set('code_challenge_method', 'S256');
+  if (opts.scope) u.searchParams.set('scope', opts.scope);
+  return u.toString();
+}
+
+// --- exchangeCodeForTokens --------------------------------------------
+
+type TokenResponseMapped = Omit<CredentialsOAuth, 'kind' | 'dcrClientId' | 'dcrClientSecret' | 'authServerMetadata'>;
+
+export type ExchangeResult =
+  | { ok: true; tokens: TokenResponseMapped }
+  | { ok: false; error: string };
+
+export async function exchangeCodeForTokens(
+  metadata: AuthServerMetadata,
+  opts: {
+    clientId: string;
+    clientSecret: string | null;
+    code: string;
+    codeVerifier: string;
+    redirectUri: string;
+  },
+  fetchFn: FetchLike = fetch,
+): Promise<ExchangeResult> {
+  const params = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code: opts.code,
+    code_verifier: opts.codeVerifier,
+    redirect_uri: opts.redirectUri,
+    client_id: opts.clientId,
+  });
+  const headers: Record<string, string> = {
+    'content-type': 'application/x-www-form-urlencoded',
+    accept: 'application/json',
+  };
+  if (opts.clientSecret) {
+    headers.authorization =
+      'Basic ' +
+      Buffer.from(`${encodeURIComponent(opts.clientId)}:${encodeURIComponent(opts.clientSecret)}`).toString(
+        'base64',
+      );
+  }
+  const res = await fetchFn(metadata.tokenEndpoint, {
+    method: 'POST',
+    headers,
+    body: params.toString(),
+  });
+  if (!res.ok) {
+    return { ok: false, error: `token HTTP ${res.status}` };
+  }
+  const body = (await res.json()) as Record<string, unknown>;
+  const accessToken = body.access_token;
+  const refreshToken = body.refresh_token;
+  const expiresIn = body.expires_in;
+  if (typeof accessToken !== 'string' || typeof refreshToken !== 'string') {
+    return { ok: false, error: 'token response missing tokens' };
+  }
+  const expiresSeconds = typeof expiresIn === 'number' ? expiresIn : 3600;
+  return {
+    ok: true,
+    tokens: {
+      accessToken,
+      refreshToken,
+      expiresAt: new Date(Date.now() + expiresSeconds * 1000).toISOString(),
+      tokenType: typeof body.token_type === 'string' ? body.token_type : 'Bearer',
+      scope: typeof body.scope === 'string' ? body.scope : null,
+    },
+  };
+}
+
+// --- refreshIfNeeded ---------------------------------------------------
+
+export type RefreshResult =
+  | { kind: 'unchanged' }
+  | { kind: 'refreshed'; credentials: CredentialsOAuth }
+  | { kind: 'invalid_grant'; error: string };
+
+const REFRESH_SKEW_MS = 60_000;
+
+export async function refreshIfNeeded(
+  creds: CredentialsOAuth,
+  now: Date,
+  fetchFn: FetchLike = fetch,
+): Promise<RefreshResult> {
+  const expiresAt = new Date(creds.expiresAt).getTime();
+  if (expiresAt - now.getTime() > REFRESH_SKEW_MS) {
+    return { kind: 'unchanged' };
+  }
+
+  const params = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: creds.refreshToken,
+    client_id: creds.dcrClientId,
+  });
+  const headers: Record<string, string> = {
+    'content-type': 'application/x-www-form-urlencoded',
+    accept: 'application/json',
+  };
+  if (creds.dcrClientSecret) {
+    headers.authorization =
+      'Basic ' +
+      Buffer.from(`${encodeURIComponent(creds.dcrClientId)}:${encodeURIComponent(creds.dcrClientSecret)}`).toString(
+        'base64',
+      );
+  }
+  const res = await fetchFn(creds.authServerMetadata.tokenEndpoint, {
+    method: 'POST',
+    headers,
+    body: params.toString(),
+  });
+  if (res.status === 400 || res.status === 401) {
+    return { kind: 'invalid_grant', error: `refresh HTTP ${res.status}` };
+  }
+  if (!res.ok) {
+    return { kind: 'invalid_grant', error: `refresh HTTP ${res.status}` };
+  }
+  const body = (await res.json()) as Record<string, unknown>;
+  const accessToken = body.access_token;
+  if (typeof accessToken !== 'string') {
+    return { kind: 'invalid_grant', error: 'refresh response missing access_token' };
+  }
+  const expiresSeconds = typeof body.expires_in === 'number' ? body.expires_in : 3600;
+  return {
+    kind: 'refreshed',
+    credentials: {
+      ...creds,
+      accessToken,
+      refreshToken: typeof body.refresh_token === 'string' ? body.refresh_token : creds.refreshToken,
+      expiresAt: new Date(now.getTime() + expiresSeconds * 1000).toISOString(),
+      tokenType: typeof body.token_type === 'string' ? body.token_type : creds.tokenType,
+      scope: typeof body.scope === 'string' ? body.scope : creds.scope,
+    },
   };
 }

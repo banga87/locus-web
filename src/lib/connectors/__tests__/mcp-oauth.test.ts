@@ -131,3 +131,124 @@ describe('performDcr', () => {
     expect(result.ok).toBe(false);
   });
 });
+
+import {
+  buildAuthorizeUrl,
+  exchangeCodeForTokens,
+  refreshIfNeeded,
+} from '../mcp-oauth';
+import type { CredentialsOAuth } from '../credentials';
+
+describe('buildAuthorizeUrl', () => {
+  it('includes PKCE + required params', () => {
+    const url = buildAuthorizeUrl(META, {
+      clientId: 'cid',
+      redirectUri: 'https://locus.local/cb',
+      scope: 'read write',
+      state: 'sig.state',
+      codeChallenge: 'chal',
+    });
+    expect(url).toMatch(/https:\/\/provider\/authorize/);
+    const u = new URL(url);
+    expect(u.searchParams.get('client_id')).toBe('cid');
+    expect(u.searchParams.get('redirect_uri')).toBe('https://locus.local/cb');
+    expect(u.searchParams.get('response_type')).toBe('code');
+    expect(u.searchParams.get('state')).toBe('sig.state');
+    expect(u.searchParams.get('code_challenge')).toBe('chal');
+    expect(u.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(u.searchParams.get('scope')).toBe('read write');
+  });
+});
+
+describe('exchangeCodeForTokens', () => {
+  it('posts the right body and maps the response', async () => {
+    let capturedBody = '';
+    const fetchFn = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+      capturedBody = (init?.body as string) ?? '';
+      return new Response(
+        JSON.stringify({
+          access_token: 'at',
+          refresh_token: 'rt',
+          expires_in: 3600,
+          token_type: 'Bearer',
+          scope: 'read',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    const result = await exchangeCodeForTokens(
+      META,
+      {
+        clientId: 'cid',
+        clientSecret: 'csec',
+        code: 'the-code',
+        codeVerifier: 'the-verifier',
+        redirectUri: 'https://locus.local/cb',
+      },
+      fetchFn,
+    );
+    expect(result.ok).toBe(true);
+    const params = new URLSearchParams(capturedBody);
+    expect(params.get('grant_type')).toBe('authorization_code');
+    expect(params.get('code')).toBe('the-code');
+    expect(params.get('code_verifier')).toBe('the-verifier');
+    if (result.ok) {
+      expect(result.tokens.accessToken).toBe('at');
+      expect(result.tokens.refreshToken).toBe('rt');
+      expect(new Date(result.tokens.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    }
+  });
+});
+
+describe('refreshIfNeeded', () => {
+  function makeCreds(offsetMs: number): CredentialsOAuth {
+    return {
+      kind: 'oauth',
+      accessToken: 'old-at',
+      refreshToken: 'rt',
+      expiresAt: new Date(Date.now() + offsetMs).toISOString(),
+      tokenType: 'Bearer',
+      scope: null,
+      dcrClientId: 'cid',
+      dcrClientSecret: 'csec',
+      authServerMetadata: META,
+    };
+  }
+
+  it('returns unchanged when far from expiry', async () => {
+    const fetchFn = vi.fn();
+    const result = await refreshIfNeeded(makeCreds(10 * 60_000), new Date(), fetchFn);
+    expect(result.kind).toBe('unchanged');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('refreshes when within 60s of expiry', async () => {
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            access_token: 'new-at',
+            refresh_token: 'new-rt',
+            expires_in: 3600,
+            token_type: 'Bearer',
+          }),
+          { status: 200, headers: {} },
+        ),
+    );
+    const result = await refreshIfNeeded(makeCreds(30_000), new Date(), fetchFn);
+    expect(result.kind).toBe('refreshed');
+    if (result.kind === 'refreshed') {
+      expect(result.credentials.accessToken).toBe('new-at');
+      expect(result.credentials.refreshToken).toBe('new-rt');
+    }
+  });
+
+  it('returns invalid_grant on 400', async () => {
+    const fetchFn = vi.fn(
+      async () =>
+        new Response('{"error":"invalid_grant"}', { status: 400, headers: {} }),
+    );
+    const result = await refreshIfNeeded(makeCreds(30_000), new Date(), fetchFn);
+    expect(result.kind).toBe('invalid_grant');
+  });
+});

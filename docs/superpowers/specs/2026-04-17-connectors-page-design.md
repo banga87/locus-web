@@ -65,7 +65,15 @@ Each row shows: connector icon (from catalog or a generic icon for custom), name
 - `oauth`: Edit opens a minimal dialog showing connection metadata + a "Reconnect" button (re-runs the OAuth flow to refresh tokens / re-authorize).
 - `bearer` / custom: Edit opens the existing dialog to change URL/name/token.
 
-**Empty state**: when a company has zero installed connectors, the page auto-opens the Add modal on first visit (detected by checking `connections.length === 0` on the server and rendering the list component with an `autoOpenAddModal` prop). Refreshing the page after that doesn't re-open it — the modal fires once per page mount and closing it is sticky for the session. A subtle "Nothing connected yet" message sits behind it.
+**Empty state**: when a company has zero installed connectors, the page auto-opens the Add modal on first visit. Mechanism:
+
+- Server passes `autoOpenAddModal = connections.length === 0` to the client list component.
+- Client reads a `connectors.addModalDismissed` flag from `sessionStorage`. If the flag is absent and `autoOpenAddModal` is true, it opens the modal and sets the flag.
+- Closing the modal (any way — X, Esc, backdrop click, successful connect) leaves the flag set for the session.
+
+`sessionStorage` (not `localStorage`): sticky for the current tab's session only. Opening a new tab gets the prompt again, which matches the "help me get started" intent without being annoying on every page refresh. No URL param, no cookies.
+
+A subtle "Nothing connected yet" message sits behind the modal so the empty page isn't blank if the user closes without connecting.
 
 ### Add connector modal
 
@@ -156,7 +164,12 @@ One platform implementation used by every `oauth-dcr` catalog entry. Lives at `s
 1. **User clicks Connect** on a catalog tile.
 2. **Client** calls `POST /api/admin/connectors` with `{ catalogId }`. Server inserts a `mcp_connections` row (`status='pending'`, `authType='oauth'`, `catalogId=<id>`, no tokens yet) and returns `{ connection, next: { kind: 'oauth', authorizeUrl } }`.
 3. **Server, inside the POST handler:**
-   a. Probes `GET <mcpUrl>` unauth'd. Reads `WWW-Authenticate` header and, if present, fetches `/.well-known/oauth-authorization-server` (or the URL the header points at) for the authorization server metadata (`authorization_endpoint`, `token_endpoint`, `registration_endpoint`, `scopes_supported`).
+   a. Probes `GET <mcpUrl>` unauth'd. Resolves the authorization server metadata in this order:
+      i. If the 401 response carries a `WWW-Authenticate` header with a `resource_metadata` or `as_uri` parameter, fetch that URL.
+      ii. Otherwise, fetch `<mcpUrl origin>/.well-known/oauth-authorization-server` (the fallback path from RFC 8414).
+      iii. If both fail, abort with `dcr_unsupported` — the provider doesn't support the DCR path, and the catalog entry is misconfigured (or the provider regressed).
+
+      The metadata document must include `authorization_endpoint`, `token_endpoint`, and `registration_endpoint`. `scopes_supported` and `revocation_endpoint` are optional.
    b. Performs Dynamic Client Registration (`POST <registration_endpoint>` with `redirect_uris`, `token_endpoint_auth_method`, `grant_types`, `application_type: 'web'`). Stores `{client_id, client_secret?}` on the connection inside `credentialsEncrypted` JSON blob.
    c. Generates PKCE (`code_verifier`, `code_challenge`) and a `state` value. Signs `{ connectionId, csrf }` with HMAC + 10-minute TTL; that signed string is the OAuth `state` parameter. Stores the PKCE verifier in a short-lived server-side cache keyed by the signed state (in-memory for single-instance dev; we'll swap for the existing KV when we deploy).
    d. Builds the authorize URL with `client_id`, `response_type=code`, `redirect_uri`, `state`, `code_challenge`, `code_challenge_method=S256`, `scope` (from metadata's `scopes_supported`).
@@ -172,7 +185,19 @@ One platform implementation used by every `oauth-dcr` catalog entry. Lives at `s
 
 ### Refresh at tool-call time
 
-The MCP-out client at `src/lib/mcp-out/*` gains a pre-call hook: if `authType === 'oauth'` and `expiresAt < now + 60s`, refresh using `refresh_token` grant at the stored `token_endpoint`. Persist new tokens atomically. If refresh fails (`invalid_grant`), mark `status='error'` with a "Reconnect needed" message and surface the error to the chat turn so the agent can tell the user.
+The pure refresh helper lives in `src/lib/connectors/mcp-oauth.ts` alongside the rest of the OAuth primitives (no Next.js/Vercel imports). Signature:
+
+```ts
+refreshIfNeeded(conn: DecryptedOAuthConnection, now: Date): Promise<
+  | { kind: 'unchanged' }
+  | { kind: 'refreshed', credentials: CredentialsOAuth }
+  | { kind: 'invalid_grant', error: Error }
+>
+```
+
+The caller in `src/lib/mcp-out/` (the existing `loadMcpOutTools` path, or a small adapter next to it) invokes `refreshIfNeeded` before opening the transport for an `authType === 'oauth'` connection. If `refreshed`, the caller re-encrypts and writes the new credentials back via the existing connection-update helper. If `invalid_grant`, the caller marks `status='error'` with message "Reconnect needed" and skips the connection for this turn. The refresh decision (`expiresAt < now + 60s`) lives inside `refreshIfNeeded`, not in `mcp-out/`.
+
+This split keeps `mcp-out/` free of OAuth mechanics (it only orchestrates DB + transport), and keeps `connectors/mcp-oauth.ts` callable from any surface — including a future worker that needs to refresh tokens on a schedule without opening an MCP transport.
 
 ### Disconnect
 
@@ -191,10 +216,15 @@ The MCP-out client at `src/lib/mcp-out/*` gains a pre-call hook: if `authType ==
 
 ### `mcp_connections` extension
 
+`authType` and `status` are PostgreSQL enums (`mcp_connection_auth_type`, `mcp_connection_status`) defined via Drizzle's `pgEnum`, not check constraints. The migration uses `ALTER TYPE … ADD VALUE`.
+
 Single migration:
 
-- Widen the `authType` check constraint to include `'oauth'` alongside existing `'none'` and `'bearer'`.
+- `ALTER TYPE mcp_connection_auth_type ADD VALUE 'oauth';` — new value alongside existing `'none'` and `'bearer'`. Also update the `pgEnum` declaration in `src/db/schema/mcp-connections.ts`.
+- `ALTER TYPE mcp_connection_status ADD VALUE 'pending';` — new value alongside existing `'active'`, `'disabled'`, `'error'`. Required because OAuth install creates a row with `status='pending'` before the authorize popup returns. Also update the `pgEnum` declaration. `loadMcpOutTools()` already filters by `status='active'`, so `pending` rows are ignored during chat turns without further change.
 - Add `catalogId text NULL` column. No index — queried only per-row.
+
+Note: `ALTER TYPE … ADD VALUE` cannot run inside a transaction block in PostgreSQL < 12. Drizzle's migration runner wraps statements in a transaction by default; either run the enum additions in a `-- @breakpoint` separated migration file or use raw SQL migrations, consistent with how other enum changes in this repo have been handled.
 
 `credentialsEncrypted` remains a single encrypted blob. The decrypted shape is discriminated by `authType`:
 
@@ -247,9 +277,9 @@ Rename the whole namespace from `/api/admin/mcp-connections` to `/api/admin/conn
 
 - `PATCH /api/admin/connectors/:id` — update name (all types), or URL/auth for custom. Unchanged from today's handler, just renamed.
 
-- `DELETE /api/admin/connectors/:id` — keep as an alias for disconnect; same handler.
-
 - `GET /api/admin/connectors` — existing, renamed. Returns the same shape the server page component calls directly today.
+
+There is no `DELETE /api/admin/connectors/:id` — disconnect is the sole removal path because OAuth connections need the revoke side-effect and we don't want two endpoints with subtly different behaviour.
 
 All endpoints require Owner role (`requireRole(ctx, 'owner')`).
 

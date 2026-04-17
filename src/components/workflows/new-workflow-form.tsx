@@ -14,6 +14,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import TurndownService from 'turndown';
 
+import { workflowSchema } from '@/lib/frontmatter/schemas/workflow';
+import { joinFrontmatter } from '@/lib/frontmatter/markdown';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,17 +36,6 @@ import type { ManifestFolder } from '@/lib/brain/manifest';
 interface Props {
   folders: ManifestFolder[];
 }
-
-// Default frontmatter block pre-seeded into new workflow documents.
-// Must satisfy validateWorkflowFrontmatter so the Run button works on
-// first save without the user touching the YAML.
-const WORKFLOW_FRONTMATTER = `---
-type: workflow
-output: document
-output_category: null
-requires_mcps: []
-schedule: null
----`;
 
 const WORKFLOW_BODY_PLACEHOLDER =
   'Describe what this workflow should do, which docs it should consult, and what output it should produce.';
@@ -96,11 +87,11 @@ export function NewWorkflowForm({ folders }: Props) {
 
       setSubmitting(true);
 
-      // Build document content: frontmatter block + blank line + body.
+      // Build document content: schema defaults frontmatter + body.
       const bodyMd = htmlRef.current
         ? turndown.turndown(htmlRef.current)
         : WORKFLOW_BODY_PLACEHOLDER;
-      const content = WORKFLOW_FRONTMATTER + '\n\n' + bodyMd;
+      const content = joinFrontmatter(workflowSchema.defaults(), bodyMd, workflowSchema);
 
       try {
         const res = await fetch('/api/brain/documents', {

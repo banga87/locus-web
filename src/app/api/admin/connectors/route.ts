@@ -3,6 +3,15 @@
 // GET  /api/admin/connectors  — list the caller's company's connections.
 // POST /api/admin/connectors  — create a new connection, then test it.
 //
+// POST supports two shapes:
+//   1. Catalog install: `{ catalogId, bearerToken? }`. Looks up the
+//      catalog entry and branches on its `authMode`:
+//        - 'oauth-dcr' → resolves metadata, performs DCR, stores a
+//          pending row with DCR details, returns an authorize URL.
+//        - 'bearer'    → encrypts the bearer token, stores active, tests.
+//   2. Custom: `{ name, serverUrl, authType, bearerToken? }`. Same path
+//      as before — insert + sync connect test.
+//
 // Auth: Owner-only (MCP OUT controls live data flowing from sensitive
 // systems like email / CRM / accounting — only the company owner may
 // configure). Other role checks are implicitly handled by `requireAuth`
@@ -23,7 +32,9 @@ import { requireAuth, requireRole } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
 import {
   createConnection,
+  encryptCredential,
   getConnection,
+  installFromCatalog,
   listConnections,
   markConnectionError,
 } from '@/lib/mcp-out/connections';
@@ -34,6 +45,18 @@ import {
   DEFAULT_DISCOVER_TIMEOUT_MS,
 } from '@/lib/mcp-out/client';
 import type { McpConnection } from '@/lib/mcp-out/types';
+import {
+  getCatalogEntry,
+  type ConnectorCatalogEntry,
+} from '@/lib/connectors/catalog';
+import {
+  resolveAuthServerMetadata,
+  performDcr,
+  buildAuthorizeUrl,
+} from '@/lib/connectors/mcp-oauth';
+import { generatePkce, signState } from '@/lib/connectors/pkce';
+import { savePkceVerifier } from '@/lib/connectors/pkce-store';
+import { encodeCredentials } from '@/lib/connectors/credentials';
 
 export const runtime = 'nodejs';
 
@@ -69,7 +92,12 @@ export async function GET() {
 
 // --- POST /api/admin/connectors -------------------------------------
 
-const createSchema = z.object({
+const catalogInstallSchema = z.object({
+  catalogId: z.string().min(1),
+  bearerToken: z.string().trim().min(1).max(4096).optional(),
+});
+
+const customInstallSchema = z.object({
   name: z.string().trim().min(1).max(100),
   serverUrl: z
     .string()
@@ -90,6 +118,15 @@ const createSchema = z.object({
   authType: z.enum(['none', 'bearer']),
   bearerToken: z.string().trim().min(1).max(4096).optional(),
 });
+
+function isCatalogInstall(body: unknown): body is { catalogId: unknown } {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    'catalogId' in (body as object) &&
+    (body as { catalogId: unknown }).catalogId !== undefined
+  );
+}
 
 export async function POST(request: Request) {
   let ctx;
@@ -123,7 +160,121 @@ export async function POST(request: Request) {
     );
   }
 
-  const parsed = createSchema.safeParse(body);
+  const origin = new URL(request.url).origin;
+
+  if (isCatalogInstall(body)) {
+    const parsed = catalogInstallSchema.safeParse(body);
+    if (!parsed.success) {
+      return Response.json(
+        {
+          error: 'invalid_body',
+          message: 'Invalid catalog install input.',
+          issues: parsed.error.issues,
+        },
+        { status: 400 },
+      );
+    }
+    const { catalogId, bearerToken } = parsed.data;
+    const entry = getCatalogEntry(catalogId);
+    if (!entry) {
+      return Response.json(
+        { error: 'unknown_catalog_id', message: `Unknown catalog id: ${catalogId}` },
+        { status: 400 },
+      );
+    }
+
+    if (entry.authMode === 'oauth-dcr') {
+      const kickoff = await kickoffOauthInstall(ctx.companyId, entry, origin);
+      if (!kickoff.ok) {
+        return Response.json(
+          {
+            error: kickoff.error,
+            message: kickoff.detail ?? 'OAuth install failed.',
+          },
+          { status: 502 },
+        );
+      }
+
+      logEvent({
+        companyId: ctx.companyId,
+        category: 'administration',
+        eventType: 'mcp.connection.created',
+        actorType: 'human',
+        actorId: ctx.userId,
+        actorName: ctx.fullName ?? undefined,
+        targetType: 'connection',
+        targetId: kickoff.connection.id,
+        details: {
+          name: kickoff.connection.name,
+          serverUrl: kickoff.connection.serverUrl,
+          authType: kickoff.connection.authType,
+          catalogId: entry.id,
+          kickoff: 'oauth',
+        },
+      });
+
+      return Response.json({
+        connection: serializeConnection(kickoff.connection),
+        next: { kind: 'oauth' as const, authorizeUrl: kickoff.authorizeUrl },
+      });
+    }
+
+    // Catalog bearer install.
+    if (!bearerToken) {
+      return Response.json(
+        {
+          error: 'invalid_body',
+          message: 'bearerToken is required for this catalog entry.',
+        },
+        { status: 400 },
+      );
+    }
+
+    const plaintext = encodeCredentials({ kind: 'bearer', token: bearerToken });
+    const credentialsEncrypted = await encryptCredential(plaintext);
+
+    const created = await installFromCatalog({
+      companyId: ctx.companyId,
+      catalogId: entry.id,
+      name: entry.name,
+      serverUrl: entry.mcpUrl,
+      authType: 'bearer',
+      credentialsEncrypted,
+      initialStatus: 'active',
+    });
+
+    const testResult = await testConnection(created);
+
+    logEvent({
+      companyId: ctx.companyId,
+      category: 'administration',
+      eventType: 'mcp.connection.created',
+      actorType: 'human',
+      actorId: ctx.userId,
+      actorName: ctx.fullName ?? undefined,
+      targetType: 'connection',
+      targetId: created.id,
+      details: {
+        name: created.name,
+        serverUrl: created.serverUrl,
+        authType: created.authType,
+        catalogId: entry.id,
+        testOk: testResult.ok,
+        testError: testResult.ok ? null : testResult.error,
+      },
+    });
+
+    const latest = await getConnection(created.id, ctx.companyId);
+
+    return Response.json({
+      connection: latest ? serializeConnection(latest) : serializeConnection(created),
+      test: testResult,
+      next: { kind: 'done' as const },
+    });
+  }
+
+  // Custom install path (unchanged behaviour from prior task).
+  const parsed = customInstallSchema.safeParse(body);
   if (!parsed.success) {
     return Response.json(
       {
@@ -203,6 +354,7 @@ function serializeConnection(c: McpConnection) {
     hasCredential: c.credentialsEncrypted !== null,
     status: c.status,
     lastErrorMessage: c.lastErrorMessage,
+    catalogId: c.catalogId,
     createdAt: c.createdAt,
     lastUsedAt: c.lastUsedAt,
   };
@@ -234,4 +386,77 @@ async function testConnection(
       await client.close().catch(() => {});
     }
   }
+}
+
+/**
+ * Kick off an OAuth 2.1 + DCR install for a catalog entry. On success the
+ * caller should redirect the user to `authorizeUrl`; the callback route
+ * at `/api/admin/connectors/oauth/callback` finishes the exchange.
+ *
+ * Side effects:
+ *   - Writes a `pending` row to `mcp_connections` carrying the DCR
+ *     client credentials + resolved metadata inside an encrypted
+ *     placeholder credential.
+ *   - Stores the PKCE verifier keyed by signed state so the callback can
+ *     retrieve it.
+ */
+async function kickoffOauthInstall(
+  companyId: string,
+  entry: ConnectorCatalogEntry,
+  origin: string,
+): Promise<
+  | { ok: true; connection: McpConnection; authorizeUrl: string }
+  | { ok: false; error: string; detail?: string }
+> {
+  const mcpUrl = new URL(entry.mcpUrl);
+  const meta = await resolveAuthServerMetadata(mcpUrl);
+  if (!meta.ok) return { ok: false, error: meta.error, detail: meta.detail };
+
+  const redirectUri = `${origin}/api/admin/connectors/oauth/callback`;
+  const dcr = await performDcr(meta.metadata, { redirectUri, clientName: 'Locus' });
+  if (!dcr.ok) return { ok: false, error: 'dcr_failed', detail: dcr.error };
+
+  const placeholder = encodeCredentials({
+    kind: 'oauth',
+    accessToken: '',
+    refreshToken: '',
+    expiresAt: new Date(0).toISOString(),
+    tokenType: 'Bearer',
+    scope: null,
+    dcrClientId: dcr.clientId,
+    dcrClientSecret: dcr.clientSecret,
+    authServerMetadata: meta.metadata,
+  });
+  const credentialsEncrypted = await encryptCredential(placeholder);
+
+  const connection = await installFromCatalog({
+    companyId,
+    catalogId: entry.id,
+    name: entry.name,
+    serverUrl: entry.mcpUrl,
+    authType: 'oauth',
+    credentialsEncrypted,
+    initialStatus: 'pending',
+  });
+
+  const secret = process.env.CONNECTORS_STATE_SECRET;
+  if (!secret) throw new Error('CONNECTORS_STATE_SECRET not set');
+
+  const { verifier, challenge } = generatePkce();
+  const state = signState(
+    { connectionId: connection.id, csrf: Math.random().toString(36).slice(2) },
+    secret,
+    600,
+  );
+  savePkceVerifier(state, verifier);
+
+  const authorizeUrl = buildAuthorizeUrl(meta.metadata, {
+    clientId: dcr.clientId,
+    redirectUri,
+    scope: meta.metadata.scopesSupported?.join(' ') ?? null,
+    state,
+    codeChallenge: challenge,
+  });
+
+  return { ok: true, connection, authorizeUrl };
 }

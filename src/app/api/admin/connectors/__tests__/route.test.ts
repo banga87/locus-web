@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   connectToMcpServerImpl: vi.fn(),
   discoverToolsImpl: vi.fn(),
   logEventImpl: vi.fn(),
+  resolveAuthServerMetadataImpl: vi.fn(),
+  performDcrImpl: vi.fn(),
+  buildAuthorizeUrlImpl: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', async () => {
@@ -52,6 +55,13 @@ vi.mock('@/lib/audit/logger', async () => {
     },
   };
 });
+
+vi.mock('@/lib/connectors/mcp-oauth', () => ({
+  resolveAuthServerMetadata: (...args: unknown[]) =>
+    mocks.resolveAuthServerMetadataImpl(...args),
+  performDcr: (...args: unknown[]) => mocks.performDcrImpl(...args),
+  buildAuthorizeUrl: (...args: unknown[]) => mocks.buildAuthorizeUrlImpl(...args),
+}));
 
 // --- Subject -------------------------------------------------------------
 
@@ -105,6 +115,11 @@ beforeEach(() => {
   mocks.connectToMcpServerImpl.mockReset();
   mocks.discoverToolsImpl.mockReset();
   mocks.logEventImpl.mockReset();
+  mocks.resolveAuthServerMetadataImpl.mockReset();
+  mocks.performDcrImpl.mockReset();
+  mocks.buildAuthorizeUrlImpl.mockReset();
+  // kickoffOauthInstall throws if this is unset.
+  process.env.CONNECTORS_STATE_SECRET = '0'.repeat(64);
 });
 
 function mockOwner() {
@@ -350,6 +365,78 @@ describeDb('POST /api/admin/connectors', () => {
     // throws synchronously-via-microtask.
     expect(elapsed).toBeLessThan(2000);
     createdConnectionIds.push(payload.connection.id);
+  });
+});
+
+// --- POST /api/admin/connectors — catalog OAuth kickoff -----------
+
+describeDb('POST /api/admin/connectors (catalog OAuth kickoff)', () => {
+  it('creates a pending oauth connection and returns an authorize URL', async () => {
+    mockOwner();
+
+    const fakeMetadata = {
+      authorizationEndpoint: 'https://auth.example.test/oauth/authorize',
+      tokenEndpoint: 'https://auth.example.test/oauth/token',
+      registrationEndpoint: 'https://auth.example.test/oauth/register',
+      revocationEndpoint: null,
+      scopesSupported: ['read', 'write'],
+    };
+
+    mocks.resolveAuthServerMetadataImpl.mockResolvedValue({
+      ok: true,
+      metadata: fakeMetadata,
+    });
+    mocks.performDcrImpl.mockResolvedValue({
+      ok: true,
+      clientId: 'cid',
+      clientSecret: null,
+    });
+    mocks.buildAuthorizeUrlImpl.mockReturnValue(
+      'https://auth.example.test/oauth/authorize?client_id=cid&state=xyz',
+    );
+
+    const req = bodyRequest(
+      'https://test.local/api/admin/connectors',
+      'POST',
+      { catalogId: 'linear' },
+    );
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    const payload = (await res.json()) as {
+      connection: {
+        id: string;
+        status: string;
+        authType: string;
+        catalogId: string | null;
+      };
+      next: { kind: string; authorizeUrl?: string };
+    };
+
+    expect(payload.connection.status).toBe('pending');
+    expect(payload.connection.authType).toBe('oauth');
+    expect(payload.connection.catalogId).toBe('linear');
+    expect(payload.next.kind).toBe('oauth');
+    expect(typeof payload.next.authorizeUrl).toBe('string');
+    expect(payload.next.authorizeUrl).toContain('https://auth.example.test/');
+
+    createdConnectionIds.push(payload.connection.id);
+
+    // Sanity: the OAuth helpers were called.
+    expect(mocks.resolveAuthServerMetadataImpl).toHaveBeenCalledOnce();
+    expect(mocks.performDcrImpl).toHaveBeenCalledOnce();
+    expect(mocks.buildAuthorizeUrlImpl).toHaveBeenCalledOnce();
+
+    // Audit event emitted for the install.
+    expect(mocks.logEventImpl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'mcp.connection.created',
+        details: expect.objectContaining({
+          catalogId: 'linear',
+          kickoff: 'oauth',
+        }),
+      }),
+    );
   });
 });
 

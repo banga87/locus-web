@@ -26,7 +26,15 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
-import { decryptCredential } from './connections';
+import { decodeCredentials, encodeCredentials } from '@/lib/connectors/credentials';
+import { refreshIfNeeded } from '@/lib/connectors/mcp-oauth';
+
+import {
+  decryptCredential,
+  encryptCredential,
+  markConnectionError,
+  updateConnectionCredentials,
+} from './connections';
 import type { McpConnection, McpOutTool } from './types';
 
 export const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
@@ -48,10 +56,48 @@ export async function connectToMcpServer(
   const url = new URL(conn.serverUrl);
 
   const headers: Record<string, string> = {};
+  let bearerToken: string | null = null;
+
   if (conn.authType === 'bearer' && conn.credentialsEncrypted) {
-    const token = await decryptCredential(conn.credentialsEncrypted);
-    headers['Authorization'] = `Bearer ${token}`;
+    // Backward-compat: the old bearer path stored a plain string, not a
+    // JSON envelope. Try JSON first; fall back to raw string so rows
+    // written before the envelope migration still work. The next write
+    // through createConnection / updateConnection normalises them.
+    const decrypted = await decryptCredential(conn.credentialsEncrypted);
+    try {
+      const envelope = decodeCredentials(decrypted);
+      if (envelope.kind === 'bearer') bearerToken = envelope.token;
+    } catch {
+      bearerToken = decrypted;
+    }
+  } else if (conn.authType === 'oauth' && conn.credentialsEncrypted) {
+    const envelope = decodeCredentials(
+      await decryptCredential(conn.credentialsEncrypted),
+    );
+    if (envelope.kind !== 'oauth') {
+      throw new Error(`expected oauth credentials, got ${envelope.kind}`);
+    }
+    const refresh = await refreshIfNeeded(envelope, new Date());
+    if (refresh.kind === 'refreshed') {
+      const next = encodeCredentials(refresh.credentials);
+      await updateConnectionCredentials(
+        conn.id,
+        conn.companyId,
+        await encryptCredential(next),
+      );
+      bearerToken = refresh.credentials.accessToken;
+    } else if (refresh.kind === 'invalid_grant') {
+      await markConnectionError(
+        conn.id,
+        'Reconnect needed: refresh token rejected.',
+      );
+      throw new Error('OAuth refresh failed — reconnect needed.');
+    } else {
+      bearerToken = envelope.accessToken;
+    }
   }
+
+  if (bearerToken) headers['Authorization'] = `Bearer ${bearerToken}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

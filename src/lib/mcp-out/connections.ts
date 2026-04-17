@@ -25,6 +25,7 @@ import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mcpConnections } from '@/db/schema';
+import { encodeCredentials } from '@/lib/connectors/credentials';
 
 import type {
   McpConnection,
@@ -173,7 +174,9 @@ export async function createConnection(
 ): Promise<McpConnection> {
   const credentialsEncrypted =
     input.authType === 'bearer' && input.bearerToken && input.bearerToken.length > 0
-      ? await encryptCredential(input.bearerToken)
+      ? await encryptCredential(
+          encodeCredentials({ kind: 'bearer', token: input.bearerToken }),
+        )
       : null;
 
   const [row] = await db
@@ -225,7 +228,9 @@ export async function updateConnection(
     values.credentialsEncrypted =
       patch.bearerToken === null || patch.bearerToken.length === 0
         ? null
-        : await encryptCredential(patch.bearerToken);
+        : await encryptCredential(
+            encodeCredentials({ kind: 'bearer', token: patch.bearerToken }),
+          );
   }
 
   if (Object.keys(values).length === 0) {

@@ -39,6 +39,7 @@ export default async function DocumentEditPage({ params }: PageProps) {
       status: documents.status,
       confidenceLevel: documents.confidenceLevel,
       ownerId: documents.ownerId,
+      type: documents.type,
     })
     .from(documents)
     .where(

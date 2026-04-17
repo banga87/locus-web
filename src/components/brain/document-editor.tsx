@@ -1,19 +1,11 @@
 'use client';
 
-// The edit surface. Wires Tiptap (HTML in/out) to a markdown-on-the-wire
-// PATCH endpoint, plus the frontmatter sidebar. Auto-saves with a 500 ms
-// debounce; a single PATCH carries whatever fields have changed since the
-// last save.
-//
-// We intentionally do not round-trip HTML ↔ Markdown on every keystroke:
-// the Tiptap editor is authoritative for HTML during the session, and we
-// convert to Markdown only at save-time (turndown runs once per debounce).
+// Brain document editor. Now delegates all save/debounce/markdown-split
+// plumbing to useFrontmatterEditor; this file is the layout + wiring.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { marked } from 'marked';
-import TurndownService from 'turndown';
 import { CheckIcon, LoaderIcon, XIcon, XCircleIcon } from 'lucide-react';
 
 import { TiptapEditor } from '@/components/editor/tiptap-editor';
@@ -22,6 +14,11 @@ import {
   FrontmatterSidebar,
   type FrontmatterValue,
 } from './frontmatter-sidebar';
+import { FrontmatterPanel } from '@/components/frontmatter/frontmatter-panel';
+import {
+  useFrontmatterEditor,
+  type SaveState,
+} from '@/components/frontmatter/use-frontmatter-editor';
 
 interface DocumentData {
   id: string;
@@ -30,6 +27,8 @@ interface DocumentData {
   status: 'draft' | 'active' | 'archived';
   confidenceLevel: 'high' | 'medium' | 'low';
   ownerId: string | null;
+  /** Denormalised documents.type — drives schema selection. Pass null for plain docs. */
+  type: string | null;
 }
 
 interface UserOption {
@@ -42,21 +41,6 @@ interface Props {
   owners: UserOption[];
 }
 
-type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
-
-// Anything in this shape can land in a PATCH body.
-type PendingPatch = Partial<FrontmatterValue & { content: string }>;
-
-const DEBOUNCE_MS = 500;
-
-// Turndown instance is expensive to construct; memoize at module scope.
-// It only runs client-side (this file is a client component).
-const turndown = new TurndownService({
-  headingStyle: 'atx',
-  codeBlockStyle: 'fenced',
-  bulletListMarker: '-',
-});
-
 export function DocumentEditor({ document, owners }: Props) {
   const router = useRouter();
 
@@ -67,90 +51,20 @@ export function DocumentEditor({ document, owners }: Props) {
     ownerId: document.ownerId,
   });
 
-  // Initial HTML for Tiptap — convert once from the markdown the server gave us.
-  const initialHtml = useMemo(
-    () => marked.parse(document.content, { async: false }) as string,
-    [document.content],
-  );
+  const editor = useFrontmatterEditor({
+    documentId: document.id,
+    initialContent: document.content,
+    docType: document.type,
+    canEdit: true,
+  });
 
-  // Live HTML from Tiptap; kept in a ref so the debounce timer can read the
-  // latest value without re-subscribing.
-  const latestHtml = useRef<string>(initialHtml);
-
-  const [saveState, setSaveState] = useState<SaveState>('idle');
-  const pending = useRef<PendingPatch>({});
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const flush = useCallback(async () => {
-    const patch = pending.current;
-    pending.current = {};
-    timer.current = null;
-
-    if (Object.keys(patch).length === 0) return;
-
-    setSaveState('saving');
-    try {
-      const body: Record<string, unknown> = {};
-      if (patch.title !== undefined) body.title = patch.title;
-      if (patch.status !== undefined) body.status = patch.status;
-      if (patch.confidenceLevel !== undefined)
-        body.confidenceLevel = patch.confidenceLevel;
-      if (patch.ownerId !== undefined) body.ownerId = patch.ownerId;
-      if (patch.content !== undefined) body.content = patch.content;
-
-      const res = await fetch(`/api/brain/documents/${document.id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setSaveState('saved');
-    } catch (err) {
-      console.error('[editor] save failed', err);
-      setSaveState('error');
-    }
-  }, [document.id]);
-
-  const schedule = useCallback(
-    (patch: PendingPatch) => {
-      pending.current = { ...pending.current, ...patch };
-      setSaveState('pending');
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        void flush();
-      }, DEBOUNCE_MS);
-    },
-    [flush],
-  );
-
-  // Frontmatter changes: update local state + schedule save.
   const onFrontmatterChange = useCallback(
     (patch: Partial<FrontmatterValue>) => {
       setFrontmatter((prev) => ({ ...prev, ...patch }));
-      schedule(patch);
+      editor.onFieldPatch(patch);
     },
-    [schedule],
+    [editor],
   );
-
-  // Tiptap updates: convert HTML → Markdown, schedule save.
-  const onHtmlUpdate = useCallback(
-    (html: string) => {
-      latestHtml.current = html;
-      const md = turndown.turndown(html);
-      schedule({ content: md });
-    },
-    [schedule],
-  );
-
-  // Flush pending saves on unmount to avoid losing work.
-  useEffect(() => {
-    return () => {
-      if (timer.current) {
-        clearTimeout(timer.current);
-        void flush();
-      }
-    };
-  }, [flush]);
 
   const breadcrumb = [
     { label: 'Brain', href: '/brain' },
@@ -173,7 +87,7 @@ export function DocumentEditor({ document, owners }: Props) {
         </nav>
         <div className="topbar-spacer" />
         <div className="flex items-center gap-3 text-xs">
-          <SaveIndicator state={saveState} />
+          <SaveIndicator state={editor.saveState} />
         </div>
         <Link
           href={`/brain/${document.id}`}
@@ -197,9 +111,9 @@ export function DocumentEditor({ document, owners }: Props) {
               className="mb-4 w-full border-0 bg-transparent text-2xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground"
             />
             <TiptapEditor
-              initialContent={initialHtml}
+              initialContent={editor.initialHtml}
               placeholder="Start writing…"
-              onUpdate={onHtmlUpdate}
+              onUpdate={editor.onBodyHtmlChange}
             />
             <button
               type="button"
@@ -210,11 +124,26 @@ export function DocumentEditor({ document, owners }: Props) {
             </button>
           </div>
 
-          <FrontmatterSidebar
-            value={frontmatter}
-            owners={owners}
-            onChange={onFrontmatterChange}
-          />
+          <div className="space-y-4">
+            {editor.panelState.schema && (
+              <FrontmatterPanel
+                schema={editor.panelState.schema}
+                value={editor.panelState.value}
+                rawYaml={editor.panelState.rawYaml}
+                mode={editor.panelState.mode}
+                canEdit={editor.canEdit}
+                onFieldsChange={editor.onPanelChange}
+                onRawChange={editor.onRawChange}
+                onModeChange={editor.onModeChange}
+                error={editor.panelState.error}
+              />
+            )}
+            <FrontmatterSidebar
+              value={frontmatter}
+              owners={owners}
+              onChange={onFrontmatterChange}
+            />
+          </div>
         </div>
       </div>
     </>

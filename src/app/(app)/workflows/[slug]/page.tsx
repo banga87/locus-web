@@ -80,21 +80,6 @@ export default async function WorkflowDetailPage({
     .orderBy(desc(workflowRuns.startedAt))
     .limit(50);
 
-  // Extract workflow frontmatter from metadata jsonb.
-  const meta = (row.metadata ?? {}) as Record<string, unknown>;
-  const frontmatter = {
-    output: typeof meta['output'] === 'string' ? meta['output'] : 'document',
-    output_category:
-      typeof meta['output_category'] === 'string'
-        ? meta['output_category']
-        : null,
-    requires_mcps: Array.isArray(meta['requires_mcps'])
-      ? (meta['requires_mcps'] as string[])
-      : [],
-    schedule:
-      typeof meta['schedule'] === 'string' ? meta['schedule'] : null,
-  };
-
   const canEdit = ['owner', 'admin', 'editor'].includes(ctx.role);
   // Viewers cannot trigger workflows (matches the trigger route's 403 gate).
   // Hide the button rather than rendering it and having the API slap them
@@ -139,7 +124,7 @@ export default async function WorkflowDetailPage({
           }}
           runs={typedRuns}
           workflowSlug={row.slug}
-          frontmatter={frontmatter}
+          docType={row.type}
           canEdit={canEdit}
           activeTab={activeTab}
         />

@@ -5,32 +5,28 @@
 // Tab state is driven by the `?tab=` URL param via router.push so the
 // active tab is bookmarkable and survives a refresh.
 //
-// Definition tab: inline Tiptap editor + auto-save + WorkflowFrontmatterFields.
+// Definition tab: inline Tiptap editor + auto-save + FrontmatterPanel.
 // Runs tab:       RunHistoryTable.
 //
 // We do NOT use <DocumentEditor> here because that component renders its own
 // .topbar — nesting a second topbar inside a tab panel would break the layout.
-// Instead we inline the save logic (same debounce pattern DocumentEditor uses)
+// Instead we use the useFrontmatterEditor hook (same pattern as DocumentEditor)
 // and render only the editor content area.
 
 import {
   useCallback,
-  useEffect,
-  useMemo,
-  useRef,
   useState,
 } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { marked } from 'marked';
-import TurndownService from 'turndown';
 import { CheckIcon, LoaderIcon, XCircleIcon } from 'lucide-react';
 
 import { TiptapEditor } from '@/components/editor/tiptap-editor';
+import { FrontmatterPanel } from '@/components/frontmatter/frontmatter-panel';
+import {
+  useFrontmatterEditor,
+  type SaveState,
+} from '@/components/frontmatter/use-frontmatter-editor';
 import { RunHistoryTable } from './run-history-table';
-import { WorkflowFrontmatterFields } from './workflow-frontmatter-fields';
-import type { WorkflowFrontmatterValue } from './workflow-frontmatter-fields';
-
-type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
 type RunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'queued';
 
@@ -56,18 +52,10 @@ interface Props {
   document: DocumentData;
   runs: RunRow[];
   workflowSlug: string;
-  frontmatter: WorkflowFrontmatterValue;
+  docType: string | null;
   canEdit: boolean;
   activeTab: 'definition' | 'runs';
 }
-
-const DEBOUNCE_MS = 500;
-
-const turndown = new TurndownService({
-  headingStyle: 'atx',
-  codeBlockStyle: 'fenced',
-  bulletListMarker: '-',
-});
 
 function SaveIndicator({ state }: { state: SaveState }) {
   switch (state) {
@@ -101,81 +89,30 @@ function SaveIndicator({ state }: { state: SaveState }) {
 
 function DefinitionEditor({
   document,
-  frontmatter,
+  docType,
   canEdit,
 }: {
   document: DocumentData;
-  frontmatter: WorkflowFrontmatterValue;
+  docType: string | null;
   canEdit: boolean;
 }) {
-  const initialHtml = useMemo(
-    () => marked.parse(document.content, { async: false }) as string,
-    [document.content],
-  );
-
   const [title, setTitle] = useState(document.title);
-  const latestHtml = useRef<string>(initialHtml);
-  const [saveState, setSaveState] = useState<SaveState>('idle');
-  const pending = useRef<Record<string, unknown>>({});
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const flush = useCallback(async () => {
-    const patch = pending.current;
-    pending.current = {};
-    timer.current = null;
-    if (Object.keys(patch).length === 0) return;
-
-    setSaveState('saving');
-    try {
-      const res = await fetch(`/api/brain/documents/${document.id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(patch),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setSaveState('saved');
-    } catch (err) {
-      console.error('[WorkflowDetailTabs] save failed', err);
-      setSaveState('error');
-    }
-  }, [document.id]);
-
-  const schedule = useCallback(
-    (patch: Record<string, unknown>) => {
-      pending.current = { ...pending.current, ...patch };
-      setSaveState('pending');
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => { void flush(); }, DEBOUNCE_MS);
-    },
-    [flush],
-  );
-
-  const onHtmlUpdate = useCallback(
-    (html: string) => {
-      latestHtml.current = html;
-      const md = turndown.turndown(html);
-      schedule({ content: md });
-    },
-    [schedule],
-  );
+  const editor = useFrontmatterEditor({
+    documentId: document.id,
+    initialContent: document.content,
+    docType,
+    canEdit,
+  });
+  const { onFieldPatch } = editor;
 
   const onTitleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       setTitle(e.target.value);
-      schedule({ title: e.target.value });
+      onFieldPatch({ title: e.target.value });
     },
-    [schedule],
+    [onFieldPatch],
   );
-
-  // Flush on unmount.
-  useEffect(() => {
-    return () => {
-      if (timer.current) {
-        clearTimeout(timer.current);
-        void flush();
-      }
-    };
-  }, [flush]);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-6">
@@ -191,27 +128,35 @@ function DefinitionEditor({
                 className="flex-1 border-0 bg-transparent text-2xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground"
               />
             ) : (
-              <h1 className="flex-1 text-2xl font-semibold tracking-tight">
-                {title}
-              </h1>
+              <h1 className="flex-1 text-2xl font-semibold tracking-tight">{title}</h1>
             )}
-            <SaveIndicator state={saveState} />
+            <SaveIndicator state={editor.saveState} />
           </div>
 
           {canEdit ? (
             <TiptapEditor
-              initialContent={initialHtml}
+              initialContent={editor.initialHtml}
               placeholder="Describe what this workflow should do…"
-              onUpdate={onHtmlUpdate}
+              onUpdate={editor.onBodyHtmlChange}
             />
           ) : (
-            <pre className="whitespace-pre-wrap text-sm text-ink">
-              {document.content}
-            </pre>
+            <pre className="whitespace-pre-wrap text-sm text-ink">{document.content}</pre>
           )}
         </div>
 
-        <WorkflowFrontmatterFields frontmatter={frontmatter} />
+        {editor.panelState.schema ? (
+          <FrontmatterPanel
+            schema={editor.panelState.schema}
+            value={editor.panelState.value}
+            rawYaml={editor.panelState.rawYaml}
+            mode={editor.panelState.mode}
+            canEdit={canEdit}
+            onFieldsChange={editor.onPanelChange}
+            onRawChange={editor.onRawChange}
+            onModeChange={editor.onModeChange}
+            error={editor.panelState.error}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -221,7 +166,7 @@ export function WorkflowDetailTabs({
   document,
   runs,
   workflowSlug,
-  frontmatter,
+  docType,
   canEdit,
   activeTab,
 }: Props) {
@@ -271,11 +216,7 @@ export function WorkflowDetailTabs({
       {/* Tab panels */}
       {activeTab === 'definition' ? (
         <div className="flex-1 overflow-auto">
-          <DefinitionEditor
-            document={document}
-            frontmatter={frontmatter}
-            canEdit={canEdit}
-          />
+          <DefinitionEditor document={document} docType={docType} canEdit={canEdit} />
         </div>
       ) : (
         <div className="flex-1 overflow-auto px-6 py-6">

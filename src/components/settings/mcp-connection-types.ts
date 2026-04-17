@@ -7,9 +7,9 @@ export interface ClientMcpConnection {
   id: string;
   name: string;
   serverUrl: string;
-  authType: 'none' | 'bearer';
+  authType: 'none' | 'bearer' | 'oauth';
   hasCredential: boolean;
-  status: 'active' | 'disabled' | 'error';
+  status: 'active' | 'disabled' | 'error' | 'pending';
   lastErrorMessage: string | null;
   createdAt: string;
   lastUsedAt: string | null;

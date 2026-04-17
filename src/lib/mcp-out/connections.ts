@@ -309,6 +309,7 @@ function toConnection(row: RawRow): McpConnection {
     credentialsEncrypted: row.credentialsEncrypted ?? null,
     status: row.status,
     lastErrorMessage: row.lastErrorMessage ?? null,
+    catalogId: row.catalogId ?? null,
     createdAt: row.createdAt,
     lastUsedAt: row.lastUsedAt ?? null,
   };

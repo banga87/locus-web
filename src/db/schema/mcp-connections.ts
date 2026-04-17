@@ -38,12 +38,14 @@ import { companies } from './companies';
 export const mcpConnectionAuthTypeEnum = pgEnum('mcp_connection_auth_type', [
   'none',
   'bearer',
+  'oauth',
 ]);
 
 export const mcpConnectionStatusEnum = pgEnum('mcp_connection_status', [
   'active',
   'disabled',
   'error',
+  'pending',
 ]);
 
 // pgcrypto's pgp_sym_encrypt returns bytea. Drizzle lacks a first-class
@@ -70,6 +72,7 @@ export const mcpConnections = pgTable(
     credentialsEncrypted: bytea('credentials_encrypted'),
     status: mcpConnectionStatusEnum('status').notNull().default('active'),
     lastErrorMessage: text('last_error_message'),
+    catalogId: text('catalog_id'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

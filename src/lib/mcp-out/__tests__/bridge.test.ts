@@ -118,6 +118,7 @@ function conn(
     credentialsEncrypted: null,
     status: 'active',
     lastErrorMessage: null,
+    catalogId: null,
     createdAt: new Date(),
     lastUsedAt: null,
     ...overrides,

@@ -90,6 +90,7 @@ function makeConn(overrides: Partial<McpConnection> = {}): McpConnection {
     credentialsEncrypted: null,
     status: 'active',
     lastErrorMessage: null,
+    catalogId: null,
     createdAt: new Date(),
     lastUsedAt: null,
     ...overrides,

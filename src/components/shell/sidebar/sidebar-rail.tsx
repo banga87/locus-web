@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Brain, Pin, Search, Home, Clock, Network, MessageSquare, Cable, Settings, PanelLeft } from 'lucide-react';
+import { Brain, Pin, Search, Home, Clock, Network, MessageSquare, Plug, Settings, PanelLeft } from 'lucide-react';
 
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
 
@@ -59,7 +59,7 @@ export function SidebarRail() {
 
       <div className="rail-bottom">
         <Link href="/chat" className="rail-btn" title="Chat" aria-label="Chat"><MessageSquare size={18} /></Link>
-        <Link href="/mcp" className="rail-btn" title="MCP" aria-label="MCP Connections"><Cable size={18} /></Link>
+        <Link href="/connectors" className="rail-btn" title="Connectors" aria-label="Connectors"><Plug size={18} /></Link>
         <Link href="/settings" className="rail-btn" title="Settings" aria-label="Settings"><Settings size={18} /></Link>
         <ThemeToggleRail />
       </div>

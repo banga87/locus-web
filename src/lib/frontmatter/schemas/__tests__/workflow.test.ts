@@ -21,6 +21,7 @@ describe('workflowSchema', () => {
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
+      expect(r.value).not.toHaveProperty('type');
       expect(r.value).toEqual({
         output: 'message',
         output_category: 'Reports',
@@ -61,6 +62,10 @@ describe('schema registry', () => {
 
   it('returns null when the input type is null', () => {
     expect(getSchema(null)).toBeNull();
+  });
+
+  it('returns null when the input type is an empty string', () => {
+    expect(getSchema('')).toBeNull();
   });
 
   it('contains workflow in the registry map', () => {

@@ -24,7 +24,6 @@ import { documents } from '@/db/schema/documents';
 import { requireAuth } from '@/lib/api/auth';
 import { canAccessRun } from '@/lib/workflow/access';
 import { getWorkflowRunById } from '@/lib/workflow/queries';
-import { ThemeToggle } from '@/components/shell/theme-toggle';
 import { RunView } from '@/components/workflows/run-view';
 
 interface PageProps {
@@ -87,7 +86,6 @@ export default async function RunViewPage({ params }: PageProps) {
           <span className="cur">Run</span>
         </nav>
         <div className="topbar-spacer" />
-        <ThemeToggle />
       </div>
 
       <div className="article-wrap">

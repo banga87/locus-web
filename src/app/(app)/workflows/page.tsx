@@ -12,7 +12,6 @@ import { workflowRuns } from '@/db/schema/workflow-runs';
 import { requireAuth } from '@/lib/api/auth';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { WorkflowList } from '@/components/workflows/workflow-list';
-import { ThemeToggle } from '@/components/shell/theme-toggle';
 import { Button } from '@/components/ui/button';
 
 export default async function WorkflowsIndexPage() {
@@ -116,7 +115,6 @@ export default async function WorkflowsIndexPage() {
             </Button>
           </div>
         )}
-        <ThemeToggle />
       </div>
 
       <div className="article-wrap">

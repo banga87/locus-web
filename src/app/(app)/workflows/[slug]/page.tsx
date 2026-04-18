@@ -19,7 +19,6 @@ import { documents } from '@/db/schema';
 import { workflowRuns } from '@/db/schema/workflow-runs';
 import { requireAuth } from '@/lib/api/auth';
 import { getBrainForCompany } from '@/lib/brain/queries';
-import { ThemeToggle } from '@/components/shell/theme-toggle';
 import { RunButton } from '@/components/workflows/run-button';
 import { WorkflowDetailTabs } from '@/components/workflows/workflow-detail-tabs';
 
@@ -109,7 +108,6 @@ export default async function WorkflowDetailPage({
         </nav>
         <div className="topbar-spacer" />
         {canRun && <RunButton workflowDocumentId={row.id} />}
-        <ThemeToggle />
       </div>
 
       <div className="article-wrap">

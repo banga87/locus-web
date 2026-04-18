@@ -341,6 +341,11 @@ describe('POST /api/agent/chat — agentDefinitionId threading (Task 9)', () => 
     // field absent → repo returns []. That keeps this test focused on
     // agentDefinitionId threading; capability derivation has its own unit.
     dbSelectMock.mockResolvedValueOnce([{ content: '' }]); // documents (capabilities)
+    // Task 9 (skills): same-shape lookup for `getAgentSkillIds`. Empty
+    // content → no `skills:` key → repo returns []; the route's later
+    // `.where()`-without-`.limit()` skills visibility query is
+    // short-circuited and never fires.
+    dbSelectMock.mockResolvedValueOnce([{ content: '' }]); // documents (skills)
 
     const result = {
       toUIMessageStreamResponse: vi.fn(() => new Response('ok')),

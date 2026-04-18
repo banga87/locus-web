@@ -86,3 +86,45 @@ describe('buildSystemPrompt', () => {
     expect(out).not.toContain('**My Custom Server** (via MCP — `');
   });
 });
+
+describe('buildSystemPrompt availableSkills block', () => {
+  const base = {
+    brain: { name: 'Acme Brain', slug: 'acme' },
+    companyName: 'Acme',
+    folders: [],
+  };
+
+  it('omits the block when no skills are available', () => {
+    const out = buildSystemPrompt({ ...base, availableSkills: [] });
+    expect(out).not.toContain('<available-skills>');
+  });
+
+  it('omits the block when availableSkills is undefined', () => {
+    const out = buildSystemPrompt({ ...base });
+    expect(out).not.toContain('<available-skills>');
+  });
+
+  it('renders one entry per skill with id + name + description', () => {
+    const out = buildSystemPrompt({
+      ...base,
+      availableSkills: [
+        { id: 'abc', name: 'Test', description: 'Use when testing' },
+      ],
+    });
+    expect(out).toContain('<available-skills>');
+    expect(out).toContain('id: abc');
+    expect(out).toContain('name: Test');
+    expect(out).toContain('description: Use when testing');
+    expect(out).toContain('</available-skills>');
+  });
+
+  it('collapses newlines in description', () => {
+    const out = buildSystemPrompt({
+      ...base,
+      availableSkills: [
+        { id: 'x', name: 'Multi', description: 'line one\nline two' },
+      ],
+    });
+    expect(out).toContain('description: line one line two');
+  });
+});

@@ -77,6 +77,15 @@ export interface ToolContext {
    */
   grantedCapabilities: string[];
   /**
+   * The set of skill ids visible to the active agent. Populated by the
+   * Platform Agent route from `agent-definition.frontmatter.skills`.
+   * `load_skill` + `read_skill_file` gate access on membership.
+   * Absent for MCP callers and for turns without an explicit agent
+   * definition — the tools treat absence as "no skills available" and
+   * return `unavailable`.
+   */
+  agentSkillIds?: string[];
+  /**
    * Running count of web_search + web_fetch calls in the current turn.
    * The route layer initialises to 0 at turn start; web_* tools read and
    * increment. Used to enforce the 15-call safety rail.

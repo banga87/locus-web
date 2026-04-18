@@ -12,6 +12,7 @@ export interface NarrativeLine {
   docPath: string | null;
   createdAt: number;
   actorId: string | null;
+  actorName?: string;
 }
 
 function extractDocPath(details: Record<string, unknown>): string | null {
@@ -48,7 +49,7 @@ export function formatEventLine(evt: BrainPulseEventBase): NarrativeLine {
 
   return {
     id: evt.id, type: 'event', text, docPath: path,
-    createdAt: evt.createdAt.getTime(), actorId: evt.actorId,
+    createdAt: evt.createdAt.getTime(), actorId: evt.actorId, actorName: who,
   };
 }
 
@@ -78,6 +79,7 @@ export function collapseEvents(batch: BrainPulseEventBase[]): NarrativeLine[] {
       id: `agg-${key}-${group[0].id}`, type: 'aggregate',
       text: `${group[0].actorName} · touched ${group.length} docs in /${cluster}`,
       docPath: null, createdAt: group[0].createdAt.getTime(), actorId: group[0].actorId,
+      actorName: group[0].actorName,
     });
   }
 

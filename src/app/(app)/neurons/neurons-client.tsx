@@ -50,6 +50,33 @@ export function NeuronsClient({ brainId, companyId, seedGraph }: Props) {
     return out;
   }, [state.events, nowMs]);
 
+  const agentColors = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const a of state.activeAgents) out[a.id] = a.color.css;
+    return out;
+  }, [state.activeAgents]);
+
+  // 8 buckets of 7.5s each over the last 60s, per-agent event counts.
+  const agentSparklines = useMemo(() => {
+    const BUCKETS = 8;
+    const WINDOW_MS = 60_000;
+    const BUCKET_MS = WINDOW_MS / BUCKETS;
+    const windowStart = nowMs - WINDOW_MS;
+    const out: Record<string, number[]> = {};
+    for (const a of state.activeAgents) out[a.id] = Array(BUCKETS).fill(0);
+    for (const e of state.events) {
+      const t = e.createdAt.getTime();
+      if (t < windowStart || t > nowMs) continue;
+      const arr = out[e.actorId];
+      if (!arr) continue;
+      let idx = Math.floor((t - windowStart) / BUCKET_MS);
+      if (idx >= BUCKETS) idx = BUCKETS - 1;
+      if (idx < 0) idx = 0;
+      arr[idx] += 1;
+    }
+    return out;
+  }, [state.events, state.activeAgents, nowMs]);
+
   if (seedGraph.nodes.length === 0) return <EmptyState variant="no-docs" />;
   if (state.graphError) return <EmptyState variant="error" onRetry={state.retryGraph} />;
 
@@ -72,6 +99,7 @@ export function NeuronsClient({ brainId, companyId, seedGraph }: Props) {
         agents={state.activeAgents}
         mcpConnections={state.mcpConnections}
         mcpCounts={mcpCounts}
+        agentSparklines={agentSparklines}
         selectedAgentId={selectedAgentId}
         onSelect={setSelectedAgentId}
       />
@@ -90,7 +118,7 @@ export function NeuronsClient({ brainId, companyId, seedGraph }: Props) {
           onNodeClick={(id) => { setSelectedDocId(id); setDrawerOpen(true); }}
         />
       </div>
-      <NarrativeStrip lines={lines} />
+      <NarrativeStrip lines={lines} agentColors={agentColors} />
       <DocumentDrawer open={drawerOpen} documentId={selectedDocId} onOpenChange={setDrawerOpen} />
     </div>
   );

@@ -981,6 +981,34 @@
   font-size: 11px;
   color: var(--neurons-text-dim);
   font-variant-numeric: tabular-nums;
+  min-width: 1.6em;
+  text-align: right;
+}
+.neurons-sidebar__spark {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+  width: 44px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.neurons-sidebar__spark-bar {
+  display: block;
+  width: 3px;
+  border-radius: 1px;
+  background: var(--spark-color, currentColor);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--spark-color, currentColor) 55%, transparent);
+  transition: height 420ms cubic-bezier(.2,.8,.2,1);
+}
+.neurons-sidebar__spark-bar[data-empty='true'] {
+  background: color-mix(in srgb, var(--spark-color, currentColor) 18%, transparent);
+  box-shadow: none;
+}
+.neurons-sidebar__mcp-row {
+  display: flex;
+  align-items: center;
+  padding: 5px 4px;
 }
 .neurons-sidebar__empty {
   color: var(--neurons-text-dim);
@@ -1031,22 +1059,56 @@
   font-size: 12.5px;
   line-height: 1.45;
 }
+.neurons-narrative__label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--neurons-text-dim);
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.neurons-narrative__label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--rim), transparent);
+}
 .neurons-narrative__line {
-  padding: 7px 4px 7px 10px;
+  padding: 6px 4px 10px 10px;
   border-left: 2px solid transparent;
   color: var(--neurons-text);
-  opacity: 0.85;
+  opacity: 0.9;
   animation: neurons-line-in 360ms cubic-bezier(.2,.8,.2,1) both;
 }
 .neurons-narrative__line:first-of-type {
   opacity: 1;
   border-left-color: var(--rim-hot);
-  text-shadow: 0 0 8px rgba(164, 201, 169, 0.22);
 }
 .neurons-narrative__line[data-type='aggregate'] {
   color: var(--neurons-text-dim);
   font-style: italic;
-  opacity: 0.7;
+  opacity: 0.75;
+}
+.neurons-narrative__text {
+  display: block;
+}
+.neurons-narrative__actor {
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  text-shadow: 0 0 14px color-mix(in srgb, currentColor 35%, transparent);
+}
+.neurons-narrative__path {
+  font-style: italic;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--rim);
+  text-underline-offset: 2px;
+}
+.neurons-narrative__path:hover {
+  text-decoration-color: var(--rim-hot);
 }
 .neurons-narrative__line a {
   color: inherit;
@@ -1057,6 +1119,15 @@
 .neurons-narrative__line a:hover {
   text-decoration-color: var(--rim-hot);
 }
+.neurons-narrative__time {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--neurons-text-dim);
+  opacity: 0.75;
+}
 .neurons-narrative__empty {
   color: var(--neurons-text-dim);
   font-size: 12px;
@@ -1065,7 +1136,7 @@
 }
 @keyframes neurons-line-in {
   from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 0.85; transform: translateY(0); }
+  to   { opacity: 0.9; transform: translateY(0); }
 }
 
 /* ---- Empty state ---- */

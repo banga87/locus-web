@@ -4,6 +4,7 @@ interface Props {
   agents: ActiveAgent[];
   mcpConnections: GraphMcpConnection[];
   mcpCounts: Record<string, number>;
+  agentSparklines?: Record<string, number[]>;
   selectedAgentId: string | null;
   onSelect: (agentId: string | null) => void;
 }
@@ -12,6 +13,7 @@ export function AgentSidebar({
   agents,
   mcpConnections,
   mcpCounts,
+  agentSparklines = {},
   selectedAgentId,
   onSelect,
 }: Props) {
@@ -38,6 +40,7 @@ export function AgentSidebar({
                     aria-hidden
                   />
                   <span className="neurons-sidebar__name">{a.name}</span>
+                  <Sparkline values={agentSparklines[a.id] ?? []} color={a.color.canvas} />
                   <span className="neurons-sidebar__count">{a.countLast60s}</span>
                 </button>
               </li>
@@ -66,6 +69,7 @@ export function AgentSidebar({
                 key={m.id}
                 data-testid={`mcp-row-${m.id}`}
                 data-status={m.status}
+                className="neurons-sidebar__mcp-row"
               >
                 <span
                   className={`neurons-sidebar__health neurons-sidebar__health--${m.status}`}
@@ -79,5 +83,34 @@ export function AgentSidebar({
         )}
       </section>
     </aside>
+  );
+}
+
+const SPARK_BARS = 8;
+
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  // Pad/trim to exactly SPARK_BARS buckets, oldest→newest.
+  const slice = values.slice(-SPARK_BARS);
+  const padded: number[] = Array(SPARK_BARS - slice.length).fill(0).concat(slice);
+  const max = Math.max(1, ...padded);
+
+  return (
+    <span
+      className="neurons-sidebar__spark"
+      aria-hidden
+      style={{ ['--spark-color' as string]: color }}
+    >
+      {padded.map((v, i) => {
+        const h = v === 0 ? 14 : 22 + Math.round((v / max) * 78);
+        return (
+          <span
+            key={i}
+            className="neurons-sidebar__spark-bar"
+            data-empty={v === 0}
+            style={{ height: `${h}%` }}
+          />
+        );
+      })}
+    </span>
   );
 }

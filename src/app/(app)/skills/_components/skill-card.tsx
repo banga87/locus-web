@@ -7,11 +7,9 @@
 
 import { Badge } from '@/components/ui/badge';
 import { formatDistance } from '@/lib/format/time';
+import type { SkillOrigin } from '@/lib/skills/types';
 
-export type SkillOrigin =
-  | { kind: 'installed'; owner: string; repo: string; skill: string | null }
-  | { kind: 'forked'; from: string }
-  | { kind: 'authored' };
+export type { SkillOrigin };
 
 interface SkillCardProps {
   id: string;

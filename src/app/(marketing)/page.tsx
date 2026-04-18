@@ -1,12 +1,14 @@
 // Tatara marketing home. Task 4 wires in the hero (Variation A, full-bleed)
 // which owns the nav + image band + copy deck. Task 5 appends the three
 // middle sections — HowItWorks / Features / Positioning. Task 6 appends
-// PricingTeaser + Footer. Task 7 will slot FinalCTA between them.
+// PricingTeaser + Footer. Task 7 slots FinalCTA (Section 07 — The
+// Invitation) between PricingTeaser and Footer.
 //
 // `authed` detection is deferred to a later task — for now `Hero` defaults
 // `authed={false}` and renders the Sign in / Request access CTAs.
 
 import { Features } from '@/components/marketing/features';
+import { FinalCTA } from '@/components/marketing/final-cta';
 import { Footer } from '@/components/marketing/footer';
 import { Hero } from '@/components/marketing/hero';
 import { HowItWorks } from '@/components/marketing/how-it-works';
@@ -21,6 +23,7 @@ export default function HomePage() {
       <Features />
       <Positioning />
       <PricingTeaser />
+      <FinalCTA />
       <Footer />
     </>
   );

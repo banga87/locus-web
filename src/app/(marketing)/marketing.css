@@ -22,6 +22,8 @@
   --mk-gold-2:  #E8A86E;
   --mk-indigo:  #2B3A5A;
   --mk-rule:    #D7C9A8;
+  /* Pinstripe tint used by <Placeholder>: --mk-ink-3 (#6B5A3E) at 12% alpha. */
+  --mk-stripe: rgba(107, 90, 62, 0.12);
 
   /* --- Basic body + text setup --- */
   background: var(--mk-paper);

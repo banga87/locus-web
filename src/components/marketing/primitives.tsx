@@ -237,6 +237,7 @@ export function Placeholder({
   const isDark = tone === 'dark';
   return (
     <div
+      aria-hidden="true"
       className={cn(
         'flex w-full items-center justify-center text-[11px] uppercase tracking-[0.12em]',
         isDark
@@ -248,7 +249,7 @@ export function Placeholder({
         height,
         fontFamily: 'var(--font-mono), monospace',
         backgroundImage:
-          'repeating-linear-gradient(135deg, transparent 0 14px, rgba(107,90,62,0.12) 14px 15px)',
+          'repeating-linear-gradient(135deg, transparent 0 14px, var(--mk-stripe) 14px 15px)',
       }}
     >
       {label}

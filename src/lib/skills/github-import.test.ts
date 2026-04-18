@@ -190,6 +190,17 @@ describe('fetchSkillPreview', () => {
     expect(preview.resources[0].bytes).toBeGreaterThan(0);
     expect(preview.totalBytes).toBeGreaterThan(0);
     expect(preview.warnings).toEqual([]);
+
+    // Spec compliance: raw.githubusercontent.com calls must NOT carry Authorization.
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const rawCalls = (fetchMock.mock.calls as [string, (RequestInit | undefined)?][]).filter(
+      ([url]) => url.startsWith('https://raw.githubusercontent.com/'),
+    );
+    expect(rawCalls.length).toBeGreaterThan(0); // sanity-check that raw calls happened
+    for (const [, init] of rawCalls) {
+      const headers = init?.headers as Record<string, string> | undefined;
+      expect(headers?.['Authorization']).toBeUndefined();
+    }
   });
 
   // --------------------------------------------------------------------------

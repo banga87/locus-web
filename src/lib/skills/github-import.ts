@@ -149,6 +149,30 @@ function rawUrl(parsed: ParsedSkillUrl, sha: string, path: string): string {
   return `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${sha}/${path}`;
 }
 
+/**
+ * Fetch raw content from raw.githubusercontent.com — intentionally does NOT
+ * include the Authorization header (scoped to GitHub API calls only).
+ * Rate-limit and 404 error semantics are preserved since GitHub controls both hosts.
+ */
+async function rawFetch(url: string): Promise<Response> {
+  const res = await fetch(url);
+
+  if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') {
+    const reset = res.headers.get('x-ratelimit-reset') ?? 'unknown';
+    throw new Error(`GitHub API rate limit exceeded, resets at ${reset}`);
+  }
+
+  if (res.status === 404) {
+    throw new Error(`GitHub returned 404: ${url}`);
+  }
+
+  if (!res.ok) {
+    throw new Error(`GitHub returned ${res.status}: ${url}`);
+  }
+
+  return res;
+}
+
 async function fetchBodies(
   parsed: ParsedSkillUrl,
   sha: string,
@@ -163,7 +187,7 @@ async function fetchBodies(
     await Promise.all(
       chunk.map(async (entry) => {
         const url = rawUrl(parsed, sha, entry.path);
-        const res = await githubFetch(url);
+        const res = await rawFetch(url);
         const text = await res.text();
         results.set(entry.path, text);
       }),

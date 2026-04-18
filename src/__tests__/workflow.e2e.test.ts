@@ -43,13 +43,6 @@ vi.mock('@/lib/brain/manifest-regen', () => ({
   tryRegenerateManifest: vi.fn(async () => {}),
 }));
 
-// Stub the skill-manifest rebuild scheduler (it calls setTimeout internally
-// and can cause test teardown issues).
-vi.mock('@/lib/brain/save', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/lib/brain/save')>();
-  return { ...original, maybeScheduleSkillManifestRebuild: vi.fn() };
-});
-
 import type { LanguageModelV3 } from '@ai-sdk/provider';
 
 import { db } from '@/db';

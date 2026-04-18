@@ -24,10 +24,7 @@ import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
-import {
-  extractDocumentTypeFromContent,
-  maybeScheduleSkillManifestRebuild,
-} from '@/lib/brain/save';
+import { extractDocumentTypeFromContent } from '@/lib/brain/save';
 import {
   getAttachment,
   markCommitted,
@@ -304,14 +301,6 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
     });
 
     await tryRegenerateManifest(brain.id);
-    // Trigger on either side of the change: a doc being re-typed away
-    // from `'skill'` must drop out of the manifest, and a doc newly
-    // re-typed to `'skill'` must appear in it. Two calls collapse into
-    // one rebuild via the loader's per-company debounce.
-    maybeScheduleSkillManifestRebuild(companyId, existing.type);
-    if (newType !== existing.type) {
-      maybeScheduleSkillManifestRebuild(companyId, newType);
-    }
     try {
       revalidatePath('/', 'layout');
     } catch {
@@ -455,9 +444,6 @@ export const DELETE = (_req: Request, { params }: RouteCtx) =>
       .where(eq(documents.id, id));
 
     await tryRegenerateManifest(brain.id);
-    // The deleted doc's `type` is the trigger — a skill being
-    // soft-deleted must drop out of the manifest.
-    maybeScheduleSkillManifestRebuild(companyId, existing.type);
     try {
       revalidatePath('/', 'layout');
     } catch {

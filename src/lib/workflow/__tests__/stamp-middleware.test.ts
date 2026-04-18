@@ -25,14 +25,6 @@ vi.mock('@/lib/brain/manifest-regen', () => ({
   tryRegenerateManifest: vi.fn(async () => {}),
 }));
 
-vi.mock('@/lib/brain/save', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/lib/brain/save')>();
-  return {
-    ...original,
-    maybeScheduleSkillManifestRebuild: vi.fn(),
-  };
-});
-
 import { db } from '@/db';
 import { companies } from '@/db/schema/companies';
 import { brains } from '@/db/schema/brains';

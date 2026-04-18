@@ -2,20 +2,10 @@
 //
 // This module sits between the brain-document route handlers
 // (`src/app/api/brain/documents/route.ts`, and the `[id]/route.ts`
-// counterpart) and the storage layer. It exposes:
-//
-//   - Pure frontmatter helpers (`parseFrontmatterRaw`,
-//     `extractDocumentTypeFromFrontmatter`, `extractDocumentTypeFromContent`)
-//     for deriving the denormalised `documents.type` column from a doc's
-//     YAML preamble.
-//   - A legacy no-op helper (`maybeScheduleSkillManifestRebuild`). It
-//     used to forward skill-doc edits to a debounced manifest rebuild
-//     scheduler; progressive-disclosure skills (see
-//     `src/lib/skills/README.md`) surface skills through the system
-//     prompt at turn time, so no per-write rebuild is needed. The
-//     helper remains as a no-op purely to avoid touching every call
-//     site (brain routes + tool implementations) in this refactor —
-//     follow-up work can delete the call sites entirely.
+// counterpart) and the storage layer. It exposes pure frontmatter
+// helpers (`parseFrontmatterRaw`, `extractDocumentTypeFromFrontmatter`,
+// `extractDocumentTypeFromContent`) for deriving the denormalised
+// `documents.type` column from a doc's YAML preamble.
 //
 // Why a separate, generic frontmatter parser here — `parseFrontmatter`
 // in `./frontmatter.ts` is narrowly typed to the 8 keys the document
@@ -107,20 +97,4 @@ export function extractDocumentTypeFromContent(
   content: string,
 ): string | null {
   return extractDocumentTypeFromFrontmatter(parseFrontmatterRaw(content));
-}
-
-/**
- * Legacy no-op — the compiled skill-manifest mechanism has been
- * replaced by progressive-disclosure skills. This helper is retained
- * so brain routes + tool implementations still import a valid symbol;
- * follow-up work can remove the call sites entirely.
- *
- * Parameters are ignored; the function name stays so existing tests
- * that spy on it via `vi.mock` continue to match.
- */
-export function maybeScheduleSkillManifestRebuild(
-  _companyId: string,
-  _docType: string | null,
-): void {
-  // Intentionally empty — see module header.
 }

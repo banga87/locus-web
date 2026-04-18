@@ -138,6 +138,9 @@ export async function writeSkillTree(
   const { companyId, brainId, name, description, skillMdBody, resources, source } = input;
 
   const rootSlug = slugify(name);
+  if (!rootSlug) {
+    throw new Error(`skill name "${name}" produces an empty slug`);
+  }
   const rootPath = `skills/${rootSlug}`;
   const rootContent = buildRootContent(name, description, skillMdBody, source);
 
@@ -222,60 +225,66 @@ export async function replaceSkillResources(
 ): Promise<ReplaceSkillResourcesResult> {
   const { rootId, newSha, newSkillMdBody, newResources } = input;
 
-  // Look up the root outside the transaction — we need its current content,
-  // version, companyId, and brainId before starting the write transaction.
-  const [existingRoot] = await db
-    .select({
-      id: documents.id,
-      type: documents.type,
-      slug: documents.slug,
-      content: documents.content,
-      version: documents.version,
-      companyId: documents.companyId,
-      brainId: documents.brainId,
-    })
-    .from(documents)
-    .where(and(eq(documents.id, rootId), isNull(documents.deletedAt)))
-    .limit(1);
-
-  if (!existingRoot || existingRoot.type !== 'skill') {
-    throw new Error('skill root not found');
-  }
-
-  // Parse the existing frontmatter to recover the name, description, and
-  // source.github sub-block. We use js-yaml for this because the frontmatter
-  // may contain nested `source:` objects that parseFrontmatterRaw (which only
-  // handles flat key:value lines) cannot reconstruct.
-  const fmEndIdx = existingRoot.content.indexOf('\n---\n', 4);
-  const existingFmBlock =
-    fmEndIdx !== -1
-      ? existingRoot.content.slice(4, fmEndIdx)
-      : '';
-  const existingFm = (
-    yaml.load(existingFmBlock) as Record<string, unknown> | null
-  ) ?? {};
-
-  const existingSource = existingFm.source as
-    | { github: { owner: string; repo: string; skill: string | null }; sha: string; imported_at: string }
-    | undefined;
-
-  // Build the updated source block: preserve github, overwrite sha + imported_at.
-  const updatedSource: WriteSkillTreeInput['source'] | undefined = existingSource
-    ? {
-        github: existingSource.github,
-        sha: newSha,
-        imported_at: new Date().toISOString(),
-      }
-    : undefined;
-
-  const rootSlug = existingRoot.slug;
-  const name = typeof existingFm.name === 'string' ? existingFm.name : '';
-  const description = typeof existingFm.description === 'string' ? existingFm.description : '';
-  const newContent = buildRootContent(name, description, newSkillMdBody, updatedSource);
-
-  const { companyId, brainId, version: currentVersion } = existingRoot;
-
   return db.transaction(async (tx) => {
+    // Look up the root INSIDE the transaction with a row-level lock so a
+    // concurrent replaceSkillResources on the same root serialises rather
+    // than racing for the version bump (fixes the TOCTOU window).
+    const [existingRoot] = await tx
+      .select({
+        id: documents.id,
+        type: documents.type,
+        slug: documents.slug,
+        content: documents.content,
+        version: documents.version,
+        companyId: documents.companyId,
+        brainId: documents.brainId,
+      })
+      .from(documents)
+      .where(and(eq(documents.id, rootId), isNull(documents.deletedAt)))
+      .for('update')
+      .limit(1);
+
+    if (!existingRoot || existingRoot.type !== 'skill') {
+      throw new Error('skill root not found');
+    }
+
+    // Parse the existing frontmatter to recover the name, description, and
+    // source.github sub-block. We use js-yaml for this because the frontmatter
+    // may contain nested `source:` objects that parseFrontmatterRaw (which only
+    // handles flat key:value lines) cannot reconstruct.
+    const fmEndIdx = existingRoot.content.indexOf('\n---\n', 4);
+    const existingFmBlock =
+      fmEndIdx !== -1
+        ? existingRoot.content.slice(4, fmEndIdx)
+        : '';
+    const existingFm = (
+      yaml.load(existingFmBlock) as Record<string, unknown> | null
+    ) ?? {};
+
+    const existingSource = existingFm.source as
+      | { github: { owner: string; repo: string; skill: string | null }; sha: string; imported_at: string }
+      | undefined;
+
+    // Guard: replaceSkillResources is only valid for upstream-tracked skills.
+    // Authored skills have no source block and no github sub-block.
+    if (!existingSource?.github) {
+      throw new Error('skill is not an install (no source block); cannot replace resources');
+    }
+
+    // Build the updated source block: preserve github, overwrite sha + imported_at.
+    const updatedSource: WriteSkillTreeInput['source'] = {
+      github: existingSource.github,
+      sha: newSha,
+      imported_at: new Date().toISOString(),
+    };
+
+    const rootSlug = existingRoot.slug;
+    const name = typeof existingFm.name === 'string' ? existingFm.name : '';
+    const description = typeof existingFm.description === 'string' ? existingFm.description : '';
+    const newContent = buildRootContent(name, description, newSkillMdBody, updatedSource);
+
+    const { companyId, brainId, version: currentVersion } = existingRoot;
+
     // 1. Hard-delete all existing children.
     await tx
       .delete(documents)

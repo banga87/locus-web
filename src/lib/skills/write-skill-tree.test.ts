@@ -196,6 +196,22 @@ describe('writeSkillTree', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Test: empty slug guard — name that slugifies to '' throws a clear error
+  // -------------------------------------------------------------------------
+  it('throws a clear error when skill name produces an empty slug', async () => {
+    await expect(
+      writeSkillTree({
+        companyId: f.companyId,
+        brainId: f.brainId,
+        name: '!!!',
+        description: 'Bad name.',
+        skillMdBody: '# body',
+        resources: [],
+      }),
+    ).rejects.toThrow('skill name "!!!" produces an empty slug');
+  });
+
+  // -------------------------------------------------------------------------
   // Test 4: transaction atomicity — duplicate relative_path fails the whole tx
   // -------------------------------------------------------------------------
   it('rolls back entirely when a resource insert violates the unique index', async () => {
@@ -341,5 +357,30 @@ describe('replaceSkillResources', () => {
         newResources: [],
       }),
     ).rejects.toThrow('skill root not found');
+  });
+
+  // -------------------------------------------------------------------------
+  // Test: no-source guard — authored skill (no source block) throws
+  // -------------------------------------------------------------------------
+  it('throws when called on an authored skill with no source block', async () => {
+    // Seed an authored skill (no source field).
+    const { rootId } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Authored Skill',
+      description: 'Hand-written, no upstream source.',
+      skillMdBody: '# Authored',
+      resources: [],
+      // source intentionally omitted
+    });
+
+    await expect(
+      replaceSkillResources({
+        rootId,
+        newSha: 'someshaaaaa',
+        newSkillMdBody: '# Updated',
+        newResources: [],
+      }),
+    ).rejects.toThrow('skill is not an install (no source block); cannot replace resources');
   });
 });

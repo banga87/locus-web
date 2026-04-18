@@ -408,6 +408,16 @@ export async function runAgentTurn(
           // once `result.finishReason` resolves. onAbort (wired above)
           // fires Stop.
           break;
+        case 'error':
+          // Stream-level error (e.g. provider auth failure, malformed
+          // request). Without re-throwing here the loop drains silently
+          // and the trailing `await result.finishReason` at the bottom
+          // rejects with the AI SDK's generic `NoOutputGeneratedError`
+          // ("No output generated. Check the stream for errors."),
+          // discarding `part.error` entirely. Rethrow with the upstream
+          // payload as the cause so the runner's try/catch walks the
+          // chain and surfaces something actionable.
+          throw new Error('stream_error', { cause: part.error });
         // Other part types (text-start/end, reasoning-start/end,
         // tool-input-*, source, file, start, finish, start-step,
         // finish-step, raw) are deliberately not surfaced as

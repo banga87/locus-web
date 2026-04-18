@@ -165,10 +165,12 @@ beforeAll(async () => {
       path: `wf-folder-${suffix}/summarise-brain-${suffix}`,
       content: workflowContent(),
       type: 'workflow',
-      // Store the structured frontmatter fields in metadata (mirrors how the
-      // editor saves workflow docs — validateWorkflowFrontmatter reads this).
+      // Mirrors how the editor actually saves workflow docs via PATCH/POST
+      // (src/app/api/brain/documents/[id]/route.ts sync block). `type` is
+      // denormalised into the `documents.type` column, NOT written into
+      // metadata. If you put `type: 'workflow'` here you are testing a
+      // fictional shape that the production write path never produces.
       metadata: {
-        type: 'workflow',
         output: 'document',
         requires_mcps: [],
         output_category: null,
@@ -285,7 +287,6 @@ describe('POST /api/workflows/runs', () => {
         content: workflowContentWithMcp(),
         type: 'workflow',
         metadata: {
-          type: 'workflow',
           output: 'document',
           requires_mcps: [`missing-mcp-${suffix}`],
           output_category: null,

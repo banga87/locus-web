@@ -129,8 +129,16 @@ export async function runWorkflow(runId: string): Promise<void> {
   }
 
   // Parse + validate the workflow frontmatter stored in documents.metadata.
-  // The metadata jsonb column holds the authored workflow fields.
-  const fmResult = validateWorkflowFrontmatter(workflowDoc.metadata);
+  // The metadata jsonb column holds the authored workflow fields. `type` is
+  // NOT mirrored into metadata — it's denormalised into the `documents.type`
+  // column by the PATCH/POST sync blocks (see
+  // src/app/api/brain/documents/[id]/route.ts). Inject it here so the
+  // type-requiring validator passes; the trigger route has already
+  // established `documents.type === 'workflow'` before creating this run.
+  const fmResult = validateWorkflowFrontmatter({
+    ...((workflowDoc.metadata as Record<string, unknown> | null) ?? {}),
+    type: 'workflow',
+  });
   if (!fmResult.ok) {
     const msg = `Invalid workflow frontmatter: ${fmResult.errors.map((e) => `${e.field} ${e.message}`).join(', ')}`;
     await insertEvent(runId, 0, 'run_error', {
@@ -341,12 +349,44 @@ export async function runWorkflow(runId: string): Promise<void> {
       outputTokens: totalOut,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    // Unwrap the cause chain. The AI SDK's NoOutputGeneratedError has a
+    // generic `.message` ("No output generated. Check the stream for errors.")
+    // and stashes the upstream provider error in `.cause`. Without walking
+    // the chain we lose the actual reason (auth, 4xx payload, etc.) and the
+    // run_error event is useless for post-mortem.
+    const chain = flattenErrorChain(err);
+    const message = chain.join(' | caused by: ');
+    console.error('[workflow/run] run failed', err);
     try {
-      await insertEvent(runId, sequence++, 'run_error', { message });
+      await insertEvent(runId, sequence++, 'run_error', {
+        message,
+        causes: chain,
+      });
     } catch {
       // insertEvent itself failing (e.g. DB down) should not mask the original error.
     }
     await markFailed(runId, message);
   }
+}
+
+/**
+ * Walk an error's `.cause` chain into a flat array of strings. Stops at
+ * depth 5 defensively in case something self-references. Used by the
+ * runner to record the full upstream reason on run_error rather than
+ * just the outermost `err.message` (which is often a generic wrapper
+ * from the AI SDK).
+ */
+function flattenErrorChain(err: unknown): string[] {
+  const out: string[] = [];
+  let cur: unknown = err;
+  for (let i = 0; i < 5 && cur; i++) {
+    if (cur instanceof Error) {
+      out.push(cur.message || cur.name);
+      cur = (cur as Error & { cause?: unknown }).cause;
+    } else {
+      out.push(String(cur));
+      break;
+    }
+  }
+  return out;
 }

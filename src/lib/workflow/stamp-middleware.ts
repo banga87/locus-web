@@ -14,9 +14,8 @@
 //      workflow_runs.output_document_ids after success.
 //   3. All other tools: pass through unmodified.
 
-import { dynamicTool, jsonSchema } from 'ai';
+import { dynamicTool } from 'ai';
 import type { Tool } from 'ai';
-import type { JSONSchema7 } from '@ai-sdk/provider';
 import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
@@ -116,7 +115,13 @@ export function wrapToolsWithStamping(
 
     result[name] = dynamicTool({
       description: stamped.description,
-      inputSchema: jsonSchema(stamped.inputSchema as unknown as JSONSchema7),
+      // Pass the already-wrapped schema straight through. `stamped.inputSchema`
+      // is the FlexibleSchema returned by `jsonSchema()` inside bridgeLocusTool;
+      // calling `jsonSchema()` on it again double-wraps it, burying `type:
+      // 'object'` two levels deep. Anthropic's adapter then sends the outer
+      // wrapper as `input_schema` and the API rejects with
+      // "tools.N.custom.input_schema.type: Field required".
+      inputSchema: stamped.inputSchema,
       execute: async (args, options) => {
         const output = await stamped.execute!(args, options);
 

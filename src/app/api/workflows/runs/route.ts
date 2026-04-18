@@ -111,7 +111,18 @@ export async function POST(req: Request) {
 
   // Validate frontmatter stored in documents.metadata — needed to extract
   // requires_mcps for the pre-flight check.
-  const fmResult = validateWorkflowFrontmatter(doc.metadata);
+  //
+  // `doc.type === 'workflow'` is established above (line 103). The authored
+  // fields live in `metadata` but `type` is intentionally NOT mirrored there
+  // — it's denormalised into the `documents.type` column by
+  // extractDocumentTypeFromContent on save (see
+  // src/app/api/brain/documents/[id]/route.ts and the paired POST handler).
+  // So we inject `type: 'workflow'` before validating, matching the pattern
+  // established in src/lib/frontmatter/schemas/workflow.ts.
+  const fmResult = validateWorkflowFrontmatter({
+    ...((doc.metadata as Record<string, unknown> | null) ?? {}),
+    type: 'workflow',
+  });
   if (!fmResult.ok) {
     return Response.json(
       {

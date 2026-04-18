@@ -16,9 +16,9 @@ import {
   parseOrigin,
   parseSkillsFromAgentContent,
 } from '@/lib/skills/frontmatter';
-import { Button } from '@/components/ui/button';
 import { SkillCard } from './_components/skill-card';
 import { NewSkillDropdown } from './_components/new-skill-dropdown';
+import { InstallButton } from './_components/install-button';
 import type { SkillOrigin } from '@/lib/skills/types';
 
 // ─── Page ──────────────────────────────────────────────────────────────────
@@ -115,10 +115,7 @@ export default async function SkillsIndexPage() {
         <div className="topbar-spacer" />
         {canCreate && (
           <div className="flex items-center gap-2">
-            {/* Install button — inert placeholder; Task 23 wires this. */}
-            <Button variant="outline" size="sm" data-test="install-button" disabled>
-              Install from GitHub
-            </Button>
+            <InstallButton />
             <NewSkillDropdown />
           </div>
         )}

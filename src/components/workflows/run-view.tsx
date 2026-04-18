@@ -5,16 +5,23 @@
 // Architecture:
 //   - useWorkflowRun hook provides events + status metadata + cancel().
 //   - A reducer collapses the flat event stream into UI-level "turns":
-//       Each turn has an accumulated text message and a list of tool calls.
+//       Each turn has an ordered list of items — text, tool-call, reasoning —
+//       in the order they were emitted. Consecutive llm_delta / reasoning
+//       events coalesce into the same text/reasoning item so a tool call
+//       that arrives between deltas splits the block at that point.
 //   - Event → UI mapping:
 //       turn_start     → start a new turn (no card)
-//       llm_delta      → accumulate text into the current turn's message
-//       turn_complete  → finalise current turn's message (no card of its own)
-//       tool_start     → push a tool-call entry (state: pending)
-//       tool_result    → update matching tool-call entry (state: complete/error)
-//       reasoning      → attach as a reasoning block on the current turn
+//       llm_delta      → append to the trailing text item (or create one)
+//       turn_complete  → finalise the turn
+//       tool_start     → push a tool-call item (state: pending)
+//       tool_result    → update matching tool-call item (by toolCallId)
+//       reasoning      → append to the trailing reasoning item (or create one)
 //       run_error      → inline error notice
 //       run_complete   → no card; triggers OutputCard to appear via status
+//
+// Payload field names are camelCase (toolName, toolCallId, isError, delta)
+// — matching the AgentEvent shape the runner strips `type` off and persists
+// verbatim (see `src/lib/workflow/run.ts` and `src/lib/agent/types.ts`).
 //
 // AI Elements reuse:
 //   - MessageResponse (Streamdown) for accumulated LLM text — same component
@@ -47,7 +54,7 @@ import { RunStatusBanner } from './run-status-banner';
 // ---------------------------------------------------------------------------
 
 interface ToolCallEntry {
-  toolCallId: string; // = event id for tool_start
+  toolCallId: string; // LLM-side tool-call id (e.g. toolu_xxx)
   toolName: string;
   args: unknown;
   state: 'pending' | 'complete' | 'error';
@@ -55,15 +62,14 @@ interface ToolCallEntry {
   errorText?: string;
 }
 
-interface ReasoningEntry {
-  text: string;
-}
+type TurnItem =
+  | { kind: 'text'; id: string; text: string }
+  | { kind: 'reasoning'; id: string; text: string }
+  | { kind: 'tool'; id: string; entry: ToolCallEntry };
 
 interface Turn {
   id: string; // = turn_start event id
-  text: string; // accumulated from llm_delta
-  toolCalls: ToolCallEntry[];
-  reasoning: ReasoningEntry[];
+  items: TurnItem[];
   complete: boolean;
 }
 
@@ -76,24 +82,28 @@ interface UIModel {
 // Event-stream reducer
 // ---------------------------------------------------------------------------
 
-function buildUIModel(events: WorkflowRunEvent[]): UIModel {
+/**
+ * Reduce the flat event log into turns with ordered items. Exported for
+ * unit testing — the component itself wraps it in `useMemo`.
+ *
+ * Field-name discipline: payloads are the AgentEvent shape with `type`
+ * stripped (see `src/lib/workflow/run.ts`), so field names are camelCase
+ * (`toolName`, `toolCallId`, `isError`, `delta`). Reading snake_case keys
+ * here would silently return undefined and render "Unknown" tool pills.
+ */
+export function buildUIModel(events: WorkflowRunEvent[]): UIModel {
   const turns: Turn[] = [];
   let runError: string | null = null;
 
-  // Index tool_start events by their id so tool_result can update them.
-  // tool_start.id is the event UUID; tool_result payload carries tool_start_id.
-  const toolCallByEventId = new Map<string, ToolCallEntry>();
+  // Match tool_result back to its tool_start by the LLM's toolCallId.
+  // The DB event UUID (ev.id) is not used for correlation — tool_result
+  // payloads don't carry it, only the toolCallId the LLM assigned.
+  const toolCallById = new Map<string, ToolCallEntry>();
 
   for (const ev of events) {
     switch (ev.eventType) {
       case 'turn_start': {
-        turns.push({
-          id: ev.id,
-          text: '',
-          toolCalls: [],
-          reasoning: [],
-          complete: false,
-        });
+        turns.push({ id: ev.id, items: [], complete: false });
         break;
       }
 
@@ -101,40 +111,12 @@ function buildUIModel(events: WorkflowRunEvent[]): UIModel {
         const current = turns[turns.length - 1];
         if (!current) break;
         const delta = (ev.payload['delta'] as string) ?? '';
-        current.text += delta;
-        break;
-      }
-
-      case 'turn_complete': {
-        const current = turns[turns.length - 1];
-        if (current) current.complete = true;
-        break;
-      }
-
-      case 'tool_start': {
-        const current = turns[turns.length - 1];
-        if (!current) break;
-        const entry: ToolCallEntry = {
-          toolCallId: ev.id,
-          toolName: (ev.payload['tool_name'] as string) ?? 'unknown',
-          args: ev.payload['args'],
-          state: 'pending',
-        };
-        current.toolCalls.push(entry);
-        toolCallByEventId.set(ev.id, entry);
-        break;
-      }
-
-      case 'tool_result': {
-        const startId = (ev.payload['tool_start_id'] as string) ?? '';
-        const entry = toolCallByEventId.get(startId);
-        if (!entry) break;
-        const isError = ev.payload['error'] === true;
-        entry.state = isError ? 'error' : 'complete';
-        entry.result = ev.payload['result'];
-        if (isError) {
-          const msg = ev.payload['message'];
-          entry.errorText = typeof msg === 'string' ? msg : undefined;
+        if (delta.length === 0) break;
+        const last = current.items[current.items.length - 1];
+        if (last && last.kind === 'text') {
+          last.text += delta;
+        } else {
+          current.items.push({ kind: 'text', id: ev.id, text: delta });
         }
         break;
       }
@@ -142,8 +124,48 @@ function buildUIModel(events: WorkflowRunEvent[]): UIModel {
       case 'reasoning': {
         const current = turns[turns.length - 1];
         if (!current) break;
-        const text = (ev.payload['text'] as string) ?? '';
-        current.reasoning.push({ text });
+        const delta = (ev.payload['delta'] as string) ?? '';
+        if (delta.length === 0) break;
+        const last = current.items[current.items.length - 1];
+        if (last && last.kind === 'reasoning') {
+          last.text += delta;
+        } else {
+          current.items.push({ kind: 'reasoning', id: ev.id, text: delta });
+        }
+        break;
+      }
+
+      case 'tool_start': {
+        const current = turns[turns.length - 1];
+        if (!current) break;
+        const toolCallId = (ev.payload['toolCallId'] as string) ?? ev.id;
+        const entry: ToolCallEntry = {
+          toolCallId,
+          toolName: (ev.payload['toolName'] as string) ?? 'unknown',
+          args: ev.payload['args'],
+          state: 'pending',
+        };
+        current.items.push({ kind: 'tool', id: ev.id, entry });
+        toolCallById.set(toolCallId, entry);
+        break;
+      }
+
+      case 'tool_result': {
+        const toolCallId = (ev.payload['toolCallId'] as string) ?? '';
+        const entry = toolCallById.get(toolCallId);
+        if (!entry) break;
+        const isError = ev.payload['isError'] === true;
+        entry.state = isError ? 'error' : 'complete';
+        entry.result = ev.payload['result'];
+        if (isError) {
+          entry.errorText = extractErrorText(ev.payload['result']);
+        }
+        break;
+      }
+
+      case 'turn_complete': {
+        const current = turns[turns.length - 1];
+        if (current) current.complete = true;
         break;
       }
 
@@ -161,6 +183,27 @@ function buildUIModel(events: WorkflowRunEvent[]): UIModel {
   return { turns, runError };
 }
 
+/**
+ * Pull a display string out of a tool_result error payload. Tool errors
+ * come through as whatever the AI SDK attached to `part.error`, which is
+ * typically an Error-like `{ message }` but can be any value. Fall back
+ * to a JSON rendering so something shows up in the indicator's hover
+ * title instead of `undefined`.
+ */
+function extractErrorText(result: unknown): string | undefined {
+  if (typeof result === 'string') return result;
+  if (result && typeof result === 'object') {
+    const msg = (result as { message?: unknown }).message;
+    if (typeof msg === 'string') return msg;
+    try {
+      return JSON.stringify(result);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -174,40 +217,42 @@ function ReasoningBlock({ text }: { text: string }) {
 }
 
 function TurnCard({ turn }: { turn: Turn }) {
-  const hasContent =
-    turn.text.trim().length > 0 ||
-    turn.toolCalls.length > 0 ||
-    turn.reasoning.length > 0;
+  // Filter out pure-whitespace text items so a trailing `\n\n` between a
+  // tool call and the next event doesn't render as an empty paragraph.
+  const visibleItems = turn.items.filter((item) => {
+    if (item.kind === 'tool') return true;
+    return item.text.trim().length > 0;
+  });
 
-  if (!hasContent) return null;
+  if (visibleItems.length === 0) return null;
 
   return (
     <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3 text-sm text-card-foreground">
-      {/* Reasoning blocks — rendered above the message text, subtle. */}
-      {turn.reasoning.map((r, i) => (
-        <ReasoningBlock key={i} text={r.text} />
-      ))}
-
-      {/* Tool calls */}
-      {turn.toolCalls.map((tc) => (
-        <div key={tc.toolCallId} className="py-0.5">
-          <ToolCallIndicator
-            toolName={tc.toolName}
-            args={tc.args}
-            state={tc.state}
-            result={tc.result}
-            errorText={tc.errorText}
-          />
-        </div>
-      ))}
-
-      {/* Accumulated LLM text — uses Streamdown (MessageResponse) for
-          safe incremental markdown rendering, matching the chat UI. */}
-      {turn.text.trim().length > 0 && (
-        <div className="chat-markdown">
-          <MessageResponse>{turn.text}</MessageResponse>
-        </div>
-      )}
+      {visibleItems.map((item) => {
+        if (item.kind === 'reasoning') {
+          return <ReasoningBlock key={item.id} text={item.text} />;
+        }
+        if (item.kind === 'tool') {
+          return (
+            <div key={item.id} className="py-0.5">
+              <ToolCallIndicator
+                toolName={item.entry.toolName}
+                args={item.entry.args}
+                state={item.entry.state}
+                result={item.entry.result}
+                errorText={item.entry.errorText}
+              />
+            </div>
+          );
+        }
+        // Text — Streamdown for safe incremental markdown rendering,
+        // matching the chat UI.
+        return (
+          <div key={item.id} className="chat-markdown">
+            <MessageResponse>{item.text}</MessageResponse>
+          </div>
+        );
+      })}
     </div>
   );
 }

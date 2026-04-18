@@ -15,8 +15,12 @@
 //     </div>
 //   </section>
 //
-// Image src: /images/hero.jpg (existing). Task 8 will generate
-// /images/hero-2400.jpg and swap the src here.
+// Image src: /images/hero-2400.jpg — pre-optimized 2400-wide derivative of
+// the original 5504×3072 hero.jpg (generated via sharp in Task 8). next/image
+// then further derives AVIF/WebP variants on demand at the breakpoint sizes
+// configured via the `sizes` prop. The original hero.jpg is preserved in
+// /public/images/ as the provenance copy — it is the source for the 1200×630
+// OG image (hero-og.jpg) and any future rescales.
 
 import Image from 'next/image';
 import Link from 'next/link';
@@ -72,7 +76,7 @@ export function Hero({ authed = false }: HeroProps) {
           <900px: 48vh (min 440), 900–1279px: 55vh, ≥1280px: 62vh. */}
       <div className="relative h-[48vh] min-h-[440px] w-full min-[900px]:h-[55vh] min-[1280px]:h-[62vh]">
         <Image
-          src="/images/hero.jpg"
+          src="/images/hero-2400.jpg"
           alt={HERO_ALT}
           fill
           sizes="100vw"

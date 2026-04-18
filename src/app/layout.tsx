@@ -25,8 +25,22 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
+// Default app-wide metadata. The marketing home at `/` provides its own
+// richer metadata (title + OG + twitter) that overrides these defaults; app
+// routes (/home, /login, /workflows/…) fall through to these.
+//
+// `metadataBase` resolves relative OG/Twitter image URLs to absolute URLs
+// in the rendered <meta> tags. Vercel injects `VERCEL_PROJECT_PRODUCTION_URL`
+// on production deployments; fall back to localhost for dev so the build
+// doesn't warn. Preview deploys will resolve to localhost in the tags but
+// that's acceptable — previews aren't shared on social.
+const metadataBase = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? new URL(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`)
+  : new URL("http://localhost:3000");
+
 export const metadata: Metadata = {
-  title: "Locus",
+  metadataBase,
+  title: "Tatara",
   description: "Your company's brain.",
 };
 

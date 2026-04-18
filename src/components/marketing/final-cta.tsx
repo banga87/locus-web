@@ -77,7 +77,7 @@ export function FinalCTA() {
           `object-[center_60%]` mirrors the prototype's background-position. */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <Image
-          src="/images/hero.jpg"
+          src="/images/hero-2400.jpg"
           alt=""
           fill
           sizes="100vw"

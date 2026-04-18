@@ -22,6 +22,12 @@
   --mk-gold-2:  #E8A86E;
   --mk-indigo:  #2B3A5A;
   --mk-rule:    #D7C9A8;
+  /* Rule colour for dark-backgrounded sections (Features). Paper (#F5EFE3)
+     at 15% alpha over --mk-ink reads as a subtle warm divider. */
+  --mk-rule-dark: rgba(245, 239, 227, 0.15);
+  /* Dim paper tone used for body copy inside dark sections. Paper at 72%
+     alpha — same alpha curve the Tatara prototype used inline. */
+  --mk-paper-dim: rgba(245, 239, 227, 0.72);
   /* Pinstripe tint used by <Placeholder>: --mk-ink-3 (#6B5A3E) at 12% alpha. */
   --mk-stripe: rgba(107, 90, 62, 0.12);
 

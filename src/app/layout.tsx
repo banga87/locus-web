@@ -7,9 +7,9 @@ import { WebVitals } from "@/lib/axiom/client";
 const fraunces = Fraunces({
   variable: "--font-display",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
   style: ["normal", "italic"],
   display: "swap",
+  axes: ["SOFT", "WONK", "opsz"],
 });
 
 const inter = Inter({

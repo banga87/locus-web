@@ -28,11 +28,9 @@
   color: var(--mk-ink);
   font-family: var(--font-body), system-ui, sans-serif;
 
-  /* Children need to sit above the ::after letterpress overlay. An explicit
-     stacking context on the root plus `position: relative` on the wrapper
-     itself means the overlay (::after, z-index: 1000) composites on top of
-     the content as intended — while `pointer-events: none` on the overlay
-     leaves all interaction passing through. */
+  /* The ::after overlay sits at z-index: 1000 with pointer-events: none.
+     Interaction falls through to the content below; the overlay only
+     composites the grain on top visually. */
   position: relative;
   min-height: 100vh;
 }
@@ -77,8 +75,12 @@
   100% { transform: rotate(-55deg); }
 }
 
-/* Respect reduced-motion preferences: kill the overlay animation hook and
-   the needle swing for users who ask for it. */
+/* Respect reduced-motion preferences: kill the needle swing for users who
+   ask for it. The guard matches both styling conventions the primitive can
+   use — inline `style={{ animation: 'tatara-needle …' }}` (the path the
+   original Tatara prototype takes) and an explicit `data-animation` opt-in
+   attribute. If Task 3 applies the animation via a class instead, add the
+   matching selector here. */
 @media (prefers-reduced-motion: reduce) {
   .tatara-marketing [style*="tatara-needle"],
   .tatara-marketing [data-animation="tatara-needle"] {

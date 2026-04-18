@@ -6,6 +6,7 @@
 // toggle button in .brand is added in Task 6; this task keeps the
 // brand block identical to the legacy file so rendering is unchanged.
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { PanelLeftClose } from 'lucide-react';
 
@@ -22,9 +23,11 @@ interface SidebarExpandedProps {
   user: { email: string; fullName: string | null; role: string };
   tree: ManifestFolder[];
   pinned: Array<{ id: string; title: string; path: string }>;
+  /** Slot for the GlobalRunBadge server component rendered by the layout. */
+  workflowsBadge?: ReactNode;
 }
 
-export function SidebarExpanded({ companyName, user, tree, pinned }: SidebarExpandedProps) {
+export function SidebarExpanded({ companyName, user, tree, pinned, workflowsBadge }: SidebarExpandedProps) {
   const { collapsed, toggleCollapsed } = useSidebarLayout();
   const userInitials = (user.fullName ?? user.email)
     .split(/\s+/)
@@ -74,6 +77,7 @@ export function SidebarExpanded({ companyName, user, tree, pinned }: SidebarExpa
           <NeuronsIcon />
           Neurons
         </Link>
+        {workflowsBadge}
       </div>
 
       <div className="side-body">

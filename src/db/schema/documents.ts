@@ -162,5 +162,13 @@ export const documents = pgTable(
     uniqueIndex('documents_company_scaffolding_unique')
       .on(table.companyId)
       .where(sql`${table.type} = 'agent-scaffolding'`),
+    // Partial unique index on (brain_id, slug) for live rows. Since `path` is
+    // derived as `{folder_slug}/{doc_slug}` this also closes out duplicate
+    // paths within a brain. Scoped to `deleted_at IS NULL` so soft-deleted
+    // slugs don't block a new document reusing the same slug. Backs up the
+    // proactive PATH_TAKEN check in create_document against TOCTOU races.
+    uniqueIndex('documents_brain_slug_live_unique')
+      .on(table.brainId, table.slug)
+      .where(sql`"deleted_at" IS NULL`),
   ]
 );

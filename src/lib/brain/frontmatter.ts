@@ -20,6 +20,16 @@
 //   <body>
 //
 // (Emitted order matches the spec in the task plan verbatim.)
+//
+// Controlled `type` vocabulary (app-level only — `documents.type` is a plain
+// text column, not a Postgres enum, so no migration is needed to extend this
+// list):
+//
+//   null               — plain knowledge document (no type set)
+//   'agent-scaffolding'
+//   'agent-definition'
+//   'skill'
+//   'workflow'         — agent-run workflow definition (Phase 1.5)
 
 export interface DocumentFrontmatter {
   title: string;
@@ -129,6 +139,172 @@ export function parseFrontmatter(raw: string): {
 
   return { meta, body };
 }
+
+// ---------------------------------------------------------------------------
+// Workflow document frontmatter
+// ---------------------------------------------------------------------------
+//
+// `type: workflow` documents carry extra authored fields (output, schedule,
+// requires_mcps, output_category) stored in the `metadata` jsonb column.
+// Runtime-stamped provenance fields (created_by_workflow, etc.) are written
+// exclusively by workflow-run code paths and are modelled in WorkflowOutputStamp.
+//
+// Storage: all fields go into `documents.metadata` (existing jsonb catch-all).
+// No new DB columns are needed.
+
+/** Valid values for the `output` field of a workflow document. */
+export type WorkflowOutput = 'document' | 'message' | 'both';
+
+/**
+ * Authored fields on a `type: workflow` document (user-editable via the
+ * Tiptap editor / frontmatter block).
+ *
+ * `output_category` and `schedule` are always present in the validated value
+ * (`validateWorkflowFrontmatter` normalises absent → null), so callers never
+ * need to distinguish `undefined` vs `null`.
+ */
+export interface WorkflowFrontmatter {
+  type: 'workflow';
+  /** What the workflow produces when it runs. */
+  output: WorkflowOutput;
+  /** Slug of the folder/category where output docs get filed. */
+  output_category: string | null;
+  /** MCP slugs that must be connected before the run can start. */
+  requires_mcps: string[];
+  /** Cron string (reserved for Phase 2) or null. */
+  schedule: string | null;
+}
+
+/**
+ * Runtime-stamped provenance fields written on documents that were created or
+ * last touched by a workflow run. NOT user-editable — stamped by workflow-run
+ * code paths and excluded from user-facing input schemas.
+ *
+ * Discriminated union: a stamp is either the "created" pair (immutable once
+ * set, written exactly once when a workflow creates a doc) OR the
+ * "last-touched" pair (overwritten on every workflow update of an existing
+ * doc). Task 5's stamp middleware constructs one variant per operation type
+ * — never both in a single write, never neither, never mixed.
+ */
+export type WorkflowOutputStamp =
+  | {
+      /** Ref of the workflow doc that created this document (immutable). */
+      created_by_workflow: string;
+      /** UUID of the workflow run that created this document (immutable). */
+      created_by_workflow_run_id: string;
+    }
+  | {
+      /** Ref of the workflow doc that last touched this document. */
+      last_touched_by_workflow: string;
+      /** UUID of the workflow run that last touched this document. */
+      last_touched_by_workflow_run_id: string;
+    };
+
+/** Validation error shape — one entry per failing field. */
+export interface ValidationError {
+  field: string;
+  message: string;
+}
+
+/** Tagged-union result returned by `validateWorkflowFrontmatter`. */
+export type WorkflowFrontmatterResult =
+  | { ok: true; value: WorkflowFrontmatter }
+  | { ok: false; errors: ValidationError[] };
+
+const WORKFLOW_OUTPUT_VALUES: WorkflowOutput[] = ['document', 'message', 'both'];
+
+/**
+ * Validate a raw frontmatter object as `WorkflowFrontmatter`. Accepts any
+ * `unknown` input and returns a tagged-union result so callers can branch
+ * without throwing.
+ *
+ * Rules:
+ *   - `type` must equal `'workflow'`
+ *   - `output` is required and must be `'document' | 'message' | 'both'`
+ *   - `requires_mcps` must be an array of strings; missing → invalid
+ *   - `output_category` may be string, null, or absent (absent → null)
+ *   - `schedule` may be string, null, or absent (absent → null)
+ *
+ * On success, `output_category` and `schedule` are always present in the
+ * returned `value` — absence in the input is normalised to `null`.
+ */
+export function validateWorkflowFrontmatter(
+  input: unknown,
+): WorkflowFrontmatterResult {
+  const errors: ValidationError[] = [];
+
+  if (typeof input !== 'object' || input === null) {
+    return {
+      ok: false,
+      errors: [{ field: 'input', message: 'must be an object' }],
+    };
+  }
+
+  const fm = input as Record<string, unknown>;
+
+  // type
+  if (fm['type'] !== 'workflow') {
+    errors.push({ field: 'type', message: "must equal 'workflow'" });
+  }
+
+  // output — required
+  if (!('output' in fm) || fm['output'] === undefined || fm['output'] === null) {
+    errors.push({ field: 'output', message: 'is required' });
+  } else if (!WORKFLOW_OUTPUT_VALUES.includes(fm['output'] as WorkflowOutput)) {
+    errors.push({
+      field: 'output',
+      message: `must be one of: ${WORKFLOW_OUTPUT_VALUES.join(', ')}`,
+    });
+  }
+
+  // requires_mcps — must be present and an array of strings
+  if (!('requires_mcps' in fm)) {
+    errors.push({ field: 'requires_mcps', message: 'is required' });
+  } else if (!Array.isArray(fm['requires_mcps'])) {
+    errors.push({ field: 'requires_mcps', message: 'must be an array' });
+  } else if (fm['requires_mcps'].some((v) => typeof v !== 'string')) {
+    errors.push({ field: 'requires_mcps', message: 'must be an array of strings' });
+  }
+
+  // output_category — optional string or null
+  if (
+    'output_category' in fm &&
+    fm['output_category'] !== null &&
+    typeof fm['output_category'] !== 'string'
+  ) {
+    errors.push({ field: 'output_category', message: 'must be a string or null' });
+  }
+
+  // schedule — optional string or null
+  if (
+    'schedule' in fm &&
+    fm['schedule'] !== null &&
+    typeof fm['schedule'] !== 'string'
+  ) {
+    errors.push({ field: 'schedule', message: 'must be a string or null' });
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  return {
+    ok: true,
+    value: {
+      type: 'workflow',
+      output: fm['output'] as WorkflowOutput,
+      output_category:
+        'output_category' in fm
+          ? (fm['output_category'] as string | null)
+          : null,
+      requires_mcps: fm['requires_mcps'] as string[],
+      schedule:
+        'schedule' in fm ? (fm['schedule'] as string | null) : null,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * Parse a single frontmatter scalar. Quoted strings use JSON.parse; `null`

@@ -12,6 +12,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import yaml from 'js-yaml';
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { db } from '@/db';
@@ -21,6 +22,7 @@ import { withAuth, requireCompany } from '@/lib/api/handler';
 import { error, success } from '@/lib/api/response';
 import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import { getBrainForCompany } from '@/lib/brain/queries';
+import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import {
   extractDocumentTypeFromContent,
@@ -203,15 +205,66 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
       patch.content !== undefined ? { type: newType } : {};
 
     // Recompute outbound_links when content changes; preserve other metadata fields.
-    const metadataUpdate =
-      patch.content !== undefined
-        ? {
-            metadata: {
-              ...((existing.metadata as Record<string, unknown> | null) ?? {}),
-              outbound_links: parseOutboundLinks(patch.content),
-            },
+    //
+    // Workflow-doc frontmatter sync (Phase 1.5): when the updated content
+    // resolves to `type: workflow`, parse the YAML frontmatter from the body
+    // and mirror the authored fields (output, output_category, requires_mcps,
+    // schedule) into `documents.metadata`. The trigger route's preflight reads
+    // these from metadata — without this sync, user edits to requires_mcps in
+    // the body are silently invisible at run time.
+    //
+    // Silent-skip policy: invalid YAML or an invalid workflow-frontmatter
+    // shape does not block the save. Users save half-edited YAML mid-thought;
+    // we don't want to fight them. The trigger-time preflight +
+    // validateWorkflowFrontmatter catches bad shapes at run time.
+    //
+    // Uses js-yaml (not parseFrontmatterRaw in save.ts) because the hand-rolled
+    // parser there doesn't handle YAML arrays like `requires_mcps: [a, b]`.
+    let metadataUpdate: { metadata?: unknown } = {};
+    if (patch.content !== undefined) {
+      const existingMetadata =
+        (existing.metadata as Record<string, unknown> | null) ?? {};
+
+      // Silent-skip preserves existingMetadata on any invalid/missing frontmatter.
+      // Consequence: removing a required field (e.g. requires_mcps) from the body
+      // does NOT clear it from metadata — trigger-time preflight will still enforce
+      // the stale value until the user either restores the field with a new value
+      // or the doc is saved with a valid frontmatter block. This is intentional:
+      // we don't want to clobber metadata on every half-edited save.
+      let workflowMetadata: Record<string, unknown> = {};
+      if (newType === 'workflow') {
+        // CRLF-safe: \r? handles Windows line endings. Content pasted from
+        // Windows editors uses \r\n; without \r? the match silently fails and
+        // the sync no-ops even though the frontmatter block is structurally
+        // valid.
+        const fmMatch = patch.content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+        if (fmMatch) {
+          try {
+            const parsed = yaml.load(fmMatch[1]) as unknown;
+            const validated = validateWorkflowFrontmatter(parsed);
+            if (validated.ok) {
+              workflowMetadata = {
+                output: validated.value.output,
+                output_category: validated.value.output_category,
+                requires_mcps: validated.value.requires_mcps,
+                schedule: validated.value.schedule,
+              };
+            }
+            // invalid shape → skip sync, keep existing metadata fields.
+          } catch {
+            // YAML parse error → skip sync, keep existing metadata fields.
           }
-        : {};
+        }
+      }
+
+      metadataUpdate = {
+        metadata: {
+          ...existingMetadata,
+          outbound_links: parseOutboundLinks(patch.content),
+          ...workflowMetadata,
+        },
+      };
+    }
 
     const changedKeys = Object.keys(patch);
     const summary = `updated: ${changedKeys.join(', ')}`;
@@ -258,6 +311,13 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
     maybeScheduleSkillManifestRebuild(companyId, existing.type);
     if (newType !== existing.type) {
       maybeScheduleSkillManifestRebuild(companyId, newType);
+    }
+    try {
+      revalidatePath('/', 'layout');
+    } catch {
+      // revalidatePath throws outside a Next request context (e.g. unit tests
+      // mocking the withAuth wrapper). Swallow — the next navigation will
+      // re-query the layout from scratch regardless.
     }
 
     // Mark the originating attachment as committed (fire-and-forget;
@@ -398,6 +458,11 @@ export const DELETE = (_req: Request, { params }: RouteCtx) =>
     // The deleted doc's `type` is the trigger — a skill being
     // soft-deleted must drop out of the manifest.
     maybeScheduleSkillManifestRebuild(companyId, existing.type);
+    try {
+      revalidatePath('/', 'layout');
+    } catch {
+      // see PATCH handler above for rationale.
+    }
 
     return success({ id });
   });

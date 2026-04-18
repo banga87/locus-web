@@ -8,6 +8,8 @@
 // a manifest regeneration (best-effort).
 
 import { and, desc, eq, isNull, lt, or } from 'drizzle-orm';
+import yaml from 'js-yaml';
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { db } from '@/db';
@@ -18,6 +20,7 @@ import { decodeCursor, encodeCursor } from '@/lib/api/pagination';
 import { created, error, paginated } from '@/lib/api/response';
 import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import { getBrainForCompany } from '@/lib/brain/queries';
+import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import {
   extractDocumentTypeFromContent,
@@ -168,6 +171,48 @@ export const POST = (req: Request) =>
     // lookups can hit the index instead of parsing content.
     const documentType = extractDocumentTypeFromContent(input.content);
 
+    // Phase 1.5 workflow-doc frontmatter sync: mirrors the PATCH route's
+    // logic (see /api/brain/documents/[id]/route.ts). When the new doc is a
+    // workflow, parse the YAML body and seed metadata with the authored
+    // fields so the trigger route's preflight reads the right values on the
+    // very first run — without this, a freshly-created workflow doc has no
+    // `output`/`requires_mcps` in metadata and every Run click fails
+    // validation until the doc is saved at least once.
+    //
+    // Silent-skip policy: invalid YAML or an invalid workflow frontmatter
+    // shape does not block creation. Trigger-time validation catches bad
+    // shapes at run time.
+    //
+    // Silent-skip preserves empty workflowMetadata on any invalid/missing
+    // frontmatter. Consequence: a new workflow doc with malformed frontmatter
+    // will have no workflow fields in metadata until the next save with a
+    // valid block. Trigger-time preflight will fail loudly rather than
+    // running with stale or missing values — this is intentional for POST
+    // (no existing metadata to preserve) and mirrors the PATCH semantics.
+    let workflowMetadata: Record<string, unknown> = {};
+    if (documentType === 'workflow') {
+      // CRLF-safe: \r? handles Windows line endings. Without it, content
+      // pasted from a Windows editor silently skips the sync even when the
+      // frontmatter block is structurally valid.
+      const fmMatch = input.content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+      if (fmMatch) {
+        try {
+          const parsed = yaml.load(fmMatch[1]) as unknown;
+          const validated = validateWorkflowFrontmatter(parsed);
+          if (validated.ok) {
+            workflowMetadata = {
+              output: validated.value.output,
+              output_category: validated.value.output_category,
+              requires_mcps: validated.value.requires_mcps,
+              schedule: validated.value.schedule,
+            };
+          }
+        } catch {
+          // YAML parse error — skip sync; trigger-time validation will catch it.
+        }
+      }
+    }
+
     try {
       const [doc] = await db
         .insert(documents)
@@ -185,7 +230,10 @@ export const POST = (req: Request) =>
           isCore: false,
           ownerId: ctx.userId,
           type: documentType,
-          metadata: { outbound_links: parseOutboundLinks(input.content) },
+          metadata: {
+            outbound_links: parseOutboundLinks(input.content),
+            ...workflowMetadata,
+          },
           version: 1,
         })
         .returning();
@@ -207,6 +255,12 @@ export const POST = (req: Request) =>
 
       await tryRegenerateManifest(brain.id);
       maybeScheduleSkillManifestRebuild(companyId, documentType);
+      try {
+        revalidatePath('/', 'layout');
+      } catch {
+        // revalidatePath throws outside a Next request context (tests).
+        // Safe to skip — next navigation re-queries the layout.
+      }
 
       // Transition the originating attachment (if any) to `committed`.
       // Fire-and-forget: if the update fails, the doc has still been

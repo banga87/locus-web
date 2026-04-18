@@ -90,8 +90,9 @@ export async function seedBrainWithNestedFolders(): Promise<string> {
     })
     .returning({ id: folders.id });
 
-  // Brand: 1 knowledge doc + 1 skill-typed doc (the latter must be
-  // excluded from the manifest).
+  // Brand: 1 knowledge doc + 1 skill-typed doc (excluded from manifest)
+  // + 1 workflow-typed doc (INCLUDED — the Platform Agent must be able to
+  // reference workflow definitions by name via the manifest).
   await db.insert(documents).values([
     {
       companyId: company.id,
@@ -116,6 +117,18 @@ export async function seedBrainWithNestedFolders(): Promise<string> {
       path: `brand-identity/skill-doc-${suffix}`,
       content: '# Skill',
       type: 'skill',
+      status: 'active',
+      confidenceLevel: 'medium',
+    },
+    {
+      companyId: company.id,
+      brainId: brain.id,
+      folderId: brandFolder.id,
+      title: 'Weekly Error Report',
+      slug: `weekly-error-report-${suffix}`,
+      path: `brand-identity/weekly-error-report-${suffix}`,
+      content: '# Weekly Error Report workflow',
+      type: 'workflow',
       status: 'active',
       confidenceLevel: 'medium',
     },

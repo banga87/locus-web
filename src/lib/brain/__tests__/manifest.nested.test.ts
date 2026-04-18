@@ -1,9 +1,9 @@
 // regenerateManifest tests — nested-folder shape.
 //
 // Asserts that a brain with a two-level folder hierarchy emits a tree
-// (folders nested under folders), preserves per-document metadata, and
-// excludes documents whose `type` column is non-null (skills,
-// agent-scaffolding, etc.).
+// (folders nested under folders), preserves per-document metadata,
+// excludes platform-internal types (agent-scaffolding, skill), and
+// includes workflow docs (type = 'workflow').
 
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -50,7 +50,7 @@ describe('regenerateManifest — nested folders', () => {
     });
   });
 
-  it('excludes documents with non-null type (agent-scaffolding, skill)', async () => {
+  it('excludes platform-internal types (agent-scaffolding, skill)', async () => {
     await regenerateManifest(brainId);
     const m = await readCurrentManifest(brainId);
     const allDocs: { title: string }[] = [];
@@ -62,5 +62,22 @@ describe('regenerateManifest — nested folders', () => {
     };
     walk(m.folders);
     expect(allDocs.find((d) => d.title === 'Skill Doc')).toBeUndefined();
+  });
+
+  it('includes documents with type: workflow', async () => {
+    // Workflow docs must appear in the manifest so the Platform Agent can
+    // reference them by name. This guards against a regression to a
+    // blanket `isNull(type)` filter that would silently drop them.
+    await regenerateManifest(brainId);
+    const m = await readCurrentManifest(brainId);
+    const allDocs: { title: string }[] = [];
+    const walk = (fs: typeof m.folders): void => {
+      for (const f of fs) {
+        allDocs.push(...f.documents);
+        walk(f.folders);
+      }
+    };
+    walk(m.folders);
+    expect(allDocs.find((d) => d.title === 'Weekly Error Report')).toBeDefined();
   });
 });

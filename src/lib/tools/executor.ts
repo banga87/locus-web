@@ -3,29 +3,37 @@
 // Order (see 02-tool-executor.md §"Tool Execution Pipeline"):
 //   1. Input validation   (ajv, pre-compiled)
 //   2. Context            (assumed pre-assembled by the caller)
-//   3. Permission check   (Pre-MVP: read-scope stub; Phase 1 swaps in
-//                          the real Permission Evaluator)
+//   3. Permission check   (dual gate: scope gate + role-based evaluator)
 //   4. Execute            (tool.call)
 //   5. Format response    (responseTokens + executionMs metadata)
 //   6. Audit event        (non-blocking via logEvent)
 //   7. Return
+//
+// The permission check is a dual gate:
+//   - Scope gate — every actor (tokens + humans) must carry the scope
+//     matching the tool's action ('read' / 'write'). This is the MCP-era
+//     check and the only gate token-only callers go through.
+//   - Role gate — when the actor also carries a `role` (Platform Agent
+//     callers), the role-based evaluator (`@/lib/agent/permissions/
+//     evaluator`) runs after the scope check. Viewers are blocked from
+//     write tools even if their token somehow carried the 'write' scope.
 //
 // Pre-MVP scope intentionally leaves out:
 //   - Response size caps / truncation (handled by individual tools today;
 //     the shared enforcement layer lands with the Platform Agent)
 //   - Rate-limit headers (MCP-server concern; attached by Task 8)
 //   - Abort-signal propagation (no long-running tools yet)
-//   - Write-tool branching (no write tools registered; the action map
-//     only lists read tools)
-//   - Real permission evaluation (see TODO in Step 3 below)
 
 import Ajv, { type ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
 
 import { logEvent } from '@/lib/audit/logger';
 import type { AuditEvent } from '@/lib/audit/types';
+import {
+  evaluate,
+  PermissionDeniedError,
+} from '@/lib/agent/permissions/evaluator';
 
-import { TOOL_ACTION_MAP, type ToolAction } from './action-map';
 import { resolveResource } from './resource-resolver';
 import { estimateTokens } from './token-estimator';
 import type {
@@ -133,21 +141,22 @@ export async function executeTool(
 
   // ---- Step 3: Permission check -----------------------------------------
   //
-  // TODO: Phase 1/2 — re-enable fine-grained permission checks + write-scope
-  // logic. This stub only verifies the action's required scope is present on
-  // the actor. No document-level ACLs, no category-scope checks, no
-  // `requiresApproval` branch. `resolveResource()` runs today only so that
-  // when the real evaluator lands the wiring is already in place.
-  const action: ToolAction = TOOL_ACTION_MAP[tool.name] ?? inferActionFromTool(tool);
+  // `tool.action` is the single source of truth for what this call requires.
+  // Both gates (scope + role) read it from the same field — no drift risk
+  // between a name-indexed map and the tool's own declaration.
+  //
+  // `resolveResource()` runs here so per-resource ACL context is available
+  // when document-level policy matching lands (Phase 2). The fine-grained
+  // `requiresApproval` branch is also a Phase 2 concern.
   void resolveResource(tool.name, rawInput, context);
 
-  if (!hasScope(context.actor, action)) {
+  if (!hasScope(context.actor, tool.action)) {
     const denied = buildError(
       'scope_denied',
-      `Actor does not have '${action}' scope for tool '${tool.name}'.`,
+      `Actor does not have '${tool.action}' scope for tool '${tool.name}'.`,
       {
         hint:
-          action === 'read'
+          tool.action === 'read'
             ? 'This token needs the "read" scope to call read tools.'
             : 'This token needs the "write" scope to call write tools.',
         retryable: false,
@@ -159,6 +168,44 @@ export async function executeTool(
     fireAuditEvent(tool, rawInput, denied, context, { denied: true });
 
     return denied;
+  }
+
+  // Role-based permission check. Runs when the actor carries a `role`
+  // (Platform Agent callers). MCP token callers (no `role`) skip this gate
+  // and rely solely on `scopes` above. `tool.action` is required on the
+  // LocusTool interface, so there is no fallback to `isReadOnly()` here —
+  // the compiler guarantees every tool has declared its intent.
+  if (context.actor.role !== undefined) {
+    try {
+      evaluate(
+        { actor: { role: context.actor.role }, brainId: context.brainId },
+        {
+          action: tool.action,
+          // `resourceType` is optional on LocusTool — tools that don't
+          // touch a brain resource (web_search, web_fetch) omit it. Default
+          // to 'document' for the evaluator's error-message shape.
+          resourceType: tool.resourceType ?? 'document',
+        },
+      );
+    } catch (err) {
+      if (err instanceof PermissionDeniedError) {
+        const denied = buildError(
+          'permission_denied',
+          err.message,
+          {
+            hint:
+              tool.action === 'write'
+                ? 'Your role does not permit write operations on this brain.'
+                : 'Your role does not permit this operation.',
+            retryable: false,
+          },
+          startMs,
+        );
+        fireAuditEvent(tool, rawInput, denied, context, { denied: true });
+        return denied;
+      }
+      throw err; // unexpected — propagate to the execution_error catch below
+    }
   }
 
   // ---- Step 4: Execute --------------------------------------------------
@@ -209,19 +256,13 @@ export async function executeTool(
 // ---------------------------------------------------------------------------
 
 /**
- * Pre-MVP scope gate. Kept deliberately dumb — real ACL eval lives in
- * `@/lib/permissions/evaluator` starting Phase 1.
+ * Scope gate — the first half of the dual permission check. Verifies the
+ * actor's token-level scopes permit the requested action. Role-based
+ * evaluation (for Platform Agent actors) lives in
+ * `@/lib/agent/permissions/evaluator` and runs after this gate.
  */
-function hasScope(actor: Actor, action: ToolAction): boolean {
+function hasScope(actor: Actor, action: 'read' | 'write'): boolean {
   return actor.scopes.includes(action);
-}
-
-/**
- * Fallback when a tool name is not in `TOOL_ACTION_MAP`. Honors the
- * tool's `isReadOnly()` hint so unregistered tools still route sensibly.
- */
-function inferActionFromTool(tool: LocusTool): ToolAction {
-  return tool.isReadOnly() ? 'read' : 'write';
 }
 
 function buildError(

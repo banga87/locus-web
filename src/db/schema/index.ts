@@ -21,3 +21,5 @@ export * from './oauth-clients';
 export * from './oauth-sessions';
 export * from './oauth-codes';
 export * from './oauth-refresh-tokens';
+export * from './workflow-runs';
+export * from './workflow-run-events';

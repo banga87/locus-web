@@ -17,6 +17,7 @@
 
 import type { JSONSchemaType, SchemaObject } from 'ajv';
 import type { ActorType, AuditEvent } from '@/lib/audit/types';
+import type { Role } from '@/lib/agent/permissions/policy';
 
 /**
  * JSON Schema passed to ajv. Accepts either a typed schema (for compile-time
@@ -44,6 +45,13 @@ export interface Actor {
   name?: string;
   /** Scopes granted to this actor. Pre-MVP: `['read']`. */
   scopes: string[];
+  /**
+   * Role-based permission level. Populated by the Platform Agent route layer
+   * from the brain membership record. Absent for MCP token callers (those
+   * rely solely on `scopes`). When present, the permission evaluator enforces
+   * role-based write gates in addition to the scope check.
+   */
+  role?: Role;
 }
 
 /**
@@ -74,6 +82,20 @@ export interface ToolContext {
    * increment. Used to enforce the 15-call safety rail.
    */
   webCallsThisTurn: number;
+
+  /**
+   * Workflow run context — present when a tool is being called from inside
+   * a workflow run. Write tools read this to stamp provenance into
+   * documents.metadata within their own transaction. Never set for
+   * interactive (chat) tool calls.
+   *
+   * `workflowDocRef` is the human-legible path of the workflow document
+   * (e.g. "workflows/my-workflow") written into the stamp, NOT the UUID.
+   */
+  workflowRunContext?: {
+    runId: string;
+    workflowDocRef: string;
+  };
 }
 
 /**
@@ -86,7 +108,7 @@ export interface ToolError {
    *   - `invalid_input`        — ajv validation failed
    *   - `unknown_tool`         — no tool registered with that name
    *   - `scope_denied`         — actor lacks the required scope
-   *   - `permission_denied`    — future: fine-grained ACL denial
+   *   - `permission_denied`    — role gate denied the actor (see evaluator.ts)
    *   - `document_not_found`   — tool-level lookup miss
    *   - `execution_error`      — unexpected throw from `tool.call()`
    *   - `rate_limited`         — future: MCP rate-limit layer
@@ -152,6 +174,30 @@ export interface LocusTool<I = unknown, O = unknown> {
    *   - 'web'   — web_search + web_fetch declare this
    */
   readonly capabilities?: string[];
+
+  /**
+   * The permission action this tool requires. All existing read tools
+   * declare 'read'. Write tools (Task 2) declare 'write'. The executor
+   * uses this to run the role-based permission evaluator before dispatch.
+   *
+   * Required at the type level so a new write tool cannot silently bypass
+   * the permission gate — the compiler forces every tool to declare intent.
+   */
+  readonly action: 'read' | 'write';
+
+  /**
+   * The resource type this tool operates on. Passed to the permission
+   * evaluator's `EvalRequest.resourceType` (which today uses it only in
+   * the `PermissionDeniedError` message). Document-operating tools declare
+   * `'document'`; workflow + session tools will declare their own type
+   * once those resources land.
+   *
+   * Optional: tools that don't touch a brain resource (web_search,
+   * web_fetch) omit this field. The executor defaults to `'document'`
+   * for the evaluator call when absent, which keeps the error message
+   * shape consistent with today's behaviour.
+   */
+  readonly resourceType?: 'document' | 'workflow' | 'session';
 
   /** True if the tool does not modify brain state. */
   isReadOnly(): boolean;

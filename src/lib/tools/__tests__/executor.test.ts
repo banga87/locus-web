@@ -60,6 +60,8 @@ function buildMockTool(overrides: Partial<LocusTool> = {}): LocusTool {
       required: ['name'],
       additionalProperties: false,
     },
+    action: 'read' as const,
+    resourceType: 'document' as const,
     isReadOnly: () => true,
     call: vi.fn(async (input: unknown) => {
       return {

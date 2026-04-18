@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import type { ManifestFolder } from '@/lib/brain/manifest';
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
 
@@ -11,6 +13,8 @@ interface SidebarProps {
   user: { email: string; fullName: string | null; role: string };
   tree: ManifestFolder[];
   pinned: Array<{ id: string; title: string; path: string }>;
+  /** Slot for the GlobalRunBadge server component rendered by the layout. */
+  workflowsBadge?: ReactNode;
 }
 
 export function Sidebar(props: SidebarProps) {

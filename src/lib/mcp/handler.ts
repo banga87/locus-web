@@ -22,6 +22,30 @@ import {
   type McpToolResponse,
 } from './response';
 
+/**
+ * Authoritative allowlist of tool names exposed over MCP IN.
+ *
+ * The shared tool registry (`registerLocusTools`) contains write tools
+ * (create_document, update_document) for the Platform Agent's use, but
+ * the MCP IN surface must stay read-only per the MVP contract. This
+ * allowlist is the defence-in-depth check — the MCP SDK registrar in
+ * `./tools.ts` already only calls `server.tool(...)` for these four
+ * names (so `tools/list` correctly advertises only them), but any direct
+ * call into `handleToolCall` (e.g. a crafted request bypassing the SDK's
+ * list surface) would reach `executeTool` and succeed for a write tool
+ * if scope + role gates passed. This allowlist prevents that.
+ *
+ * Exported so `./tools.ts` can assert that every `server.tool(...)`
+ * registration is covered — compile-time link between the two lists,
+ * so growth/drift requires updating both sides.
+ */
+export const MCP_ALLOWED_TOOLS = new Set<string>([
+  'search_documents',
+  'get_document',
+  'get_document_diff',
+  'get_diff_history',
+]);
+
 // Log-once-per-cold-start flag so we can see in logs that the stub is
 // active but don't spam it on every request.
 let warnedRateStub = false;
@@ -60,6 +84,18 @@ export async function handleToolCall(
 
   // Idempotent — safe to call on every request. No-op after the first.
   registerLocusTools();
+
+  // MCP IN read-only allowlist. The shared tool registry includes write
+  // tools for the Platform Agent; MCP IN must not be able to reach them.
+  // Fail with `unknown_tool` so the external surface behaves exactly as
+  // if the write tool weren't registered at all (consistent with the
+  // `server.tool(...)` list in `./tools.ts`).
+  if (!MCP_ALLOWED_TOOLS.has(params.toolName)) {
+    return formatMcpError(
+      'unknown_tool',
+      `No tool named '${params.toolName}' is available over MCP.`,
+    );
+  }
 
   let brainId: string;
   try {

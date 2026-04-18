@@ -17,12 +17,14 @@ interface NewAppShellProps {
   user: { email: string; fullName: string | null; role: string };
   tree: ManifestFolder[];
   pinned: Array<{ id: string; title: string; path: string }>;
+  /** Slot for the GlobalRunBadge server component (rendered by the layout). */
+  workflowsBadge?: ReactNode;
 }
 
-export function NewAppShell({ children, ...props }: NewAppShellProps) {
+export function NewAppShell({ children, workflowsBadge, ...props }: NewAppShellProps) {
   return (
     <div className="app">
-      <Sidebar {...props} />
+      <Sidebar {...props} workflowsBadge={workflowsBadge} />
       <ResizeHandle />
       <section className="main">
         <SidebarMobileTrigger />

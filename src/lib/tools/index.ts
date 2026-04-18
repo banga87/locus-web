@@ -11,21 +11,27 @@ import { getDocumentDiffTool } from './implementations/get-document-diff';
 import { getDiffHistoryTool } from './implementations/get-diff-history';
 import { webSearchTool } from './implementations/web-search';
 import { webFetchTool } from './implementations/web-fetch';
+import { createDocumentTool } from './implementations/create-document';
+import { updateDocumentTool } from './implementations/update-document';
 
 let registered = false;
 
 /**
- * Register all Pre-MVP read tools on the shared executor registry. Safe
- * to call multiple times — subsequent calls are no-ops.
+ * Register all tools on the shared executor registry. Safe to call
+ * multiple times — subsequent calls are no-ops.
  */
 export function registerLocusTools(): void {
   if (registered) return;
+  // Read tools
   registerTool(searchDocumentsTool);
   registerTool(getDocumentTool);
   registerTool(getDocumentDiffTool);
   registerTool(getDiffHistoryTool);
   registerTool(webSearchTool);
   registerTool(webFetchTool);
+  // Write tools (Task 2)
+  registerTool(createDocumentTool);
+  registerTool(updateDocumentTool);
   registered = true;
 }
 
@@ -41,4 +47,6 @@ export {
   getDiffHistoryTool,
   webSearchTool,
   webFetchTool,
+  createDocumentTool,
+  updateDocumentTool,
 };

@@ -21,12 +21,25 @@ export type ResolveResult =
 /**
  * Probe the MCP endpoint for OAuth 2.1 metadata.
  *
- * Order:
- *  1. If the unauthenticated `GET <mcpUrl>` returns `WWW-Authenticate`
- *     with `resource_metadata=` or `as_uri=`, fetch that URL.
- *  2. Otherwise, fetch `<origin>/.well-known/oauth-authorization-server`.
- *  3. If both fail or the metadata lacks required fields, return
- *     `dcr_unsupported`.
+ * Two metadata shapes are in circulation:
+ *   - RFC 9728 Protected Resource Metadata — the document pointed to by
+ *     `resource_metadata=` in `WWW-Authenticate`. Contains
+ *     `authorization_servers[]`; we fetch
+ *     `<issuer>/.well-known/oauth-authorization-server` to get the real
+ *     AS metadata (two-hop).
+ *   - RFC 8414 Authorization Server Metadata — direct AS metadata with
+ *     `authorization_endpoint` / `token_endpoint` /
+ *     `registration_endpoint`. Either labelled `as_uri=` in the header,
+ *     or served at `<origin>/.well-known/oauth-authorization-server` as
+ *     a fallback.
+ *
+ * Resolution order:
+ *   1. Every `resource_metadata=` / `as_uri=` URL in the header, in the
+ *      order it appears (some servers — e.g. Sentry — emit multiple
+ *      `resource_metadata=` directives and only one of them is real).
+ *   2. Fallback: `<origin>/.well-known/oauth-authorization-server` on
+ *      the MCP URL.
+ * First candidate that resolves to a complete AS metadata document wins.
  */
 export async function resolveAuthServerMetadata(
   mcpUrl: URL,
@@ -43,27 +56,75 @@ export async function resolveAuthServerMetadata(
     };
   }
 
-  const metaUrl =
-    extractMetadataUrl(probe.headers.get('www-authenticate')) ??
-    new URL('/.well-known/oauth-authorization-server', mcpUrl).toString();
+  const hints = extractMetadataHints(probe.headers.get('www-authenticate'));
+  const fallback = new URL('/.well-known/oauth-authorization-server', mcpUrl).toString();
+  const candidates = [...hints, fallback];
 
-  let metaRes: Response;
+  let lastDetail = 'no metadata candidate succeeded';
+  for (const candidate of candidates) {
+    const result = await resolveFromCandidate(candidate, fetchFn);
+    if (result.ok) return result;
+    lastDetail = result.detail ?? lastDetail;
+  }
+  return { ok: false, error: 'dcr_unsupported', detail: lastDetail };
+}
+
+/**
+ * Fetch a candidate URL and resolve to AS metadata. The candidate may be
+ * either RFC 9728 resource metadata (triggers a second hop to AS metadata
+ * via `authorization_servers[0]`) or RFC 8414 AS metadata directly.
+ */
+async function resolveFromCandidate(
+  url: string,
+  fetchFn: FetchLike,
+): Promise<ResolveResult> {
+  const fetched = await fetchJson(url, fetchFn);
+  if (!fetched.ok) return fetched;
+
+  // RFC 9728 Protected Resource Metadata → follow authorization_servers[0].
+  if (Array.isArray(fetched.body.authorization_servers)) {
+    const issuers = fetched.body.authorization_servers.filter(
+      (v): v is string => typeof v === 'string',
+    );
+    if (issuers.length === 0) {
+      return {
+        ok: false,
+        error: 'dcr_unsupported',
+        detail: `empty authorization_servers at ${url}`,
+      };
+    }
+    const asUrl = new URL('/.well-known/oauth-authorization-server', issuers[0]).toString();
+    const asFetched = await fetchJson(asUrl, fetchFn);
+    if (!asFetched.ok) return asFetched;
+    return parseAsMetadata(asFetched.body, asUrl);
+  }
+
+  // RFC 8414 AS metadata served directly at this URL.
+  return parseAsMetadata(fetched.body, url);
+}
+
+type FetchJsonResult =
+  | { ok: true; body: Record<string, unknown> }
+  | { ok: false; error: 'dcr_unsupported'; detail: string };
+
+async function fetchJson(url: string, fetchFn: FetchLike): Promise<FetchJsonResult> {
+  let res: Response;
   try {
-    metaRes = await fetchFn(metaUrl);
+    res = await fetchFn(url);
   } catch {
-    return { ok: false, error: 'dcr_unsupported', detail: 'metadata fetch failed' };
+    return { ok: false, error: 'dcr_unsupported', detail: `fetch failed: ${url}` };
   }
-  if (!metaRes.ok) {
-    return { ok: false, error: 'dcr_unsupported', detail: `metadata HTTP ${metaRes.status}` };
+  if (!res.ok) {
+    return { ok: false, error: 'dcr_unsupported', detail: `HTTP ${res.status} at ${url}` };
   }
-
-  let raw: Record<string, unknown>;
   try {
-    raw = (await metaRes.json()) as Record<string, unknown>;
+    return { ok: true, body: (await res.json()) as Record<string, unknown> };
   } catch {
-    return { ok: false, error: 'dcr_unsupported', detail: 'metadata not JSON' };
+    return { ok: false, error: 'dcr_unsupported', detail: `not JSON: ${url}` };
   }
+}
 
+function parseAsMetadata(raw: Record<string, unknown>, sourceUrl: string): ResolveResult {
   const authorizationEndpoint = raw.authorization_endpoint;
   const tokenEndpoint = raw.token_endpoint;
   const registrationEndpoint = raw.registration_endpoint ?? null;
@@ -72,10 +133,18 @@ export async function resolveAuthServerMetadata(
     typeof tokenEndpoint !== 'string' ||
     (registrationEndpoint !== null && typeof registrationEndpoint !== 'string')
   ) {
-    return { ok: false, error: 'dcr_unsupported', detail: 'required fields missing' };
+    return {
+      ok: false,
+      error: 'dcr_unsupported',
+      detail: `required fields missing at ${sourceUrl}`,
+    };
   }
   if (!registrationEndpoint) {
-    return { ok: false, error: 'dcr_unsupported', detail: 'registration_endpoint missing' };
+    return {
+      ok: false,
+      error: 'dcr_unsupported',
+      detail: `registration_endpoint missing at ${sourceUrl}`,
+    };
   }
 
   return {
@@ -94,11 +163,18 @@ export async function resolveAuthServerMetadata(
   };
 }
 
-function extractMetadataUrl(header: string | null): string | null {
-  if (!header) return null;
-  // Look for either `resource_metadata="..."` or `as_uri="..."`.
-  const m = /(?:resource_metadata|as_uri)="([^"]+)"/i.exec(header);
-  return m?.[1] ?? null;
+function extractMetadataHints(header: string | null): string[] {
+  if (!header) return [];
+  // A single WWW-Authenticate header can legitimately carry multiple
+  // `resource_metadata=` directives (observed on sentry.dev). Collect all
+  // matches in the order they appear so the caller can try each.
+  const hints: string[] = [];
+  const re = /(?:resource_metadata|as_uri)="([^"]+)"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(header)) !== null) {
+    hints.push(m[1]);
+  }
+  return hints;
 }
 
 // --- performDcr --------------------------------------------------------

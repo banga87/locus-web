@@ -18,7 +18,8 @@ function fetchMock(responses: Array<{ urlMatch: RegExp; init: ResponseInit; body
     const url = input.toString();
     const match = responses.find((r) => r.urlMatch.test(url));
     if (!match) throw new Error(`unexpected fetch: ${url}`);
-    return new Response(JSON.stringify(match.body), match.init);
+    const body = typeof match.body === 'string' ? match.body : JSON.stringify(match.body);
+    return new Response(body, match.init);
   });
 }
 
@@ -90,6 +91,120 @@ describe('resolveAuthServerMetadata', () => {
     ]);
     const result = await resolveAuthServerMetadata(new URL('https://mcp.provider/mcp'), fetchFn);
     expect(result.ok).toBe(false);
+  });
+
+  it('handles RFC 9728 resource metadata (two-hop: authorization_servers → AS metadata)', async () => {
+    // Real Linear / Notion / Sentry shape: resource_metadata= points to a
+    // Protected Resource Metadata document with authorization_servers[], and
+    // the AS metadata lives at <issuer>/.well-known/oauth-authorization-server.
+    const fetchFn = fetchMock([
+      {
+        urlMatch: /mcp\.provider\/mcp$/,
+        init: {
+          status: 401,
+          headers: {
+            'WWW-Authenticate':
+              'Bearer realm="OAuth", resource_metadata="https://mcp.provider/.well-known/oauth-protected-resource"',
+          },
+        },
+        body: {},
+      },
+      {
+        urlMatch: /oauth-protected-resource$/,
+        init: { status: 200, headers: {} },
+        body: {
+          resource: 'https://mcp.provider/mcp',
+          authorization_servers: ['https://auth.provider'],
+          bearer_methods_supported: ['header'],
+        },
+      },
+      {
+        urlMatch: /auth\.provider\/\.well-known\/oauth-authorization-server$/,
+        init: { status: 200, headers: {} },
+        body: {
+          authorization_endpoint: 'https://auth.provider/authorize',
+          token_endpoint: 'https://auth.provider/token',
+          registration_endpoint: 'https://auth.provider/register',
+        },
+      },
+    ]);
+    const result = await resolveAuthServerMetadata(new URL('https://mcp.provider/mcp'), fetchFn);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.metadata.authorizationEndpoint).toBe('https://auth.provider/authorize');
+      expect(result.metadata.tokenEndpoint).toBe('https://auth.provider/token');
+      expect(result.metadata.registrationEndpoint).toBe('https://auth.provider/register');
+    }
+  });
+
+  it('tries all resource_metadata hints in order (Sentry: first 404s, second works)', async () => {
+    // Observed in prod: Sentry returns two resource_metadata= directives in
+    // a single WWW-Authenticate header. The first URL 404s; the second is
+    // the real one. We must try them in order and not bail on the first miss.
+    const fetchFn = fetchMock([
+      {
+        urlMatch: /mcp\.provider\/mcp$/,
+        init: {
+          status: 401,
+          headers: {
+            'WWW-Authenticate':
+              'Bearer realm="OAuth", resource_metadata="https://mcp.provider/.well-known/oauth-protected-resource", resource_metadata="https://mcp.provider/.well-known/oauth-protected-resource/mcp"',
+          },
+        },
+        body: {},
+      },
+      {
+        urlMatch: /oauth-protected-resource$/,
+        init: { status: 404, headers: {} },
+        body: 'Not Found',
+      },
+      {
+        urlMatch: /oauth-protected-resource\/mcp$/,
+        init: { status: 200, headers: {} },
+        body: {
+          resource: 'https://mcp.provider/mcp',
+          authorization_servers: ['https://mcp.provider'],
+        },
+      },
+      {
+        urlMatch: /mcp\.provider\/\.well-known\/oauth-authorization-server$/,
+        init: { status: 200, headers: {} },
+        body: {
+          authorization_endpoint: 'https://mcp.provider/authorize',
+          token_endpoint: 'https://mcp.provider/token',
+          registration_endpoint: 'https://mcp.provider/register',
+        },
+      },
+    ]);
+    const result = await resolveAuthServerMetadata(new URL('https://mcp.provider/mcp'), fetchFn);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.metadata.registrationEndpoint).toBe('https://mcp.provider/register');
+    }
+  });
+
+  it('returns dcr_unsupported when resource metadata has empty authorization_servers', async () => {
+    const fetchFn = fetchMock([
+      {
+        urlMatch: /mcp\.provider\/mcp$/,
+        init: {
+          status: 401,
+          headers: {
+            'WWW-Authenticate':
+              'Bearer resource_metadata="https://mcp.provider/.well-known/oauth-protected-resource"',
+          },
+        },
+        body: {},
+      },
+      {
+        urlMatch: /oauth-protected-resource$/,
+        init: { status: 200, headers: {} },
+        body: { resource: 'https://mcp.provider/mcp', authorization_servers: [] },
+      },
+    ]);
+    const result = await resolveAuthServerMetadata(new URL('https://mcp.provider/mcp'), fetchFn);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe('dcr_unsupported');
   });
 });
 

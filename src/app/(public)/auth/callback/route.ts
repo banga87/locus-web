@@ -80,5 +80,5 @@ export async function GET(request: Request) {
   }
 
   const needsSetup = !existing || !existing.companyId;
-  return NextResponse.redirect(needsSetup ? `${origin}/setup` : `${origin}/`);
+  return NextResponse.redirect(needsSetup ? `${origin}/setup` : `${origin}/home`);
 }

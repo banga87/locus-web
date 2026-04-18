@@ -4,7 +4,7 @@
 // attach the user to it, create their first brain, and seed that brain
 // with the Universal Base Pack. Then we try to regenerate the navigation
 // manifest and seed the Phase 1.5 built-ins (ingestion-filing skill +
-// default agent-scaffolding) before bouncing the user to /.
+// default agent-scaffolding) before bouncing the user to /home.
 //
 // Anything that fails mid-flow rolls the transactional portion back; the
 // Phase 1.5 built-in seed runs best-effort — a failure there is logged
@@ -41,7 +41,7 @@ async function completeSetup(formData: FormData) {
   if (ctx.companyId) {
     // Already set up — shouldn't be hitting this action, but if a stale
     // tab posts the form, silently bounce to the dashboard.
-    redirect('/');
+    redirect('/home');
   }
 
   const rawName = formData.get('companyName');
@@ -148,7 +148,7 @@ async function completeSetup(formData: FormData) {
     }
   }
 
-  redirect('/');
+  redirect('/home');
 }
 
 // ----- Page --------------------------------------------------------------
@@ -169,7 +169,7 @@ export default async function SetupPage({
   }
 
   if (ctx.companyId) {
-    redirect('/');
+    redirect('/home');
   }
 
   const { error } = await searchParams;

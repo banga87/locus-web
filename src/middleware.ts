@@ -62,6 +62,7 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/.well-known/') ||
     pathname.startsWith('/auth/') ||
+    pathname === '/' ||
     pathname === '/login' ||
     pathname === '/signup' ||
     pathname.startsWith('/_next') ||

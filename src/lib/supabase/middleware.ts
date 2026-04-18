@@ -8,7 +8,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // Originally scaffolded by the shadcn/supabase registry; we've adjusted:
 //  - redirect path `/auth/login` -> `/login` to match our plan
 //  - API routes get a JSON 401 instead of an HTML redirect
-//  - authenticated users on /login or /signup get bounced to `/`
+//  - authenticated users on /login or /signup get bounced to `/home`
 
 export async function updateSession(request: NextRequest) {
   // Stamp the current pathname so server components / layouts can read it
@@ -82,7 +82,7 @@ export async function updateSession(request: NextRequest) {
   // company is attached.)
   if (isAuthPage) {
     const url = request.nextUrl.clone();
-    url.pathname = '/';
+    url.pathname = '/home';
     url.search = '';
     return NextResponse.redirect(url);
   }

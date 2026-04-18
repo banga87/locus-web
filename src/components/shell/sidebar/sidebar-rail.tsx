@@ -33,7 +33,7 @@ export function SidebarRail() {
         <button type="button" className="rail-btn" title="Search" aria-label="Search">
           <Search size={18} />
         </button>
-        <Link href="/" className="rail-btn" title="Home" aria-label="Home"><Home size={18} /></Link>
+        <Link href="/home" className="rail-btn" title="Home" aria-label="Home"><Home size={18} /></Link>
         <Link href="/recent" className="rail-btn" title="Recent" aria-label="Recent"><Clock size={18} /></Link>
         <Link href="/neurons" className="rail-btn" title="Neurons" aria-label="Neurons"><Network size={18} /></Link>
       </div>

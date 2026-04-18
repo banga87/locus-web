@@ -65,7 +65,7 @@ export function SidebarExpanded({ companyName, user, tree, pinned, workflowsBadg
           Search
           <span className="kbd">⌘K</span>
         </div>
-        <Link href="/" className="quick-item">
+        <Link href="/home" className="quick-item">
           <HomeIcon />
           Home
         </Link>

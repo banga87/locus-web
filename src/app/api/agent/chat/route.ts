@@ -187,6 +187,21 @@ export async function POST(req: Request) {
   if (agentDefinitionId) {
     const skillsRepo = createDbAgentSkillsRepo();
     agentSkillIds = (await skillsRepo.getAgentSkillIds(agentDefinitionId)) ?? [];
+  } else {
+    // Default Platform Agent (no agent-definition): expose every skill
+    // the company has installed/authored. See spec § Phase-1 follow-up
+    // for the plan to narrow this to an explicit seeded default agent-def.
+    const rows = await db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.companyId, auth.companyId),
+          eq(documents.type, 'skill'),
+          isNull(documents.deletedAt),
+        ),
+      );
+    agentSkillIds = rows.map((r) => r.id);
   }
 
   let availableSkills: Array<{

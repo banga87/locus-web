@@ -26,6 +26,7 @@
 // mirrors what the route does with `ctx.userId`.
 
 import { and, eq, isNull } from 'drizzle-orm';
+import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db';
 import { documents, documentVersions } from '@/db/schema';
@@ -305,6 +306,20 @@ export const createDocumentTool: LocusTool<
     // ---- Side effects (best-effort, outside the transaction) ------------
     await tryRegenerateManifest(context.brainId);
     maybeScheduleSkillManifestRebuild(context.companyId, documentType);
+    // Invalidate the layout's server-side tree so the next nav/refresh sees
+    // the new doc in the sidebar. Without this, a workflow-created document
+    // is only visible after a hard reload even though it's queryable by id.
+    //
+    // Swallow the "static generation store missing" invariant — `revalidatePath`
+    // throws outside a Next.js request context (unit tests, and also
+    // `waitUntil` after the response has flushed). Skipping there is safe:
+    // the user will still see the doc on their next full navigation because
+    // the Server Component re-queries on each request.
+    try {
+      revalidatePath('/', 'layout');
+    } catch {
+      // no-op
+    }
 
     return {
       success: true,

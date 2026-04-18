@@ -18,6 +18,7 @@
 // rather than throwing — mirrors the create tool's non-throwing error contract.
 
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db';
 import { documents, documentVersions } from '@/db/schema';
@@ -285,6 +286,15 @@ export const updateDocumentTool: LocusTool<
     maybeScheduleSkillManifestRebuild(context.companyId, existing.type);
     if (newType !== existing.type) {
       maybeScheduleSkillManifestRebuild(context.companyId, newType);
+    }
+    // Invalidate the layout tree so the sidebar picks up title/status/
+    // folder/pin changes on the next nav without a hard reload. Swallow
+    // the invariant when called outside a Next request context (tests,
+    // post-flush waitUntil) — same rationale as create-document.
+    try {
+      revalidatePath('/', 'layout');
+    } catch {
+      // no-op
     }
 
     return {

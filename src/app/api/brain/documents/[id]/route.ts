@@ -12,6 +12,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import yaml from 'js-yaml';
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { db } from '@/db';
@@ -311,6 +312,13 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
     if (newType !== existing.type) {
       maybeScheduleSkillManifestRebuild(companyId, newType);
     }
+    try {
+      revalidatePath('/', 'layout');
+    } catch {
+      // revalidatePath throws outside a Next request context (e.g. unit tests
+      // mocking the withAuth wrapper). Swallow — the next navigation will
+      // re-query the layout from scratch regardless.
+    }
 
     // Mark the originating attachment as committed (fire-and-forget;
     // see POST handler for the rationale).
@@ -450,6 +458,11 @@ export const DELETE = (_req: Request, { params }: RouteCtx) =>
     // The deleted doc's `type` is the trigger — a skill being
     // soft-deleted must drop out of the manifest.
     maybeScheduleSkillManifestRebuild(companyId, existing.type);
+    try {
+      revalidatePath('/', 'layout');
+    } catch {
+      // see PATCH handler above for rationale.
+    }
 
     return success({ id });
   });

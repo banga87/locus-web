@@ -9,6 +9,7 @@
 
 import { and, desc, eq, isNull, lt, or } from 'drizzle-orm';
 import yaml from 'js-yaml';
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { db } from '@/db';
@@ -254,6 +255,12 @@ export const POST = (req: Request) =>
 
       await tryRegenerateManifest(brain.id);
       maybeScheduleSkillManifestRebuild(companyId, documentType);
+      try {
+        revalidatePath('/', 'layout');
+      } catch {
+        // revalidatePath throws outside a Next request context (tests).
+        // Safe to skip — next navigation re-queries the layout.
+      }
 
       // Transition the originating attachment (if any) to `committed`.
       // Fire-and-forget: if the update fails, the doc has still been

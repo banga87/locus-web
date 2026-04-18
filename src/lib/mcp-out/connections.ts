@@ -25,6 +25,7 @@ import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mcpConnections } from '@/db/schema';
+import { encodeCredentials } from '@/lib/connectors/credentials';
 
 import type {
   McpConnection,
@@ -173,7 +174,9 @@ export async function createConnection(
 ): Promise<McpConnection> {
   const credentialsEncrypted =
     input.authType === 'bearer' && input.bearerToken && input.bearerToken.length > 0
-      ? await encryptCredential(input.bearerToken)
+      ? await encryptCredential(
+          encodeCredentials({ kind: 'bearer', token: input.bearerToken }),
+        )
       : null;
 
   const [row] = await db
@@ -225,7 +228,9 @@ export async function updateConnection(
     values.credentialsEncrypted =
       patch.bearerToken === null || patch.bearerToken.length === 0
         ? null
-        : await encryptCredential(patch.bearerToken);
+        : await encryptCredential(
+            encodeCredentials({ kind: 'bearer', token: patch.bearerToken }),
+          );
   }
 
   if (Object.keys(values).length === 0) {
@@ -276,6 +281,49 @@ export async function touchConnection(id: string): Promise<void> {
     .where(eq(mcpConnections.id, id));
 }
 
+export interface InstallFromCatalogInput {
+  companyId: string;
+  catalogId: string;
+  name: string;
+  serverUrl: string;
+  authType: McpConnectionAuthType; // 'oauth' or 'bearer'
+  /** Encrypted credentials blob (JSON string, then pgcrypto-encrypted). */
+  credentialsEncrypted: Buffer | null;
+  initialStatus: McpConnectionStatus; // 'pending' for oauth, 'active' for bearer
+}
+
+export async function installFromCatalog(
+  input: InstallFromCatalogInput,
+): Promise<McpConnection> {
+  const [row] = await db
+    .insert(mcpConnections)
+    .values({
+      companyId: input.companyId,
+      name: input.name,
+      serverUrl: input.serverUrl,
+      authType: input.authType,
+      credentialsEncrypted: input.credentialsEncrypted,
+      status: input.initialStatus,
+      catalogId: input.catalogId,
+    })
+    .returning();
+  return toConnection(row);
+}
+
+export async function updateConnectionCredentials(
+  id: string,
+  companyId: string,
+  credentialsEncrypted: Buffer,
+  status: McpConnectionStatus = 'active',
+): Promise<McpConnection | null> {
+  const [row] = await db
+    .update(mcpConnections)
+    .set({ credentialsEncrypted, status, lastErrorMessage: null })
+    .where(and(eq(mcpConnections.id, id), eq(mcpConnections.companyId, companyId)))
+    .returning();
+  return row ? toConnection(row) : null;
+}
+
 export async function deleteConnection(
   id: string,
   companyId: string,
@@ -309,6 +357,7 @@ function toConnection(row: RawRow): McpConnection {
     credentialsEncrypted: row.credentialsEncrypted ?? null,
     status: row.status,
     lastErrorMessage: row.lastErrorMessage ?? null,
+    catalogId: row.catalogId ?? null,
     createdAt: row.createdAt,
     lastUsedAt: row.lastUsedAt ?? null,
   };

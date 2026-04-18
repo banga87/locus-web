@@ -17,7 +17,7 @@ export interface DeriveGraphInput {
     metadata: { outbound_links?: Array<{ target_slug: string; source: 'wikilink' | 'markdown_link' }> } | null;
   }>;
   folders: Array<{ id: string; slug: string; name: string; parentId: string | null }>;
-  mcps: Array<{ id: string; name: string; status: 'active' | 'disabled' | 'error'; serverUrl: string }>;
+  mcps: Array<{ id: string; name: string; status: 'active' | 'disabled' | 'error' | 'pending'; serverUrl: string }>;
 }
 
 export interface GraphNode {
@@ -37,7 +37,7 @@ export interface GraphCluster {
 }
 
 export interface GraphMcpConnection {
-  id: string; name: string; status: 'active' | 'disabled' | 'error';
+  id: string; name: string; status: 'active' | 'disabled' | 'error' | 'pending';
   server_url_host: string;
 }
 

@@ -38,6 +38,7 @@ const CUSTOM_MIGRATIONS = [
   '0013_audit_events_brain_id_column.sql',
   '0014_audit_events_realtime_publication.sql',
   '0015_mcp_in_oauth.sql',
+  '0016_connectors.sql',
 ];
 
 async function main() {
@@ -52,8 +53,19 @@ async function main() {
     for (const filename of CUSTOM_MIGRATIONS) {
       const path = resolve(__dirname, '..', 'src', 'db', 'migrations', filename);
       const content = readFileSync(path, 'utf8');
-      console.log(`Applying ${filename}...`);
-      await sql.unsafe(content);
+
+      // Split on Drizzle's statement-breakpoint marker so that statements
+      // which cannot run inside a transaction (e.g. ALTER TYPE ADD VALUE)
+      // are each executed in their own sql.unsafe() call.
+      const blocks = content
+        .split(/--> statement-breakpoint/g)
+        .map((b) => b.trim())
+        .filter((b) => b.length > 0);
+
+      console.log(`Applying ${filename} (${blocks.length} block${blocks.length === 1 ? '' : 's'})...`);
+      for (const block of blocks) {
+        await sql.unsafe(block);
+      }
       console.log(`  ✓ ${filename} applied`);
     }
   } finally {

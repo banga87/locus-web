@@ -7,10 +7,14 @@
 //   3. Qualify low-confidence content — frontmatter `confidence_level` is
 //      visible on every document; if a draft underwrites the answer, say so.
 //
-// Task 3 will append a section listing tools discovered from connected MCP
-// OUT servers. The hook is the trailing comment in the template.
+// External tool awareness: when the company has connected MCP OUT
+// servers, their tools are appended under `## Connected external tools`
+// so the model can recognise (by name + grouping) which tool belongs to
+// which server. Without this grouping the tool keys like
+// `ext_<hex>_list_teams` look opaque and the model tends to skip them.
 
 import type { brains, folders } from '@/db/schema';
+import type { ConnectionToolGroup } from '@/lib/mcp-out/bridge';
 
 interface SystemPromptInput {
   brain: Pick<typeof brains.$inferSelect, 'name' | 'slug'>;
@@ -19,6 +23,12 @@ interface SystemPromptInput {
     typeof folders.$inferSelect,
     'slug' | 'name' | 'description'
   >[];
+  /**
+   * Groups of tools discovered from the company's active MCP OUT
+   * connections. Empty / absent when nothing is connected — in that
+   * case no external-tools section is rendered.
+   */
+  externalConnections?: ConnectionToolGroup[];
 }
 
 export function buildSystemPrompt(input: SystemPromptInput): string {
@@ -33,6 +43,8 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
     input.folders.length > 0
       ? `## Available folders\n${folderList}`
       : '## Available folders\n_(No folders defined yet — the brain may be empty.)_';
+
+  const externalBlock = renderExternalConnections(input.externalConnections);
 
   return `You are Locus, the AI assistant for ${input.companyName}. You have access to the company's brain, a structured collection of documents about their business.
 
@@ -49,11 +61,40 @@ ${foldersBlock}
 4. Every document has YAML frontmatter that tells you its status, owner, and confidence level. If you rely on a document with \`confidence_level: low\`, qualify the answer ("Based on a draft document, it looks like…").
 5. If the brain doesn't cover the question, say so plainly. Don't invent facts.
 
-## Tools available
+## Brain tools
 - \`search_documents\`: full-text search across the brain, optionally filtered by folder slug
 - \`get_document\`: read a specific document by path, optionally a single section
 - \`get_document_diff\`: see recent changes to a specific document
 - \`get_diff_history\`: see changes across the brain since a timestamp, optionally filtered by folder slug
+${externalBlock}`;
+}
+
+function renderExternalConnections(
+  groups: ConnectionToolGroup[] | undefined,
+): string {
+  if (!groups || groups.length === 0) return '';
+
+  // Only include groups that actually discovered tools. A connection with
+  // zero tools offers nothing the model can call and would just add noise.
+  const usable = groups.filter((g) => g.tools.length > 0);
+  if (usable.length === 0) return '';
+
+  const sections = usable.map((g) => {
+    const header = g.catalogId
+      ? `**${g.connectionName}** (via MCP — \`${g.catalogId}\`):`
+      : `**${g.connectionName}** (via MCP):`;
+    const lines = g.tools.map((t) => `- \`${t.key}\`: ${t.description}`);
+    return [header, ...lines].join('\n');
+  });
+
+  return `
+## Connected external tools
+The company has connected these external services via MCP. The tool keys
+below are namespaced with an \`ext_\` prefix — the user will ask for the
+server by its friendly name (e.g. "Linear", "Notion"), and you should map
+that to the tools listed under that server. Prefer these when the user's
+question is about data in the connected service.
+
+${sections.join('\n\n')}
 `;
-  // Task 3 will append connected MCP OUT tools below this line.
 }

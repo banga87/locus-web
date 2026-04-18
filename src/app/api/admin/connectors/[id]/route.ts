@@ -1,10 +1,10 @@
 // Admin MCP OUT connection detail endpoints — detail / patch / delete.
 //
-// GET     /api/admin/mcp-connections/[id]   — read detail
-// PATCH   /api/admin/mcp-connections/[id]   — update (name, URL, auth,
+// GET     /api/admin/connectors/[id]   — read detail
+// PATCH   /api/admin/connectors/[id]   — update (name, URL, auth,
 //                                             toggle status). Optionally
 //                                             re-tests on URL/token change.
-// DELETE  /api/admin/mcp-connections/[id]   — delete.
+// DELETE  /api/admin/connectors/[id]   — delete.
 //
 // Auth: Owner-only. Cross-tenant id guesses return 404 (not 403) to
 // avoid leaking existence. Implementation: helpers already scope by
@@ -22,16 +22,9 @@ import { ApiAuthError } from '@/lib/api/errors';
 import {
   deleteConnection,
   getConnection,
-  markConnectionError,
   updateConnection,
 } from '@/lib/mcp-out/connections';
-import {
-  connectToMcpServer,
-  discoverTools,
-  DEFAULT_CONNECT_TIMEOUT_MS,
-  DEFAULT_DISCOVER_TIMEOUT_MS,
-} from '@/lib/mcp-out/client';
-import type { McpConnection } from '@/lib/mcp-out/types';
+import { serializeConnection, testConnection } from '../_serialise';
 
 export const runtime = 'nodejs';
 
@@ -78,21 +71,7 @@ function isResponse(x: unknown): x is Response {
   return x instanceof Response;
 }
 
-function serializeConnection(c: McpConnection) {
-  return {
-    id: c.id,
-    name: c.name,
-    serverUrl: c.serverUrl,
-    authType: c.authType,
-    hasCredential: c.credentialsEncrypted !== null,
-    status: c.status,
-    lastErrorMessage: c.lastErrorMessage,
-    createdAt: c.createdAt,
-    lastUsedAt: c.lastUsedAt,
-  };
-}
-
-// --- GET /api/admin/mcp-connections/[id] ---------------------------------
+// --- GET /api/admin/connectors/[id] ---------------------------------
 
 export async function GET(
   _request: Request,
@@ -112,7 +91,7 @@ export async function GET(
   return Response.json({ connection: serializeConnection(conn) });
 }
 
-// --- PATCH /api/admin/mcp-connections/[id] -------------------------------
+// --- PATCH /api/admin/connectors/[id] -------------------------------
 
 const patchSchema = z
   .object({
@@ -276,7 +255,7 @@ export async function PATCH(
   });
 }
 
-// --- DELETE /api/admin/mcp-connections/[id] ------------------------------
+// --- DELETE /api/admin/connectors/[id] ------------------------------
 
 export async function DELETE(
   _request: Request,
@@ -323,23 +302,3 @@ export async function DELETE(
   return Response.json({ ok: true });
 }
 
-// --- shared connection test ----------------------------------------------
-
-async function testConnection(
-  conn: McpConnection,
-): Promise<{ ok: true; toolCount: number } | { ok: false; error: string }> {
-  let client: Awaited<ReturnType<typeof connectToMcpServer>> | null = null;
-  try {
-    client = await connectToMcpServer(conn, DEFAULT_CONNECT_TIMEOUT_MS);
-    const tools = await discoverTools(client, DEFAULT_DISCOVER_TIMEOUT_MS);
-    return { ok: true, toolCount: tools.length };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Connection failed.';
-    await markConnectionError(conn.id, message).catch(() => {});
-    return { ok: false, error: message.slice(0, 500) };
-  } finally {
-    if (client) {
-      await client.close().catch(() => {});
-    }
-  }
-}

@@ -30,6 +30,7 @@ import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { companies, mcpConnections } from '@/db/schema';
+import { decodeCredentials } from '@/lib/connectors/credentials';
 
 import {
   createConnection,
@@ -172,7 +173,8 @@ describeDb('connections (live DB)', () => {
       expect(Buffer.isBuffer(row.credentialsEncrypted)).toBe(true);
 
       const plaintext = await decryptCredential(row.credentialsEncrypted!);
-      expect(plaintext).toBe(secret);
+      const envelope = decodeCredentials(plaintext);
+      expect(envelope).toEqual({ kind: 'bearer', token: secret });
     });
 
     it('returns null for a cross-tenant lookup', async () => {
@@ -255,7 +257,8 @@ describeDb('connections (live DB)', () => {
       });
       expect(patched).not.toBeNull();
       const plaintext = await decryptCredential(patched!.credentialsEncrypted!);
-      expect(plaintext).toBe('second');
+      const envelope = decodeCredentials(plaintext);
+      expect(envelope).toEqual({ kind: 'bearer', token: 'second' });
     });
 
     it('clears credential when bearerToken is null', async () => {

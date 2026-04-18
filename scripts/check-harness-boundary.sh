@@ -7,24 +7,24 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET_DIR="${ROOT_DIR}/src/lib/agent"
-
-if [ ! -d "${TARGET_DIR}" ]; then
-  echo "check-harness-boundary: ${TARGET_DIR} does not exist (skipping)."
-  exit 0
-fi
+TARGET_DIRS=("${ROOT_DIR}/src/lib/agent" "${ROOT_DIR}/src/lib/connectors")
 
 # Forbidden imports: any `from 'next'`, `from 'next/...'`, or
 # `from '@vercel/functions'`. Single or double quotes both match.
 PATTERN="from[[:space:]]+['\"](next($|/)|@vercel/functions)"
 
-if grep -rEn --include="*.ts" --include="*.tsx" "${PATTERN}" "${TARGET_DIR}"; then
-  echo ""
-  echo "ERROR: src/lib/agent/ must stay platform-agnostic."
-  echo "See src/lib/agent/README.md — push the Next.js / Vercel coupling"
-  echo "up into the route layer instead."
-  exit 1
-fi
+for TARGET_DIR in "${TARGET_DIRS[@]}"; do
+  if [ ! -d "${TARGET_DIR}" ]; then
+    echo "check-harness-boundary: ${TARGET_DIR} does not exist (skipping)."
+    continue
+  fi
+  if grep -rEn --include="*.ts" --include="*.tsx" "${PATTERN}" "${TARGET_DIR}"; then
+    echo ""
+    echo "ERROR: ${TARGET_DIR} must stay platform-agnostic."
+    echo "Push the Next.js / Vercel coupling up into the route layer instead."
+    exit 1
+  fi
+done
 
 # Second invariant: only run.ts may import streamText from 'ai'. Catches
 # accidental `import { streamText } from 'ai'` outside the harness entry.

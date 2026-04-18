@@ -133,6 +133,39 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Connectors module boundary: same platform-agnostic guarantee as
+  // src/lib/agent/. OAuth primitives must not reach into Next.js or
+  // Vercel-runtime APIs so they stay callable from any execution surface.
+  {
+    files: ["src/lib/connectors/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "ai",
+              importNames: ["streamText"],
+              message:
+                "Use runAgentTurn from @/lib/agent/run instead. See src/lib/agent/README.md.",
+            },
+          ],
+          patterns: [
+            {
+              group: ["next", "next/*"],
+              message:
+                "src/lib/connectors/ must stay platform-agnostic — see AGENTS.md",
+            },
+            {
+              group: ["@vercel/functions"],
+              message:
+                "src/lib/connectors/ must stay platform-agnostic — see AGENTS.md",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

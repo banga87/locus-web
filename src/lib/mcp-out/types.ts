@@ -10,8 +10,8 @@
 // at runtime — the type exists so bridge / client helpers can trade in
 // plain objects without leaning on the SDK's `ListToolsResult` shape.
 
-export type McpConnectionAuthType = 'none' | 'bearer';
-export type McpConnectionStatus = 'active' | 'disabled' | 'error';
+export type McpConnectionAuthType = 'none' | 'bearer' | 'oauth';
+export type McpConnectionStatus = 'active' | 'disabled' | 'error' | 'pending';
 
 export interface McpConnection {
   id: string;
@@ -23,6 +23,7 @@ export interface McpConnection {
   credentialsEncrypted: Buffer | null;
   status: McpConnectionStatus;
   lastErrorMessage: string | null;
+  catalogId: string | null;
   createdAt: Date;
   lastUsedAt: Date | null;
 }

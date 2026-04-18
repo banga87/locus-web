@@ -8,7 +8,7 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { PanelLeftClose } from 'lucide-react';
+import { PanelLeftClose, Plug } from 'lucide-react';
 
 import type { ManifestFolder } from '@/lib/brain/manifest';
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
@@ -90,9 +90,9 @@ export function SidebarExpanded({ companyName, user, tree, pinned, workflowsBadg
           <ChatIcon />
           Chat
         </Link>
-        <Link href="/mcp" className="quick-item">
-          <McpIcon />
-          MCP Connections
+        <Link href="/connectors" className="quick-item">
+          <Plug size={15} />
+          Connectors
         </Link>
         <Link href="/settings" className="quick-item">
           <SettingsIcon />
@@ -120,6 +120,5 @@ function SearchIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" 
 function HomeIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M3 12l9-9 9 9" /><path d="M5 10v10h14V10" /></svg>); }
 function RecentIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>); }
 function ChatIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>); }
-function McpIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8 2v4M16 2v4M3 10h18" /></svg>); }
 function SettingsIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 10-14 0 7 7 0 0014 0z" /></svg>); }
 function NeuronsIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3" /><circle cx="4" cy="6" r="2" /><circle cx="20" cy="6" r="2" /><circle cx="4" cy="18" r="2" /><circle cx="20" cy="18" r="2" /><path d="M6 7l4 4M18 7l-4 4M6 17l4-4M18 17l-4-4" /></svg>); }

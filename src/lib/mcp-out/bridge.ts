@@ -49,6 +49,7 @@ import { waitUntil } from '@vercel/functions';
 import { dynamicTool, jsonSchema, type Tool } from 'ai';
 import type { JSONSchema7 } from '@ai-sdk/provider';
 
+import type { McpToolMeta } from '@/lib/agent/tool-bridge';
 import {
   listConnections,
   markConnectionError,
@@ -66,9 +67,33 @@ export const DISCOVER_TIMEOUT_MS = 10_000;
 /** Wall-clock budget for a single `callTool` during the chat loop. */
 export const TOOL_CALL_TIMEOUT_MS = 30_000;
 
+/**
+ * Per-connection summary passed to the system prompt so the LLM can see
+ * which external tools belong to which server (e.g. "Linear", "Notion").
+ * Without this grouping the prompt would list namespaced `ext_<hex>_...`
+ * keys with no hint at their origin and the model tends to ignore them.
+ */
+export interface ConnectionToolGroup {
+  connectionId: string;
+  connectionName: string;
+  catalogId: string | null;
+  tools: Array<{ key: string; description: string }>;
+}
+
 export interface LoadMcpOutToolsResult {
   /** Map of AI SDK tool definitions keyed by namespaced tool id. */
   tools: Record<string, Tool>;
+  /**
+   * Audit metadata for each tool key. Passed through to `buildToolSet`
+   * so MCP tool invocations emit paired `mcp_invocation` audit events.
+   */
+  toolMeta: Record<string, McpToolMeta>;
+  /**
+   * Per-connection summaries for system-prompt rendering. Only includes
+   * connections whose discovery succeeded — a failed connection is
+   * flipped to `status = 'error'` and contributes nothing here.
+   */
+  connections: ConnectionToolGroup[];
   /**
    * Release all open MCP client transports opened during discovery.
    * Safe to call exactly once; subsequent calls are no-ops. Swallows
@@ -95,9 +120,13 @@ export async function loadMcpOutTools(
   const conns = await listConnections(companyId, /* activeOnly */ true);
 
   const tools: Record<string, Tool> = {};
+  const toolMeta: Record<string, McpToolMeta> = {};
+  const connections: ConnectionToolGroup[] = [];
   const openClients: Array<Awaited<ReturnType<typeof connectToMcpServer>>> = [];
 
-  await Promise.all(conns.map((conn) => loadOne(conn, tools, openClients)));
+  await Promise.all(
+    conns.map((conn) => loadOne(conn, tools, toolMeta, connections, openClients)),
+  );
 
   let closed = false;
   const close = async (): Promise<void> => {
@@ -113,12 +142,14 @@ export async function loadMcpOutTools(
     );
   };
 
-  return { tools, close };
+  return { tools, toolMeta, connections, close };
 }
 
 async function loadOne(
   conn: McpConnection,
   tools: Record<string, Tool>,
+  toolMeta: Record<string, McpToolMeta>,
+  connections: ConnectionToolGroup[],
   openClients: Array<Awaited<ReturnType<typeof connectToMcpServer>>>,
 ): Promise<void> {
   let client: Awaited<ReturnType<typeof connectToMcpServer>> | null = null;
@@ -140,6 +171,7 @@ async function loadOne(
     );
 
     const activeClient = discovered.client;
+    const groupTools: ConnectionToolGroup['tools'] = [];
 
     for (const rt of discovered.remoteTools) {
       const toolKey = buildToolKey(conn.id, rt.name);
@@ -151,9 +183,16 @@ async function loadOne(
         );
       }
 
+      const description =
+        rt.description ?? `External tool from ${conn.name} (${rt.name}).`;
+      groupTools.push({ key: toolKey, description });
+      toolMeta[toolKey] = {
+        mcpConnectionId: conn.id,
+        mcpName: conn.name,
+      };
+
       tools[toolKey] = dynamicTool({
-        description:
-          rt.description ?? `External tool from ${conn.name} (${rt.name}).`,
+        description,
         inputSchema: jsonSchema(
           (rt.inputSchema as JSONSchema7 | undefined) ?? {
             type: 'object',
@@ -177,6 +216,21 @@ async function loadOne(
               TOOL_CALL_TIMEOUT_MS,
               `External tool call timed out after ${TOOL_CALL_TIMEOUT_MS}ms`,
             );
+
+            // MCP tools signal application-layer errors by setting
+            // `isError: true` on the CallToolResult (the transport
+            // itself succeeded, so no exception is thrown). Log these
+            // at error level so we see the provider's actual message in
+            // Axiom — otherwise the audit log shows `complete` for a
+            // failed call and the LLM's "Not connected"-style paraphrase
+            // is our only signal.
+            if (result && typeof result === 'object' && 'isError' in result && (result as { isError?: unknown }).isError) {
+              const text = extractToolResultText(result);
+              console.error(
+                `[mcp-out] ${conn.name}/${rt.name} returned isError: ${text}`,
+              );
+            }
+
             return result;
           } catch (err) {
             const message =
@@ -197,6 +251,14 @@ async function loadOne(
     // Register this client for deterministic close by the caller.
     openClients.push(activeClient);
     keepOpen = true;
+
+    // Record the per-connection summary for the system prompt.
+    connections.push({
+      connectionId: conn.id,
+      connectionName: conn.name,
+      catalogId: conn.catalogId,
+      tools: groupTools,
+    });
 
     // Non-blocking bump of `last_used_at`. A DB blip should not slow
     // down the chat turn; waitUntil keeps the write alive past the
@@ -260,4 +322,29 @@ function sanitizeToolName(name: string): string {
 /** First 12 hex chars of a UUID with hyphens removed. */
 function shortConnPrefix(connId: string): string {
   return connId.replace(/-/g, '').slice(0, 12);
+}
+
+/**
+ * Extract a human-readable message from an MCP `CallToolResult`. The
+ * shape is `{ content: Content[], isError?: boolean }` where `Content`
+ * variants include `{ type: 'text', text: string }`. We flatten all text
+ * parts; non-text parts are omitted. Used for logging only — do not
+ * mutate the result returned to the caller.
+ */
+function extractToolResultText(result: unknown): string {
+  if (!result || typeof result !== 'object') return '';
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return '';
+  const parts: string[] = [];
+  for (const part of content) {
+    if (
+      part &&
+      typeof part === 'object' &&
+      (part as { type?: unknown }).type === 'text' &&
+      typeof (part as { text?: unknown }).text === 'string'
+    ) {
+      parts.push((part as { text: string }).text);
+    }
+  }
+  return parts.join(' ').slice(0, 500);
 }

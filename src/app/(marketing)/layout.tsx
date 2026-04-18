@@ -10,5 +10,11 @@
 import type { ReactNode } from 'react';
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
-  return <div className="tatara-marketing">{children}</div>;
+  // <main> landmark lives at the layout level so every marketing route gets
+  // the a11y landmark for free. Hero, sections, etc. remain <section>s.
+  return (
+    <div className="tatara-marketing">
+      <main>{children}</main>
+    </div>
+  );
 }

@@ -12,9 +12,11 @@
 // `min-[1180px]:` arbitrary-breakpoint utilities.
 
 import Link from 'next/link';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Wordmark } from '@/components/marketing/primitives';
 import { cn } from '@/lib/utils';
+
+const MOBILE_MENU_ID = 'marketing-nav-menu';
 
 const SERIF: CSSProperties = { fontFamily: 'var(--font-display), serif' };
 
@@ -42,13 +44,22 @@ export interface NavProps {
 
 export function Nav({ authed = false, absolute = true, dark = true }: NavProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // Ref on the hamburger lets us restore focus to it when the menu is
+  // dismissed via Escape — otherwise keyboard users get dropped on <body>.
+  // We deliberately do NOT restore focus on link-click dismissal: hash links
+  // scroll the viewport, and yanking focus back to the hamburger would steal
+  // it from where the user expects to land.
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   // Escape-to-dismiss. Listener is only attached while the menu is open to
   // avoid a background keydown handler in every nav consumer.
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false);
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        buttonRef.current?.focus();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -158,10 +169,12 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
 
         {/* Compact-only hamburger */}
         <button
+          ref={buttonRef}
           type="button"
           onClick={() => setMenuOpen((open) => !open)}
           aria-label="Menu"
           aria-expanded={menuOpen}
+          aria-controls={MOBILE_MENU_ID}
           className="inline-flex items-center justify-center border px-3 py-[9px] text-[12px] tracking-[0.12em] min-[1180px]:hidden"
           style={{
             fontFamily: 'var(--font-mono), monospace',
@@ -179,6 +192,7 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
       {/* Compact dropdown panel */}
       {menuOpen && (
         <div
+          id={MOBILE_MENU_ID}
           className="absolute left-4 right-4 top-full mt-2 border py-2 shadow-[0_12px_40px_rgba(0,0,0,0.4)] min-[1180px]:hidden"
           style={{
             background: 'var(--mk-ink)',

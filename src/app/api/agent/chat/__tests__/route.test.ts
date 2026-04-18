@@ -92,7 +92,12 @@ vi.mock('@/lib/sessions/manager', () => ({
 
 const closeMcpMock = vi.fn(async () => {});
 vi.mock('@/lib/mcp-out/bridge', () => ({
-  loadMcpOutTools: vi.fn(async () => ({ tools: {}, close: closeMcpMock })),
+  loadMcpOutTools: vi.fn(async () => ({
+    tools: {},
+    toolMeta: {},
+    connections: [],
+    close: closeMcpMock,
+  })),
 }));
 
 vi.mock('@/lib/tools', () => ({

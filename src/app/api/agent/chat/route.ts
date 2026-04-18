@@ -208,9 +208,12 @@ export async function POST(req: Request) {
   // `close` must be invoked once the turn is done so per-request MCP
   // transports are released; we defer via `waitUntil` below in every
   // terminal path so teardown doesn't block the response stream.
-  const { tools: externalTools, close: closeMcp } = await loadMcpOutTools(
-    auth.companyId,
-  );
+  const {
+    tools: externalTools,
+    toolMeta: externalToolMeta,
+    connections: externalConnections,
+    close: closeMcp,
+  } = await loadMcpOutTools(auth.companyId);
 
   const { result, denied } = await runAgentTurn({
     ctx,
@@ -218,6 +221,7 @@ export async function POST(req: Request) {
       brain,
       companyName: companyRow?.name ?? 'your company',
       folders: folderRows,
+      externalConnections,
     }),
     messages: [...priorMessages, ...incomingModelMessages],
     tools: buildToolSet(
@@ -239,6 +243,7 @@ export async function POST(req: Request) {
         webCallsThisTurn: 0,
       },
       externalTools,
+      externalToolMeta,
     ),
     maxSteps: 6,
     onFinish: (finish) => {
@@ -317,10 +322,23 @@ export async function POST(req: Request) {
     return createUIMessageStreamResponse({ stream });
   }
 
-  // Normal path: schedule MCP transport teardown after the response
-  // stream closes. `waitUntil` keeps the function alive long enough for
-  // the close to complete without blocking the stream delivery.
-  waitUntil(closeMcp());
+  // Normal path: defer MCP transport teardown until AFTER the response
+  // stream completes. Calling `closeMcp()` synchronously — e.g.
+  // `waitUntil(closeMcp())` — evaluates closeMcp immediately and races
+  // with the stream; the transport then closes before the model has had
+  // a chance to issue tool calls, and the SDK throws "Not connected" on
+  // `client.callTool(...)`. Chaining off `result.finishReason` waits for
+  // the turn to end (success or error) and only then tears down the
+  // transports, while waitUntil keeps the function alive.
+  waitUntil(
+    (async () => {
+      try {
+        await result.finishReason;
+      } finally {
+        await closeMcp();
+      }
+    })(),
+  );
 
   return result.toUIMessageStreamResponse();
 }

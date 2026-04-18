@@ -89,30 +89,25 @@ export function Features() {
       </div>
 
       {/* Tile grid — 1 col mobile, 2 at 640px, 3 from 900px up. Dividers
-          replicate the Tatara prototype's 3-up desktop grid with the top and
-          bottom + right-edge rules. At narrower breakpoints the right-edge
-          rule disappears on rightmost tiles naturally since there's only
-          one column. */}
+          must only appear *between* tiles at each breakpoint, so we use
+          arbitrary-variant selectors tied to nth-child + breakpoint to
+          disable right/bottom borders on edge tiles per grid configuration. */}
       <div
         className="grid grid-cols-1 min-[640px]:grid-cols-2 min-[900px]:grid-cols-3"
         style={{ borderTop: '1px solid var(--mk-rule-dark)' }}
       >
-        {ITEMS.map((it, i) => (
+        {ITEMS.map((it) => (
           <div
             key={it.n}
-            className="relative px-7 pb-10 pt-9"
-            style={{
-              borderBottom: '1px solid var(--mk-rule-dark)',
-              // Right rule: suppress on the last column of whichever grid is
-              // active. Using nth-child-like media rules would be ideal, but
-              // the grid is column-count-driven. Simplest faithful fallback:
-              // always render the right rule on all-but-last (index 5) and
-              // every 3rd item in 3-col. Good enough for all breakpoints
-              // because the border lands inside the tile, and on single-col
-              // the right edge is the section edge (no visual collision).
-              borderRight:
-                (i + 1) % 3 !== 0 ? '1px solid var(--mk-rule-dark)' : 'none',
-            }}
+            className="
+              relative px-7 pb-10 pt-9
+              border-b border-[color:var(--mk-rule-dark)]
+              [&:last-child]:border-b-0
+              min-[640px]:max-[899px]:[&:nth-child(odd)]:border-r
+              min-[640px]:[&:nth-last-child(-n+2)]:border-b-0
+              min-[900px]:[&:not(:nth-child(3n))]:border-r
+              min-[900px]:[&:nth-last-child(-n+3)]:border-b-0
+            "
           >
             <div
               className="mb-4 text-[11px] tracking-[0.16em]"

@@ -55,7 +55,6 @@ import yaml from 'js-yaml';
 
 import { db, pgClient } from '../src/db';
 import { brains, companies, documents } from '../src/db/schema';
-import { scheduleManifestRebuild } from '../src/lib/skills/loader';
 
 // ---- Seed file loading ----------------------------------------------------
 //
@@ -183,7 +182,6 @@ export async function seedBuiltins(companyId: string): Promise<void> {
   }
 
   let insertedAny = false;
-  let insertedSkill = false;
 
   for (const seed of PARSED_SEEDS) {
     // Idempotence pre-check: is this built-in already present for the
@@ -238,16 +236,6 @@ export async function seedBuiltins(companyId: string): Promise<void> {
     });
 
     insertedAny = true;
-    if (seed.type === 'skill') insertedSkill = true;
-  }
-
-  // Only fire the manifest rebuild if we actually inserted the skill —
-  // re-runs that hit both idempotent branches shouldn't burn a rebuild
-  // every time the script is invoked. The 5s debounce would coalesce
-  // bursts, but the underlying rebuild still reads every skill doc
-  // from Postgres; skipping when nothing changed is cheaper still.
-  if (insertedSkill) {
-    scheduleManifestRebuild(companyId);
   }
 
   if (!insertedAny) {
@@ -256,9 +244,7 @@ export async function seedBuiltins(companyId: string): Promise<void> {
     // useful output.
     console.log(`[seed-builtins] company ${companyId}: already seeded`);
   } else {
-    console.log(
-      `[seed-builtins] company ${companyId}: seeded ${insertedSkill ? 'skill + ' : ''}built-ins`,
-    );
+    console.log(`[seed-builtins] company ${companyId}: seeded built-ins`);
   }
 }
 

@@ -8,15 +8,14 @@
 //     `extractDocumentTypeFromFrontmatter`, `extractDocumentTypeFromContent`)
 //     for deriving the denormalised `documents.type` column from a doc's
 //     YAML preamble.
-//   - One dispatch helper (`maybeScheduleSkillManifestRebuild`) that
-//     forwards skill-doc edits to the manifest loader's debounced
-//     rebuild scheduler. Pure dispatch — no DB calls itself, just a
-//     conditional re-export.
-//
-// Why these live together: route handlers need both on every write
-// (extract → write to `type` column → schedule rebuild). Co-locating
-// them keeps the call sites small and gives Task 3 a single import
-// surface to add the rebuild trigger to.
+//   - A legacy no-op helper (`maybeScheduleSkillManifestRebuild`). It
+//     used to forward skill-doc edits to a debounced manifest rebuild
+//     scheduler; progressive-disclosure skills (see
+//     `src/lib/skills/README.md`) surface skills through the system
+//     prompt at turn time, so no per-write rebuild is needed. The
+//     helper remains as a no-op purely to avoid touching every call
+//     site (brain routes + tool implementations) in this refactor —
+//     follow-up work can delete the call sites entirely.
 //
 // Why a separate, generic frontmatter parser here — `parseFrontmatter`
 // in `./frontmatter.ts` is narrowly typed to the 8 keys the document
@@ -24,8 +23,6 @@
 // raw Record<string, unknown> view to pick out arbitrary vocabulary
 // fields. This helper is a tiny superset — same on-disk format, no
 // key allowlist.
-
-import { scheduleManifestRebuild } from '@/lib/skills/loader';
 
 /**
  * Parse a frontmatter block from raw document content into a generic
@@ -113,27 +110,17 @@ export function extractDocumentTypeFromContent(
 }
 
 /**
- * Dispatch a skill-manifest rebuild when a brain-doc write touches a
- * skill doc. Routes call this on POST/PATCH/DELETE — the helper is a
- * thin guard that forwards to the loader's debouncer when the doc type
- * is `'skill'` and no-ops otherwise.
+ * Legacy no-op — the compiled skill-manifest mechanism has been
+ * replaced by progressive-disclosure skills. This helper is retained
+ * so brain routes + tool implementations still import a valid symbol;
+ * follow-up work can remove the call sites entirely.
  *
- * Why dispatch sits in the brain layer (and not the loader): the
- * manifest loader is generic — it doesn't know which write paths exist.
- * The brain save path is the one that knows when a write happens. Pure
- * dispatch (no DB calls) keeps this helper unit-testable without
- * touching the loader's debounce timer.
- *
- * `docType` may be the new type (writes), the old type (deletes), or
- * either side of a re-typing (PATCH that flips skill -> knowledge);
- * the route handler is responsible for calling this with both old and
- * new on a re-type so the manifest can drop the orphaned entry.
+ * Parameters are ignored; the function name stays so existing tests
+ * that spy on it via `vi.mock` continue to match.
  */
 export function maybeScheduleSkillManifestRebuild(
-  companyId: string,
-  docType: string | null,
+  _companyId: string,
+  _docType: string | null,
 ): void {
-  if (docType === 'skill') {
-    scheduleManifestRebuild(companyId);
-  }
+  // Intentionally empty — see module header.
 }

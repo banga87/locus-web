@@ -9,7 +9,11 @@
 //   skill has no source.github block          → 400 not_an_install
 //   fetchSkillPreview throws "GitHub returned 404: …" → 409 sha_not_found
 //   fetchSkillPreview throws "GitHub API rate limit …" → 429 rate_limited
+//   fetchSkillPreview throws "not a valid skill …"  → 400 not_a_skill
+//   fetchSkillPreview throws "…description is empty" → 422 empty_description
 //   any other upstream error                  → 502 upstream_error
+//   replaceSkillResources throws "skill root not found" → 404 not_found
+//   replaceSkillResources throws "skill is not an install…" → 400 not_an_install
 
 import { z } from 'zod';
 import yaml from 'js-yaml';
@@ -118,16 +122,35 @@ export const POST = (req: Request, { params }: RouteCtx) =>
         return error('rate_limited', msg, 429);
       }
 
+      if (msg.startsWith('not a valid skill')) {
+        return error('not_a_skill', msg, 400);
+      }
+
+      if (msg.startsWith("the skill's description is empty")) {
+        return error('empty_description', msg, 422);
+      }
+
       return error('upstream_error', `Upstream error: ${msg}`, 502);
     }
 
     // 5. Atomically replace resource children and bump root SHA.
-    await replaceSkillResources({
-      rootId: id,
-      newSha: target_sha,
-      newSkillMdBody: preview.skillMdBody,
-      newResources: preview.resources,
-    });
+    try {
+      await replaceSkillResources({
+        rootId: id,
+        newSha: target_sha,
+        newSkillMdBody: preview.skillMdBody,
+        newResources: preview.resources,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === 'skill root not found') {
+        return error('not_found', 'Skill not found.', 404);
+      }
+      if (msg.startsWith('skill is not an install')) {
+        return error('not_an_install', msg, 400);
+      }
+      throw e;
+    }
 
     return success({ skill_id: id, new_sha: target_sha });
   });

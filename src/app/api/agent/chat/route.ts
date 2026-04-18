@@ -188,9 +188,12 @@ export async function POST(req: Request) {
     const skillsRepo = createDbAgentSkillsRepo();
     agentSkillIds = (await skillsRepo.getAgentSkillIds(agentDefinitionId)) ?? [];
   } else {
-    // Default Platform Agent (no agent-definition): expose every skill
-    // the company has installed/authored. See spec § Phase-1 follow-up
-    // for the plan to narrow this to an explicit seeded default agent-def.
+    // Default Platform Agent (no agent-definition): expose ONLY the two
+    // seeded skills that every company ships with (skill-creator +
+    // ingestion-filing). Third-party installs or authored skills don't
+    // reach this fallback — they only become visible once a user wires
+    // them into an explicit agent-definition via the wizard. When a
+    // real default-agent-definition seed lands this branch goes away.
     const rows = await db
       .select({ id: documents.id })
       .from(documents)
@@ -199,6 +202,7 @@ export async function POST(req: Request) {
           eq(documents.companyId, auth.companyId),
           eq(documents.type, 'skill'),
           isNull(documents.deletedAt),
+          inArray(documents.title, ['Skill Creator', 'Ingestion filing rules']),
         ),
       );
     agentSkillIds = rows.map((r) => r.id);

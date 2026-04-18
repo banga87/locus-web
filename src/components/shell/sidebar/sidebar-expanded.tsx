@@ -8,7 +8,7 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { PanelLeftClose, Plug } from 'lucide-react';
+import { BookOpen, PanelLeftClose, Plug } from 'lucide-react';
 
 import type { ManifestFolder } from '@/lib/brain/manifest';
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
@@ -76,6 +76,10 @@ export function SidebarExpanded({ companyName, user, tree, pinned, workflowsBadg
         <Link href="/neurons" className="quick-item">
           <NeuronsIcon />
           Neurons
+        </Link>
+        <Link href="/skills" className="quick-item">
+          <BookOpen size={15} />
+          Skills
         </Link>
         {workflowsBadge}
       </div>

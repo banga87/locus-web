@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Brain, Pin, Search, Home, Clock, Network, MessageSquare, Plug, Settings, PanelLeft } from 'lucide-react';
+import { BookOpen, Brain, Pin, Search, Home, Clock, Network, MessageSquare, Plug, Settings, PanelLeft } from 'lucide-react';
 
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
 
@@ -36,6 +36,7 @@ export function SidebarRail() {
         <Link href="/home" className="rail-btn" title="Home" aria-label="Home"><Home size={18} /></Link>
         <Link href="/recent" className="rail-btn" title="Recent" aria-label="Recent"><Clock size={18} /></Link>
         <Link href="/neurons" className="rail-btn" title="Neurons" aria-label="Neurons"><Network size={18} /></Link>
+        <Link href="/skills" className="rail-btn" title="Skills" aria-label="Skills"><BookOpen size={18} /></Link>
       </div>
 
       <div className="rail-sections">

@@ -62,7 +62,7 @@ export default async function AppLayout({
 
   const companyName = company?.name ?? 'Your company';
 
-  // /setup with a companyId will itself redirect to / (see setup/page.tsx).
+  // /setup with a companyId will itself redirect to /home (see setup/page.tsx).
   // Everything else renders the app shell.
   if (onSetup) {
     return <>{children}</>;

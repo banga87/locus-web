@@ -49,9 +49,9 @@ function LoginForm() {
     }
 
     // Full navigation so middleware re-evaluates with the new cookie and
-    // sends us to /setup or / as appropriate.
+    // sends us to /setup or /home as appropriate.
     router.refresh();
-    router.replace('/');
+    router.replace('/home');
   }
 
   return (

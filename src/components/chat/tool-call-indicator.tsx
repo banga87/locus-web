@@ -34,6 +34,10 @@ import { useSkillNames } from '@/lib/skills/use-skill-names';
 import { cn } from '@/lib/utils';
 
 import { ProposalCard, type Proposal } from './proposal-card';
+import {
+  SkillProposalCard,
+  type SkillCreateProposal,
+} from './skill-proposal-card';
 import { displayToolName, pillToolName } from './tool-display-names';
 
 type IndicatorState = 'pending' | 'complete' | 'error';
@@ -79,6 +83,22 @@ function extractProposal(result: unknown): Proposal | null {
     }
   }
   return r.proposal as Proposal;
+}
+
+/**
+ * Narrow an unknown tool-result payload to the `SkillCreateProposal` shape
+ * emitted by `propose_skill_create`. Returns the proposal on match, `null`
+ * otherwise.
+ */
+function extractSkillProposal(result: unknown): SkillCreateProposal | null {
+  if (!result || typeof result !== 'object') return null;
+  const r = result as { isProposal?: unknown; proposal?: unknown };
+  if (r.isProposal !== true) return null;
+  if (!r.proposal || typeof r.proposal !== 'object') return null;
+  const p = r.proposal as { kind?: unknown; name?: unknown };
+  if (p.kind !== 'skill-create') return null;
+  if (typeof p.name !== 'string' || p.name.length === 0) return null;
+  return r.proposal as SkillCreateProposal;
 }
 
 /** Tool names that benefit from skill-name resolution. */
@@ -167,6 +187,15 @@ export function ToolCallIndicator({
     const proposal = extractProposal(result);
     if (proposal) {
       return <ProposalCard proposal={proposal} />;
+    }
+  }
+
+  // Skill-create proposal branch — `propose_skill_create` does NOT share the
+  // PROPOSE_TOOL_PREFIX (`propose_document_`) so it needs its own check.
+  if (toolName === 'propose_skill_create') {
+    const skillProposal = extractSkillProposal(result);
+    if (skillProposal) {
+      return <SkillProposalCard proposal={skillProposal} />;
     }
   }
 

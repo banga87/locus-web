@@ -1,6 +1,10 @@
 // Tool-call indicator state-transition tests. We render under jsdom
 // (configured globally in vitest.setup.ts) and assert on the rendered
 // output for each indicator state — pending / complete / error.
+//
+// Also covers the skill-create proposal dispatch: when toolName is
+// `propose_skill_create` and result carries a valid SkillCreateProposal,
+// the indicator renders <SkillProposalCard> instead of the default pill.
 
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -56,5 +60,68 @@ describe('ToolCallIndicator', () => {
       />,
     );
     expect(screen.getByText(/Using Send Email/)).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Skill-create proposal dispatch
+  // -------------------------------------------------------------------------
+
+  it('renders <SkillProposalCard> when toolName is propose_skill_create with a valid proposal result', () => {
+    const skillResult = {
+      isProposal: true,
+      proposal: {
+        kind: 'skill-create',
+        name: 'Code Review',
+        description: 'Guidelines for reviewing pull requests.',
+        body: '# Code Review\n\nAlways check for test coverage.',
+        resources: [],
+        rationale: 'Agent detected a recurring review pattern.',
+      },
+    };
+
+    render(
+      <ToolCallIndicator
+        toolName="propose_skill_create"
+        args={{}}
+        state="complete"
+        result={skillResult}
+      />,
+    );
+
+    // SkillProposalCard renders this header.
+    expect(
+      screen.getByText(/Agent proposes a new skill/),
+    ).toBeInTheDocument();
+    // Skill name is displayed.
+    expect(screen.getByText('Code Review')).toBeInTheDocument();
+    // The default "Used:" pill is NOT shown.
+    expect(screen.queryByText(/Used:/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to the default pill when propose_skill_create result is malformed (missing name)', () => {
+    const malformedResult = {
+      isProposal: true,
+      proposal: {
+        kind: 'skill-create',
+        // name is missing
+        description: 'Oops.',
+        body: 'body',
+        resources: [],
+        rationale: 'reason',
+      },
+    };
+
+    render(
+      <ToolCallIndicator
+        toolName="propose_skill_create"
+        args={{}}
+        state="complete"
+        result={malformedResult}
+      />,
+    );
+
+    // Falls back to the complete pill, not the proposal card.
+    expect(screen.getByText(/Used:/)).toBeInTheDocument();
+    expect(screen.queryByText(/Agent proposes a new skill/)).not.toBeInTheDocument();
   });
 });

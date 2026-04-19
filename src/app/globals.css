@@ -437,7 +437,12 @@
 /* Tiptap editor surface. Scoped via the `.tiptap` class so it doesn't bleed
    into the read-only document renderer (which uses `.prose`). */
 .tiptap {
-  @apply text-base leading-relaxed outline-none;
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: var(--lh-prose);
+  color: var(--ink-1);
+  max-width: 72ch;
+  @apply outline-none;
 }
 .tiptap:focus {
   @apply outline-none;
@@ -445,27 +450,48 @@
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
-  color: var(--color-muted-foreground);
+  color: var(--ink-muted);
   pointer-events: none;
   height: 0;
 }
 .tiptap h1 {
   font-family: var(--font-display);
-  @apply text-3xl font-medium mt-6 mb-3;
+  font-size: 40px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  color: var(--ink-1);
+  margin: 1.4em 0 0.4em;
 }
 .tiptap h2 {
   font-family: var(--font-display);
-  @apply text-2xl font-medium mt-5 mb-2;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--ink-1);
+  margin: 1.6em 0 0.35em;
 }
 .tiptap h3 {
   font-family: var(--font-display);
-  @apply text-xl font-medium mt-4 mb-2;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--ink-1);
+  margin: 1.5em 0 0.3em;
 }
 .tiptap p { @apply my-3; }
 .tiptap ul { @apply my-3 pl-6 list-disc; }
 .tiptap ol { @apply my-3 pl-6 list-decimal; }
 .tiptap blockquote {
-  @apply border-l-4 border-border pl-4 text-muted-foreground my-3;
+  border-left: 2px solid var(--brass);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 19px;
+  color: var(--ink-1);
+  margin: 1.2em 0;
+  padding: 4px 0 4px 20px;
 }
 /* Pull-quote styling applied to Tiptap Callout output (editor surface) and
    the same data-type markup when it makes it through the read-mode
@@ -479,14 +505,14 @@
 .prose [data-type="callout"] {
   margin: 36px 0;
   padding: 22px 0;
-  border-top: 2px solid var(--ink);
-  border-bottom: 1px solid var(--rule);
+  border-top: 2px solid var(--ink-1);
+  border-bottom: 1px solid var(--paper-rule);
   font-family: var(--font-display);
   font-style: italic;
   font-weight: 400;
   font-size: 22px;
   line-height: 1.35;
-  color: var(--ink);
+  color: var(--ink-1);
   letter-spacing: -0.01em;
   background: transparent;
   border-radius: 0;
@@ -499,15 +525,23 @@
   font-style: normal;
   font-size: 10px;
   letter-spacing: 0.12em;
-  color: var(--accent);
+  color: var(--brass);
   text-transform: uppercase;
   margin-bottom: 8px;
 }
 .tiptap code {
-  @apply rounded bg-muted px-1 py-0.5 font-mono text-sm;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--cream-soft);
+  color: var(--iron);
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
 }
 .tiptap a {
-  @apply text-primary underline underline-offset-2;
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 /* === App shell === */

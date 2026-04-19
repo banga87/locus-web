@@ -8,7 +8,17 @@ import { Suspense, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+import { Eyebrow } from '@/components/tatara';
 import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { createClient } from '@/lib/supabase/client';
 
 export default function LoginPage() {
@@ -55,54 +65,73 @@ function LoginForm() {
   }
 
   return (
-    <div className="rounded-lg border border-border bg-background p-6 shadow-sm">
-      <h1 className="mb-1 text-lg font-semibold text-foreground">Sign in</h1>
-      <p className="mb-6 text-sm text-muted-foreground">
-        Welcome back. Enter your email and password.
-      </p>
+    <>
+      <Card>
+        <CardHeader>
+          <Eyebrow number="01">SIGN IN</Eyebrow>
+          <CardTitle>Sign in</CardTitle>
+          <CardDescription>
+            Welcome back. Enter your email and password.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="login-email">Email</Label>
+              <Input
+                id="login-email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-foreground">Email</span>
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
-        </label>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="login-password">Password</Label>
+              <Input
+                id="login-password"
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-foreground">Password</span>
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
-        </label>
+            {error ? (
+              <p
+                role="alert"
+                className="text-sm"
+                style={{ color: 'var(--state-error)' }}
+              >
+                {error}
+              </p>
+            ) : null}
 
-        {error ? (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
+            <Button
+              type="submit"
+              variant="default"
+              size="lg"
+              disabled={pending}
+              className="w-full"
+            >
+              {pending ? 'Signing in…' : 'Sign in'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-        <Button type="submit" disabled={pending} size="lg">
-          {pending ? 'Signing in…' : 'Sign in'}
-        </Button>
-      </form>
-
-      <p className="mt-6 text-sm text-muted-foreground">
+      <p className="mt-6 text-center text-sm text-[var(--ink-3)]">
         No account yet?{' '}
-        <Link className="font-medium text-foreground underline" href="/signup">
+        <Link
+          className="text-[var(--link)] underline underline-offset-[3px]"
+          href="/signup"
+        >
           Create one
         </Link>
       </p>
-    </div>
+    </>
   );
 }

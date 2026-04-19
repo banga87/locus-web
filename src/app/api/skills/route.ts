@@ -7,20 +7,27 @@
 //
 // Sorted: most recently updated first.
 //
-// POST is deferred to Task 26.
+// POST /api/skills (Task 26)
+//
+// Quick-form create (Path A). Body: { name, description, instructions }.
+// Validates all three non-empty, name unique within company (slug uniqueness),
+// then writes a root-only skill via writeSkillTree with resources: [].
+// Returns 201 { skill_id: string } on success.
 
+import { z } from 'zod';
 import { and, count, desc, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { withAuth, requireCompany } from '@/lib/api/handler';
-import { success } from '@/lib/api/response';
+import { success, created, error } from '@/lib/api/response';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import {
   extractYamlFrontmatter,
   parseOrigin,
   parseSkillsFromAgentContent,
 } from '@/lib/skills/frontmatter';
+import { writeSkillTree } from '@/lib/skills/write-skill-tree';
 
 export type { SkillOrigin } from '@/lib/skills/types';
 
@@ -111,4 +118,73 @@ export const GET = () =>
     });
 
     return success({ skills });
+  });
+
+// ─── POST /api/skills ───────────────────────────────────────────────────────
+
+const createSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    description: z.string().min(1).max(1000),
+    instructions: z.string().min(1),
+  })
+  .strict();
+
+export const POST = (req: Request) =>
+  withAuth(async (ctx) => {
+    const companyIdOrResponse = requireCompany(ctx);
+    if (companyIdOrResponse instanceof Response) return companyIdOrResponse;
+    const companyId = companyIdOrResponse;
+
+    // 1. Parse + validate body.
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return error('invalid_input', 'Request body must be valid JSON.', 400);
+    }
+
+    const parsed = createSchema.safeParse(body);
+    if (!parsed.success) {
+      return error('invalid_input', parsed.error.message, 400);
+    }
+
+    const { name, description, instructions } = parsed.data;
+
+    // 2. Resolve brain.
+    const brain = await getBrainForCompany(companyId);
+
+    // 3. Write skill tree (root only, no resource children).
+    let rootId: string;
+    try {
+      const result = await writeSkillTree({
+        companyId,
+        brainId: brain.id,
+        name,
+        description,
+        skillMdBody: instructions,
+        resources: [],
+        // source: undefined — authored skill, no github block
+      });
+      rootId = result.rootId;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+
+      if (msg.includes('produces an empty slug')) {
+        return error('invalid_input', msg, 400);
+      }
+
+      // Postgres 23505 unique-constraint violation on (brain_id, slug) partial index.
+      if (msg.includes('slug_taken') || msg.includes('23505')) {
+        return error(
+          'slug_taken',
+          `A skill named '${name}' already exists in this workspace.`,
+          409,
+        );
+      }
+
+      return error('internal_error', 'Failed to create skill.', 500);
+    }
+
+    return created({ skill_id: rootId });
   });

@@ -39,3 +39,14 @@
 - `<Wordmark />` renders "Tatara" per tatara primitive (not "Locus") — confirmed appropriate per project_rename_tatara memory.
 - Auth is observation/waiting, not conversation — GaugeNeedle permitted for pending/loading states (per gauge rule in plan).
 - The `auth/mcp` page lives OUTSIDE `(public)/` shell — it renders its own `<main>` and has bespoke centering. Keep that structure; just apply Tatara palette + primitives.
+
+## Stage 4: Chat
+
+### Run-header pattern has no current home (Task 4.4 skipped)
+
+The AgentPanel "Run № NN · Stage II · Temper" eyebrow + gauge-needle header described in spec Section 3 Slice 4 has **no current rendering home** in the chat codebase. `chat-interface.tsx`, `chat-container.tsx`, and `message-bubble.tsx` do not render anything resembling an agent-turn header; the only visible hierarchy is bubbles and the streaming indicator.
+
+Task 4.4 skipped per plan ("If not present in current code: skip this task"). When someone introduces an agent-run or agent-turn shell component later, apply the header spec:
+- Eyebrow: `Run № NN · Stage II · Temper` (mono, `var(--ember)`).
+- Title: EB Garamond Semibold 18px, `var(--ink-1)`.
+- Right-side: `<GaugeNeedle size="lg" />` when status is `running`.

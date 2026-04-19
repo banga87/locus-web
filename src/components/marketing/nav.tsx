@@ -5,10 +5,6 @@
 // image (absolute variant) by default; pass `absolute={false}` for
 // pinned/dark-bar usage in later sections.
 //
-// Scoping contract: renders inside `.tatara-marketing`, but styling is
-// driven entirely by Tatara design-system tokens (--ink-*, --surface-*,
-// --brass, --ember-warm) now that the --mk-* palette is being retired.
-//
 // Breakpoint: 1180px (not a Tailwind default). Expressed via
 // `min-[1180px]:` arbitrary-breakpoint utilities.
 

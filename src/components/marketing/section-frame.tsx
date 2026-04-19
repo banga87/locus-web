@@ -7,10 +7,10 @@
 // Positioning / PricingTeaser, which each own their own <h2>), renders just
 // the <Eyebrow> so those callers stay unbroken.
 //
-// The `--mk-*` marketing tokens are gone. We use the semantic Tatara tokens
-// (`--surface-0`, `--ink-1`, `--ink-inverse`, `--brass-soft`) plus a
-// `#1B1410` literal for the dark background (no exact surface token maps
-// to that warm near-black in the current palette).
+// Uses the semantic Tatara tokens (`--surface-0`, `--ink-1`,
+// `--ink-inverse`, `--brass-soft`) plus a `#1B1410` literal for the dark
+// background (no exact surface token maps to that warm near-black in the
+// current palette).
 
 import type { ReactNode } from 'react';
 import { Eyebrow, SectionHeader } from '@/components/tatara';

@@ -259,4 +259,54 @@ describe('SkillProposalCard', () => {
     expect(onDiscard).toHaveBeenCalledTimes(1);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('Discard removes the card from the document (self-dismiss)', () => {
+    const { queryByTestId } = render(
+      <SkillProposalCard proposal={BASE_PROPOSAL} />,
+    );
+    expect(queryByTestId('skill-proposal-card')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /discard/i }));
+    expect(queryByTestId('skill-proposal-card')).toBeNull();
+    // No network call on discard.
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Duplicate relative_path guard (I1)
+  // -------------------------------------------------------------------------
+
+  it('two resources with identical relative_path both render and expand independently', () => {
+    const dupProposal: SkillCreateProposal = {
+      ...BASE_PROPOSAL,
+      resources: [
+        { relative_path: 'dup.md', content: 'first content' },
+        { relative_path: 'dup.md', content: 'second content' },
+      ],
+    };
+    render(<SkillProposalCard proposal={dupProposal} />);
+
+    // Both rows rendered — two "View" buttons.
+    const viewButtons = screen.getAllByRole('button', { name: /view/i });
+    expect(viewButtons).toHaveLength(2);
+
+    // Expand first row.
+    fireEvent.click(viewButtons[0]);
+    expect(screen.getByTestId('resource-content-0')).toBeInTheDocument();
+    expect(screen.getByTestId('resource-content-0').textContent).toBe('first content');
+    // Second row still collapsed.
+    expect(screen.queryByTestId('resource-content-1')).not.toBeInTheDocument();
+
+    // Expand second row.
+    const hideAndViewButtons = screen.getAllByRole('button', { name: /view|hide/i });
+    const secondViewButton = hideAndViewButtons.find(
+      (btn) => btn.textContent === 'View',
+    );
+    fireEvent.click(secondViewButton!);
+    expect(screen.getByTestId('resource-content-1')).toBeInTheDocument();
+    expect(screen.getByTestId('resource-content-1').textContent).toBe('second content');
+
+    // Both pre elements have distinct ids.
+    expect(screen.getByTestId('resource-content-0').id).toBe('resource-content-0');
+    expect(screen.getByTestId('resource-content-1').id).toBe('resource-content-1');
+  });
 });

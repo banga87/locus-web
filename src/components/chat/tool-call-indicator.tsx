@@ -31,6 +31,7 @@ import { Loader2Icon, CheckIcon, AlertTriangleIcon } from 'lucide-react';
 
 import { PROPOSE_TOOL_PREFIX } from '@/lib/context/proposals';
 import { useSkillNames } from '@/lib/skills/use-skill-names';
+import { PROPOSE_SKILL_CREATE_TOOL_NAME } from '@/lib/tools/propose-skill-create';
 import { cn } from '@/lib/utils';
 
 import { ProposalCard, type Proposal } from './proposal-card';
@@ -192,7 +193,7 @@ export function ToolCallIndicator({
 
   // Skill-create proposal branch — `propose_skill_create` does NOT share the
   // PROPOSE_TOOL_PREFIX (`propose_document_`) so it needs its own check.
-  if (toolName === 'propose_skill_create') {
+  if (toolName === PROPOSE_SKILL_CREATE_TOOL_NAME) {
     const skillProposal = extractSkillProposal(result);
     if (skillProposal) {
       return <SkillProposalCard proposal={skillProposal} />;

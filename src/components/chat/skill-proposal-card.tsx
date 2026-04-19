@@ -71,6 +71,7 @@ export function SkillProposalCard({
   onDiscard,
 }: SkillProposalCardProps) {
   const [state, setState] = useState<ActionState>({ kind: 'idle' });
+  const [dismissed, setDismissed] = useState(false);
 
   const handleApprove = async () => {
     setState({ kind: 'submitting' });
@@ -109,10 +110,13 @@ export function SkillProposalCard({
   };
 
   const handleDiscard = () => {
+    setDismissed(true);
     onDiscard?.();
   };
 
   const isSettled = state.kind === 'success' || state.kind === 'submitting';
+
+  if (dismissed) return null;
 
   return (
     <Card
@@ -151,8 +155,8 @@ export function SkillProposalCard({
               Resources ({proposal.resources.length})
             </p>
             <ul className="space-y-1">
-              {proposal.resources.map((res) => (
-                <ResourceRow key={res.relative_path} resource={res} />
+              {proposal.resources.map((res, index) => (
+                <ResourceRow key={`${index}-${res.relative_path}`} index={index} resource={res} />
               ))}
             </ul>
           </div>
@@ -218,11 +222,14 @@ export function SkillProposalCard({
 // ---------------------------------------------------------------------------
 
 function ResourceRow({
+  index,
   resource,
 }: {
+  index: number;
   resource: { relative_path: string; content: string };
 }) {
   const [expanded, setExpanded] = useState(false);
+  const contentId = `resource-content-${index}`;
 
   return (
     <li className="rounded border border-border/50">
@@ -233,16 +240,16 @@ function ResourceRow({
           onClick={() => setExpanded((v) => !v)}
           className="shrink-0 text-primary hover:underline"
           aria-expanded={expanded}
-          aria-controls={`resource-content-${resource.relative_path}`}
+          aria-controls={contentId}
         >
           {expanded ? 'Hide' : 'View'}
         </button>
       </div>
       {expanded ? (
         <pre
-          id={`resource-content-${resource.relative_path}`}
+          id={contentId}
           className="whitespace-pre-wrap rounded-b bg-muted/40 p-2 font-mono text-muted-foreground"
-          data-testid={`resource-content-${resource.relative_path}`}
+          data-testid={contentId}
         >
           {resource.content}
         </pre>

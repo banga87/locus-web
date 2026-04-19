@@ -11,7 +11,7 @@
 //
 // Error state surfaces actionable messages mapped from error codes.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
@@ -106,10 +106,12 @@ export function InstallModal({ open, onOpenChange }: InstallModalProps) {
   const router = useRouter();
   const [url, setUrl] = useState('');
   const [state, setState] = useState<ModalState>({ stage: 'idle' });
+  const abortRef = useRef<AbortController | null>(null);
 
   function handleOpenChange(next: boolean) {
     if (!next) {
-      // Reset on close
+      // Abort any in-flight fetch and reset state on close
+      abortRef.current?.abort();
       setUrl('');
       setState({ stage: 'idle' });
     }
@@ -120,6 +122,9 @@ export function InstallModal({ open, onOpenChange }: InstallModalProps) {
     const trimmed = url.trim();
     if (!trimmed) return;
 
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
     setState({ stage: 'loading-preview' });
 
     try {
@@ -127,6 +132,7 @@ export function InstallModal({ open, onOpenChange }: InstallModalProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: trimmed }),
+        signal: abortRef.current.signal,
       });
 
       const body: PreviewResponseBody = await res.json();
@@ -139,7 +145,8 @@ export function InstallModal({ open, onOpenChange }: InstallModalProps) {
       }
 
       setState({ stage: 'preview-ready', preview: body.data, url: trimmed });
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       setState({ stage: 'error', message: 'Network error. Check your connection and try again.' });
     }
   }
@@ -148,6 +155,9 @@ export function InstallModal({ open, onOpenChange }: InstallModalProps) {
     if (state.stage !== 'preview-ready') return;
     const { preview, url: confirmedUrl } = state;
 
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
     setState({ stage: 'installing', preview, url: confirmedUrl });
 
     try {
@@ -155,6 +165,7 @@ export function InstallModal({ open, onOpenChange }: InstallModalProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: confirmedUrl, confirmed_sha: preview.sha }),
+        signal: abortRef.current.signal,
       });
 
       const body: InstallResponseBody = await res.json();
@@ -168,12 +179,14 @@ export function InstallModal({ open, onOpenChange }: InstallModalProps) {
 
       handleOpenChange(false);
       router.push(`/skills/${body.data.skill_id}`);
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       setState({ stage: 'error', message: 'Network error. Check your connection and try again.' });
     }
   }
 
   function handleBack() {
+    abortRef.current?.abort();
     setState({ stage: 'idle' });
   }
 
@@ -181,6 +194,15 @@ export function InstallModal({ open, onOpenChange }: InstallModalProps) {
   const isPreviewReady = state.stage === 'preview-ready';
   const isInstalling = state.stage === 'installing';
   const hint = urlHint(url);
+
+  // Narrowed state available whenever the preview panel should be shown.
+  // Avoids repeated `state.stage === 'preview-ready' || state.stage === 'installing'`
+  // checks and the `null as never` cast in JSX.
+  type ConfirmedState = Extract<ModalState, { stage: 'preview-ready' | 'installing' }>;
+  const confirmedState: ConfirmedState | null =
+    state.stage === 'preview-ready' || state.stage === 'installing'
+      ? (state as ConfirmedState)
+      : null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -229,34 +251,16 @@ export function InstallModal({ open, onOpenChange }: InstallModalProps) {
         )}
 
         {/* Stage 2: Preview */}
-        {(isPreviewReady || isInstalling) && (
+        {confirmedState && (
           <ScrollArea className="max-h-[60vh]">
             <div className="pr-1">
               <SkillPreviewView
-                preview={
-                  state.stage === 'preview-ready' || state.stage === 'installing'
-                    ? state.preview
-                    : (null as never)
-                }
+                preview={confirmedState.preview}
                 origin={{
-                  owner: extractOwner(
-                    state.stage === 'preview-ready' || state.stage === 'installing'
-                      ? state.url
-                      : '',
-                  ),
-                  repo: extractRepo(
-                    state.stage === 'preview-ready' || state.stage === 'installing'
-                      ? state.url
-                      : '',
-                  ),
-                  skillName: extractSkillName(
-                    state.stage === 'preview-ready' || state.stage === 'installing'
-                      ? state.url
-                      : '',
-                  ),
-                  sha: (state.stage === 'preview-ready' || state.stage === 'installing')
-                    ? state.preview.sha
-                    : '',
+                  owner: extractOwner(confirmedState.url),
+                  repo: extractRepo(confirmedState.url),
+                  skillName: extractSkillName(confirmedState.url),
+                  sha: confirmedState.preview.sha,
                 }}
               />
             </div>

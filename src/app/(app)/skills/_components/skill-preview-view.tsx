@@ -32,7 +32,7 @@ export function SkillPreviewView({ preview, origin }: SkillPreviewViewProps) {
   return (
     <div className="flex flex-col gap-4">
       {/* Safety notice — destructive style without an Alert component */}
-      <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+      <div role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
         <strong className="font-medium">Review before installing.</strong>{' '}
         This content will become part of your agents&apos; instructions. Review it before
         installing.

@@ -2,25 +2,44 @@
 // sends them a confirmation email with a link back to /auth/callback; we
 // don't do anything here other than tell them to check their inbox.
 
+import { Eyebrow, GaugeNeedle } from '@/components/tatara';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+
 export default function VerifyPage() {
   return (
-    <div className="rounded-lg border border-border bg-background p-6 shadow-sm">
-      <h1 className="mb-2 text-lg font-semibold text-foreground">
-        Check your email
-      </h1>
-      <p className="text-sm text-muted-foreground">
-        We just sent you a verification link. Click it from the same device
-        you signed up on and you&apos;ll land back here ready to set up your
-        company.
-      </p>
-      <p className="mt-4 text-xs text-muted-foreground">
-        Didn&apos;t arrive in a minute or two? Check your spam folder — or
-        start over at{' '}
-        <a className="underline" href="/signup">
-          signup
-        </a>
-        .
-      </p>
-    </div>
+    <Card>
+      <CardHeader>
+        <Eyebrow number="02">CHECK YOUR EMAIL</Eyebrow>
+        <CardTitle>Check your email</CardTitle>
+        <CardDescription>
+          We just sent you a verification link. Click it from the same device
+          you signed up on and you&apos;ll land back here ready to set up your
+          company.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="mt-4 flex items-center gap-2 text-xs text-[var(--ink-muted)]">
+          <GaugeNeedle size="sm" />
+          Waiting for confirmation…
+        </div>
+        <p className="mt-4 text-xs text-[var(--ink-muted)]">
+          Didn&apos;t arrive in a minute or two? Check your spam folder — or
+          start over at{' '}
+          <a
+            className="text-[var(--link)] underline underline-offset-[3px]"
+            href="/signup"
+          >
+            signup
+          </a>
+          .
+        </p>
+      </CardContent>
+    </Card>
   );
 }

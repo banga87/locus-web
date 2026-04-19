@@ -13,16 +13,16 @@ import { Button } from '@/components/ui/button';
 
 export function ConsentForm({ sessionRef }: { sessionRef: string }) {
   return (
-    <div className="mt-6 flex gap-3">
+    <div className="flex gap-3">
       <form method="post" action="/api/oauth/authorize/deny">
         <input type="hidden" name="session_ref" value={sessionRef} />
-        <Button type="submit" variant="outline" size="lg">
+        <Button type="submit" variant="ghost" size="lg">
           Cancel
         </Button>
       </form>
       <form method="post" action="/api/oauth/authorize/approve">
         <input type="hidden" name="session_ref" value={sessionRef} />
-        <Button type="submit" size="lg">
+        <Button type="submit" variant="default" size="lg">
           Connect
         </Button>
       </form>

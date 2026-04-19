@@ -17,15 +17,19 @@ interface SkillListItem {
   title: string;
 }
 
-interface SkillsApiResponse {
-  skills: SkillListItem[];
+// /api/skills returns the standard envelope: { success: true, data: { skills: [...] } }
+interface SkillsApiEnvelope {
+  success: boolean;
+  data?: { skills: SkillListItem[] };
 }
 
 async function fetchSkillNames(url: string): Promise<Map<string, string>> {
   const res = await fetch(url);
   if (!res.ok) return new Map();
-  const data = (await res.json()) as SkillsApiResponse;
-  return new Map(data.skills.map((s) => [s.id, s.title]));
+  const envelope = (await res.json()) as SkillsApiEnvelope;
+  const skills = envelope.data?.skills;
+  if (!Array.isArray(skills)) return new Map();
+  return new Map(skills.map((s) => [s.id, s.title]));
 }
 
 /**

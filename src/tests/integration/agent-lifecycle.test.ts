@@ -47,12 +47,10 @@ import {
   companies,
   documents,
   sessions,
-  skillManifests,
   usageRecords,
   users,
 } from '@/db/schema';
 import { buildAgentDefinitionDoc } from '@/lib/agents/definitions';
-import { rebuildManifest } from '@/lib/skills/loader';
 import { __clearScaffoldingCacheForTests } from '@/lib/context/repos';
 import { __resetContextHandlersForTests } from '@/lib/context/register';
 import { clearHooks } from '@/lib/agent/hooks';
@@ -233,11 +231,6 @@ beforeAll(async () => {
     .returning({ id: documents.id });
   agentDefinitionDocId = agentDef.id;
 
-  // Synchronous rebuild so UserPromptSubmit never hits a missing
-  // manifest (empty manifest is fine; the test doesn't rely on
-  // skill matching).
-  await rebuildManifest(companyId);
-
   const [session] = await db
     .insert(sessions)
     .values({
@@ -257,9 +250,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.delete(sessions).where(eq(sessions.companyId, companyId));
   await db.delete(usageRecords).where(eq(usageRecords.companyId, companyId));
-  await db
-    .delete(skillManifests)
-    .where(eq(skillManifests.companyId, companyId));
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`ALTER TABLE audit_events DISABLE TRIGGER audit_events_immutable`,

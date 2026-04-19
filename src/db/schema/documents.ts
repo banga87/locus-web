@@ -52,6 +52,20 @@ export const documents = pgTable(
       onDelete: 'set null',
     }),
 
+    // Skill-resource parent (migration 0019). A row with type='skill-resource'
+    // is owned by a root skill doc (type='skill'); cascading delete removes
+    // every nested file when the skill is deleted. Nullable — brain docs
+    // and root skills have parent_skill_id IS NULL.
+    parentSkillId: uuid('parent_skill_id').references(
+      (): any => documents.id,
+      { onDelete: 'cascade' },
+    ),
+
+    // Relative path of the resource within its parent skill (e.g.
+    // 'reference/pricing.md'). Only meaningful when parent_skill_id IS NOT
+    // NULL; unique within a parent via the partial index below.
+    relativePath: text('relative_path'),
+
     title: text('title').notNull(),
 
     // URL-safe slug, unique within a brain (e.g., "brand-voice-guide").
@@ -170,5 +184,11 @@ export const documents = pgTable(
     uniqueIndex('documents_brain_slug_live_unique')
       .on(table.brainId, table.slug)
       .where(sql`"deleted_at" IS NULL`),
+    // Skill-resource identity: (parent_skill_id, relative_path) is unique,
+    // scoped to rows that actually belong to a skill. Brain documents
+    // (parent_skill_id IS NULL) are unaffected.
+    uniqueIndex('documents_skill_resource_path')
+      .on(table.parentSkillId, table.relativePath)
+      .where(sql`"parent_skill_id" IS NOT NULL`),
   ]
 );

@@ -37,9 +37,19 @@ vi.mock('@/db', () => ({
   db: {
     select: () => ({
       from: () => ({
-        where: () => ({
-          limit: () => dbSelectMock(),
-        }),
+        where: () => {
+          // Return an object that supports both:
+          //   .limit(n)  — used by queries with an explicit limit
+          //   await      — used by the fallback skill-ids query which has no .limit()
+          // We make it a thenable so `await db.select().from().where()` resolves
+          // via dbSelectMock(), while `.limit()` also calls dbSelectMock().
+          const result = {
+            limit: () => dbSelectMock(),
+            then: (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
+              Promise.resolve(dbSelectMock()).then(resolve, reject),
+          };
+          return result;
+        },
       }),
     }),
   },
@@ -98,6 +108,17 @@ vi.mock('@/lib/mcp-out/bridge', () => ({
     connections: [],
     close: closeMcpMock,
   })),
+}));
+
+// @axiomhq/nextjs imports `next/server` without .js extension, which breaks
+// vitest ESM resolution. Mock the whole module so tests run without Next.js.
+vi.mock('@/lib/axiom/server', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  withAxiom: (handler: unknown) => handler,
 }));
 
 vi.mock('@/lib/tools', () => ({
@@ -203,7 +224,18 @@ describe('POST /api/agent/chat — happy path', () => {
   beforeEach(() => {
     requireAuthMock.mockResolvedValue(TEST_AUTH);
     getBrainForCompanyMock.mockResolvedValue(TEST_BRAIN);
-    dbSelectMock.mockResolvedValue([{ name: 'Acme Co' }]);
+    // Query order for sessionId='sess-1' requests:
+    //   1. folders (thenable, no .limit())
+    //   2. companies (.limit())
+    //   3. sessions (.limit())
+    //   4. skills fallback (thenable, no .limit()) — else branch when agentDefinitionId null
+    // Persistent [] as default handles everything after the first three Once values.
+    dbSelectMock.mockResolvedValueOnce([]); // folders
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]); // companies
+    dbSelectMock.mockResolvedValueOnce([{ agentDefinitionId: null }]); // sessions
+    // Skills fallback + any remaining queries: return [] so agentSkillIds is
+    // empty and the visibleSkills query is skipped.
+    dbSelectMock.mockResolvedValue([]);
   });
 
   it('delegates to runAgentTurn and returns the UIMessageStreamResponse', async () => {
@@ -321,17 +353,20 @@ describe('POST /api/agent/chat — happy path', () => {
 });
 
 describe('POST /api/agent/chat — agentDefinitionId threading (Task 9)', () => {
-  // The route runs two `.select().from().where().limit()` chains:
-  //   1. Company name  (by companyId)
-  //   2. Session's agent-definition id  (by sessionId + companyId)
-  // Both resolve through the same `dbSelectMock`, so these tests use
-  // `mockResolvedValueOnce` in sequence to control each query's result.
+  // Query order for requests with sessionId:
+  //   1. folders (thenable, no .limit()) — always first
+  //   2. companies (.limit())
+  //   3. sessions (.limit())
+  //   4+ capabilities / skills repos (.limit()) or skills fallback (thenable)
+  // All queries share `dbSelectMock`; tests use `mockResolvedValueOnce`
+  // in sequence to control each call's result.
   beforeEach(() => {
     requireAuthMock.mockResolvedValue(TEST_AUTH);
     getBrainForCompanyMock.mockResolvedValue(TEST_BRAIN);
   });
 
   it('threads the session row agent_definition_id onto AgentContext', async () => {
+    dbSelectMock.mockResolvedValueOnce([]); // folders
     dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]); // companies
     dbSelectMock.mockResolvedValueOnce([
       { agentDefinitionId: 'agent-def-123' },
@@ -341,6 +376,10 @@ describe('POST /api/agent/chat — agentDefinitionId threading (Task 9)', () => 
     // field absent → repo returns []. That keeps this test focused on
     // agentDefinitionId threading; capability derivation has its own unit.
     dbSelectMock.mockResolvedValueOnce([{ content: '' }]); // documents (capabilities)
+    // Task 9 (skills): same-shape lookup for `getAgentSkillIds`. Empty
+    // content → no `skills:` key → repo returns []; the route's later
+    // visibleSkills query is short-circuited and never fires.
+    dbSelectMock.mockResolvedValueOnce([{ content: '' }]); // documents (skills)
 
     const result = {
       toUIMessageStreamResponse: vi.fn(() => new Response('ok')),
@@ -368,9 +407,13 @@ describe('POST /api/agent/chat — agentDefinitionId threading (Task 9)', () => 
   });
 
   it('resolves agentDefinitionId to null when the session row has no agent bound', async () => {
-    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]);
+    dbSelectMock.mockResolvedValueOnce([]); // folders
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]); // companies
     // Column is nullable; Drizzle returns `null` when the value is NULL.
-    dbSelectMock.mockResolvedValueOnce([{ agentDefinitionId: null }]);
+    dbSelectMock.mockResolvedValueOnce([{ agentDefinitionId: null }]); // sessions
+    // Skills fallback (no agent-def): return [] so agentSkillIds is empty
+    // and the visibleSkills query is skipped.
+    dbSelectMock.mockResolvedValue([]);
 
     const result = {
       toUIMessageStreamResponse: vi.fn(() => new Response('ok')),
@@ -397,8 +440,12 @@ describe('POST /api/agent/chat — agentDefinitionId threading (Task 9)', () => 
   });
 
   it('resolves agentDefinitionId to null when there is no sessionId (fresh chat)', async () => {
-    // No session → no second query. Only the company name lookup runs.
-    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]);
+    // No session → no sessions query. Query order: folders, companies, skills fallback.
+    dbSelectMock.mockResolvedValueOnce([]); // folders
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]); // companies
+    // Skills fallback (no agent-def, no session): return [] so agentSkillIds
+    // is empty and the visibleSkills query is skipped.
+    dbSelectMock.mockResolvedValue([]);
 
     const result = {
       toUIMessageStreamResponse: vi.fn(() => new Response('ok')),
@@ -423,19 +470,21 @@ describe('POST /api/agent/chat — agentDefinitionId threading (Task 9)', () => 
     const params = runAgentTurnMock.mock.calls[0]?.[0];
     expect(params.ctx.agentDefinitionId).toBeNull();
     expect(params.ctx.sessionId).toBeNull();
-    // Only the companies query fired — the sessions lookup is gated on
+    // Three queries fired: folders (thenable) + companies (.limit()) +
+    // skills fallback (thenable). The sessions lookup is gated on
     // `body.sessionId` being truthy, so a new chat (sessionId: null)
     // short-circuits past it.
-    expect(dbSelectMock).toHaveBeenCalledTimes(1);
+    expect(dbSelectMock).toHaveBeenCalledTimes(3);
   });
 
   it('resolves agentDefinitionId to null when the session row is missing (cross-tenant id)', async () => {
     // The company+session WHERE clause yields zero rows — treat as
-    // default Platform Agent rather than blowing up. The session turn
-    // will still run (this matches today's behaviour for the messages
-    // side: `sessionManager.getContext` returns [] for an unknown id).
-    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]);
-    dbSelectMock.mockResolvedValueOnce([]); // no session row
+    // default Platform Agent rather than blowing up.
+    dbSelectMock.mockResolvedValueOnce([]); // folders
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]); // companies
+    dbSelectMock.mockResolvedValueOnce([]); // sessions: no row
+    // Skills fallback (no agent-def): return [] so agentSkillIds is empty.
+    dbSelectMock.mockResolvedValue([]);
 
     const result = {
       toUIMessageStreamResponse: vi.fn(() => new Response('ok')),
@@ -460,13 +509,61 @@ describe('POST /api/agent/chat — agentDefinitionId threading (Task 9)', () => 
     const params = runAgentTurnMock.mock.calls[0]?.[0];
     expect(params.ctx.agentDefinitionId).toBeNull();
   });
+
+  it('fallback: exposes all company skills to Platform Agent when no agent-definition bound', async () => {
+    // Arrange: company has two skills installed.
+    const SKILL_ID_1 = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const SKILL_ID_2 = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    // Query order: folders, companies, sessions, skills-fallback, visibleSkills.
+    dbSelectMock.mockResolvedValueOnce([]); // folders
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]); // companies
+    dbSelectMock.mockResolvedValueOnce([{ agentDefinitionId: null }]); // sessions
+    // Skills fallback returns two skill rows.
+    dbSelectMock.mockResolvedValueOnce([{ id: SKILL_ID_1 }, { id: SKILL_ID_2 }]);
+    // visibleSkills query (agentSkillIds non-empty): return two skill docs.
+    dbSelectMock.mockResolvedValue([
+      {
+        id: SKILL_ID_1,
+        content: '---\nname: Skill One\ndescription: Does one thing\n---\nBody one',
+      },
+      {
+        id: SKILL_ID_2,
+        content: '---\nname: Skill Two\ndescription: Does two things\n---\nBody two',
+      },
+    ]);
+
+    const result = {
+      toUIMessageStreamResponse: vi.fn(() => new Response('ok')),
+    };
+    runAgentTurnMock.mockResolvedValueOnce({ result });
+
+    await POST(
+      buildRequest(
+        buildBody(
+          [{ id: 'msg-1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+          'sess-no-agent-2',
+        ),
+      ),
+    );
+
+    // agentSkillIds should be populated from the fallback query.
+    const params = runAgentTurnMock.mock.calls[0]?.[0];
+    expect(params.ctx.agentDefinitionId).toBeNull();
+    // 5 calls: folders, companies, sessions, skills-fallback, visibleSkills.
+    expect(dbSelectMock).toHaveBeenCalledTimes(5);
+  });
 });
 
 describe('POST /api/agent/chat — deny path', () => {
   beforeEach(() => {
     requireAuthMock.mockResolvedValue(TEST_AUTH);
     getBrainForCompanyMock.mockResolvedValue(TEST_BRAIN);
-    dbSelectMock.mockResolvedValue([{ name: 'Acme Co' }]);
+    // Query order: folders (thenable), companies (.limit()), sessions (.limit()),
+    // skills fallback (thenable). Return [] for everything except companies.
+    dbSelectMock.mockResolvedValueOnce([]); // folders
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]); // companies
+    dbSelectMock.mockResolvedValueOnce([{ agentDefinitionId: null }]); // sessions
+    dbSelectMock.mockResolvedValue([]); // skills fallback + any remaining
   });
 
   it('returns a properly-terminated 200 UI message stream when runAgentTurn returns result=null (SessionStart denied)', async () => {
@@ -508,7 +605,12 @@ describe('POST /api/agent/chat — MCP OUT teardown', () => {
   beforeEach(() => {
     requireAuthMock.mockResolvedValue(TEST_AUTH);
     getBrainForCompanyMock.mockResolvedValue(TEST_BRAIN);
-    dbSelectMock.mockResolvedValue([{ name: 'Acme Co' }]);
+    // Query order: folders (thenable), companies (.limit()), sessions (.limit()),
+    // skills fallback (thenable). Return [] for everything except companies.
+    dbSelectMock.mockResolvedValueOnce([]); // folders
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]); // companies
+    dbSelectMock.mockResolvedValueOnce([{ agentDefinitionId: null }]); // sessions
+    dbSelectMock.mockResolvedValue([]); // skills fallback + any remaining
   });
 
   it('invokes MCP close() via waitUntil on the happy path', async () => {

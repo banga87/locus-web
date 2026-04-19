@@ -24,6 +24,19 @@ import postgres from 'postgres';
 // RLS policy block — we run it through this script too so the RLS
 // portion lands. The CREATE TABLE statements use IF NOT EXISTS / DO
 // blocks so re-running on top of `drizzle-kit push` is safe.
+//
+// 0008 is intentionally omitted: it narrowed the `skill_manifests` RLS
+// policy, but 0019 dropped the `skill_manifests` table entirely. On a
+// post-0019 DB, 0008's DROP POLICY / CREATE POLICY statements fail with
+// `relation "skill_manifests" does not exist` because Postgres's
+// IF EXISTS guard on policy statements applies to the policy, not the
+// underlying table. The whole migration is moot now.
+//
+// 0007 still creates structures in active use (session context-injection
+// columns, `session_attachments`), so it stays in the list. Its
+// `skill_manifests` block is a no-op on fresh DBs (0019 drops the table
+// later in the same run) and remains re-runnable on established DBs
+// (IF NOT EXISTS re-creates the table before the RLS block touches it).
 const CUSTOM_MIGRATIONS = [
   '0002_tsvector_trigger.sql',
   '0003_rls_policies.sql',
@@ -31,7 +44,6 @@ const CUSTOM_MIGRATIONS = [
   '0005_mcp_connections.sql',
   '0006_document_type_column.sql',
   '0007_agents_ingestion.sql',
-  '0008_skill_manifests_select_only.sql',
   '0009_session_attachments_owner_scope.sql',
   '0010_attachment_storage.sql',
   '0012_audit_events_mcp_invocation_enum.sql',
@@ -39,6 +51,7 @@ const CUSTOM_MIGRATIONS = [
   '0014_audit_events_realtime_publication.sql',
   '0015_mcp_in_oauth.sql',
   '0016_connectors.sql',
+  '0019_skills_progressive_disclosure.sql',
 ];
 
 async function main() {

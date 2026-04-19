@@ -27,6 +27,10 @@ import {
   proposeDocumentCreateTool,
   proposeDocumentUpdateTool,
 } from '@/lib/tools/propose-document';
+import {
+  proposeSkillCreateTool,
+  PROPOSE_SKILL_CREATE_TOOL_NAME,
+} from '@/lib/tools/propose-skill-create';
 import type { LocusTool, ToolContext } from '@/lib/tools/types';
 
 /**
@@ -197,21 +201,23 @@ function toolAllowed(tool: LocusTool, ctx: ToolContext): boolean {
 /**
  * Build the full tool set for a turn: every registered Locus brain tool
  * (4 today: search/get/diff/history) merged with the two user-gated
- * propose_document_* tools and any external tools supplied by the
- * caller. Task 3 supplies MCP OUT tools via the `externalTools` arg;
- * until then it defaults to `{}`.
+ * propose_document_* tools, the propose_skill_create tool, and any
+ * external tools supplied by the caller. Task 3 supplies MCP OUT tools
+ * via the `externalTools` arg; until then it defaults to `{}`.
  *
  * Tool names must be unique across the merged set. If an external tool
  * collides with a brain tool name, the external tool wins (spread order).
  * Caller is responsible for namespacing MCP tools to avoid collisions.
  *
- * The two propose tools — `propose_document_create` +
- * `propose_document_update` — are registered unconditionally for every
- * agent. They're side-effect-free: their `execute` functions only
- * validate input and return `{ proposal, isProposal: true }` for the
- * UI to render an Approve/Discard card. No DB writes, no Brain CRUD
- * calls — the user performs the actual write on approval. See
- * `src/lib/tools/propose-document.ts` for the full contract.
+ * The three propose tools — `propose_document_create`,
+ * `propose_document_update`, and `propose_skill_create` — are
+ * registered unconditionally for every agent. They're side-effect-free:
+ * their `execute` functions only validate input and return
+ * `{ proposal, isProposal: true }` for the UI to render an
+ * Approve/Discard card. No DB writes, no Brain CRUD calls — the user
+ * performs the actual write on approval. See
+ * `src/lib/tools/propose-document.ts` and
+ * `src/lib/tools/propose-skill-create.ts` for the full contract.
  */
 export function buildToolSet(
   ctx: ToolContext,
@@ -236,6 +242,7 @@ export function buildToolSet(
   // `src/lib/context/proposals.ts`.
   bridged[`${PROPOSE_TOOL_PREFIX}create`] = proposeDocumentCreateTool as Tool;
   bridged[`${PROPOSE_TOOL_PREFIX}update`] = proposeDocumentUpdateTool as Tool;
+  bridged[PROPOSE_SKILL_CREATE_TOOL_NAME] = proposeSkillCreateTool as Tool;
 
   // External tools: if `externalToolMeta` supplies metadata keyed by the
   // same tool name, wrap in `bridgeMcpTool` to emit `mcp_invocation`

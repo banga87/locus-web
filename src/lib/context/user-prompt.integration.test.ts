@@ -1,27 +1,12 @@
-// Integration test for the UserPromptSubmit user-prompt payload builder.
+// Integration test for the UserPromptSubmit user-prompt repo + builder.
 //
 // Runs against live Supabase via the Drizzle superuser connection
 // (DATABASE_URL — bypasses RLS so we can seed + read without the
-// Supabase Auth dance). Mirrors the fixture pattern in
-// `loader.integration.test.ts` + `scaffolding.integration.test.ts` —
-// create a fresh company + brain + category + one skill doc + one
-// agent-definition doc referencing the skill, rebuild the manifest,
-// then exercise `buildUserPromptPayload` end-to-end with the live
-// DB-backed repo.
-//
-// Coverage (matches Task 6 Step 7 in the Phase 1.5 plan):
-//   1. Happy path — matching skill lands as an injected block.
-//   2. Candidate-pool isolation — when the agent does NOT list the
-//      skill, the matcher still scores against the manifest but the
-//      candidate filter excludes the skill.
-//
-// Not covered here (deliberate):
-//   - Attachments: Task 8 ships the `session_attachments` pipeline.
-//     Until then `getExtractedAttachments` is stubbed to `[]`; there
-//     is nothing meaningful to integration-test on the DB side.
-//   - Ingestion-filing co-injection: Task 10 seeds the built-in
-//     `ingestion-filing` skill. Until the seed lands, the filing
-//     lookup returns `null`.
+// Supabase Auth dance). Post-skills-rewrite the builder only emits
+// attachment blocks; this test covers the repo's attachment lookup
+// against the real `session_attachments` schema plus the sibling
+// `AgentSkillsRepo` which reads the agent-definition doc's `skills:`
+// frontmatter array.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
@@ -29,7 +14,6 @@ import yaml from 'js-yaml';
 
 import { db } from '@/db';
 import { brains, companies, documents, folders } from '@/db/schema';
-import { rebuildManifest } from '@/lib/skills/loader';
 
 import {
   createDbAgentSkillsRepo,
@@ -45,23 +29,6 @@ let brainId: string;
 let folderId: string;
 let skillDocId: string;
 let agentDefinitionDocId: string;
-
-function skillContent(): string {
-  return `---
-type: skill
-title: Draft a Landing Page
-description: Use when the user asks to draft a landing page.
-triggers:
-  phrases:
-    - landing page
-  allOf: []
-  anyOf: []
-  minScore: 1
-priority: 5
----
-
-Open with a hook, lead with the single best benefit, close with a CTA.`;
-}
 
 beforeAll(async () => {
   const [company] = await db
@@ -96,7 +63,7 @@ beforeAll(async () => {
       title: 'Draft a Landing Page',
       slug: `draft-landing-page-${suffix}`,
       path: `up-cat-${suffix}/draft-landing-page-${suffix}`,
-      content: skillContent(),
+      content: `---\ntype: skill\ntitle: Draft a Landing Page\n---\n\nOpen with a hook.`,
       type: 'skill',
       version: 1,
     })
@@ -134,18 +101,12 @@ beforeAll(async () => {
     })
     .returning({ id: documents.id });
   agentDefinitionDocId = agentDef.id;
-
-  // Build the manifest synchronously (don't route through the
-  // scheduler — setTimeout handles leak across a test run).
-  await rebuildManifest(companyId);
 }, 60_000);
 
 afterAll(async () => {
   // Mirror the scaffolding integration test: disable the document_
   // versions immutability trigger inside a transaction so the brain
-  // cascade can reach through any version rows. Manifests cascade
-  // off companies, so dropping the company in the final DELETE
-  // tears them down too.
+  // cascade can reach through any version rows.
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`ALTER TABLE document_versions DISABLE TRIGGER document_versions_immutable`,
@@ -160,60 +121,14 @@ afterAll(async () => {
 
 // ---- Tests ----------------------------------------------------------------
 
-describe('buildUserPromptPayload (integration with live DB)', () => {
-  it('injects the matched skill when the agent candidate pool includes it', async () => {
+describe('createDbAgentSkillsRepo (integration with live DB)', () => {
+  it('returns the agent-definition skills array from frontmatter', async () => {
     const agentRepo = createDbAgentSkillsRepo();
-    const agentSkillIds = (await agentRepo.getAgentSkillIds(agentDefinitionDocId)) ?? [];
+    const agentSkillIds = await agentRepo.getAgentSkillIds(agentDefinitionDocId);
     expect(agentSkillIds).toEqual([skillDocId]);
-
-    const repo = createDbUserPromptRepo();
-    const payload = await buildUserPromptPayload(
-      {
-        companyId,
-        // A valid nil UUID. The attachment branch now hits the real
-        // session_attachments table; the column type is uuid, so an
-        // arbitrary placeholder string would throw a 22P02. This
-        // nil-uuid has no attachments — the branch short-circuits to
-        // empty, which is what the skill-matching assertions need.
-        sessionId: '00000000-0000-0000-0000-000000000000',
-        agentSkillIds,
-        userMessage: 'please draft a landing page for our new product',
-      },
-      repo,
-    );
-
-    const skillBlocks = payload.blocks.filter((b) => b.kind === 'skill');
-    expect(skillBlocks).toHaveLength(1);
-    expect(skillBlocks[0].skillId).toBe(skillDocId);
-    expect(skillBlocks[0].title).toBe('Draft a Landing Page');
-    // Body is the skill doc's content minus frontmatter — the repo
-    // stripFrontmatter helper handles this.
-    expect(skillBlocks[0].body).toContain('Open with a hook');
-    // Frontmatter must not leak into the injected body.
-    expect(skillBlocks[0].body).not.toContain('type: skill');
   });
 
-  it('excludes skills when the agent candidate pool is empty', async () => {
-    const repo = createDbUserPromptRepo();
-    const payload = await buildUserPromptPayload(
-      {
-        companyId,
-        // See note above about the nil-uuid. This test exercises the
-        // "empty agent pool" short-circuit, so the session id doesn't
-        // matter to what we're asserting — but it must parse as a
-        // uuid now that the repo runs a real Drizzle query.
-        sessionId: '00000000-0000-0000-0000-000000000000',
-        agentSkillIds: [],
-        userMessage: 'please draft a landing page for our new product',
-      },
-      repo,
-    );
-    expect(payload.blocks.filter((b) => b.kind === 'skill')).toHaveLength(0);
-  });
-
-  it('returns null agentSkillIds when the agent-definition is soft-deleted', async () => {
-    // Flip the agent-definition to soft-deleted and back, asserting the
-    // lookup degrades to null rather than throwing.
+  it('returns null when the agent-definition is soft-deleted', async () => {
     await db
       .update(documents)
       .set({ deletedAt: new Date() })
@@ -229,14 +144,15 @@ describe('buildUserPromptPayload (integration with live DB)', () => {
         .where(eq(documents.id, agentDefinitionDocId));
     }
   });
+});
 
-  it('returns [] for a session with no extracted attachments (Task 8 wired)', async () => {
-    // Post-Task 8 this now hits the real `session_attachments` table.
+describe('createDbUserPromptRepo (integration with live DB)', () => {
+  it('returns [] for a session with no extracted attachments', async () => {
     // The nil-uuid session has no rows, and the query filters on
     // `companyId = ? AND sessionId = ?` so even a sessionId collision
     // across tenants wouldn't surface rows into the wrong company's
-    // turn. This exercises the "no attachments" short-circuit path
-    // that the builder uses to skip the ingestion-filing co-injection.
+    // turn. Exercises the "no attachments" short-circuit path that
+    // the builder uses to emit an empty payload.
     const repo = createDbUserPromptRepo();
     const attachments = await repo.getExtractedAttachments(
       companyId,
@@ -245,45 +161,16 @@ describe('buildUserPromptPayload (integration with live DB)', () => {
     expect(attachments).toEqual([]);
   });
 
-  it('ignores user-authored docs titled like the built-in filing skill (slug guard, Task 10)', async () => {
-    // The repo looks up the built-in ingestion-filing skill by the
-    // stable slug `ingestion-filing` — NOT by title. This test seeds a
-    // user-authored skill-type doc whose title contains "ingestion" /
-    // "filing" but whose slug is distinct. An earlier draft of the
-    // repo used `title ILIKE '%ingestion filing%'` and would have
-    // silently injected e.g. "Canada Ingestion Filing SOPs" on every
-    // attachment turn; the slug guard is what closes that door.
-    //
-    // This fixture deliberately skips `seedBuiltins`, so the repo
-    // should return `null` — there is no doc with slug
-    // `ingestion-filing` in this company. A separate integration test
-    // at `scripts/__tests__/seed-builtins.integration.test.ts`
-    // exercises the seeded-body-comes-through half of the contract.
-    const [decoy] = await db
-      .insert(documents)
-      .values({
+  it('emits an empty payload when no attachments exist for the session', async () => {
+    const repo = createDbUserPromptRepo();
+    const payload = await buildUserPromptPayload(
+      {
         companyId,
-        brainId,
-        folderId,
-        title: 'Canada Ingestion Filing SOPs',
-        slug: `canada-ingestion-filing-sops-${suffix}`,
-        path: `up-cat-${suffix}/canada-ingestion-filing-sops-${suffix}`,
-        content: `---
-type: skill
-title: Canada Ingestion Filing SOPs
----
-
-User-authored content that must NOT be injected as the built-in filing skill.`,
-        type: 'skill',
-        version: 1,
-      })
-      .returning({ id: documents.id });
-    try {
-      const repo = createDbUserPromptRepo();
-      const filing = await repo.getIngestionFilingSkill(companyId);
-      expect(filing).toBeNull();
-    } finally {
-      await db.delete(documents).where(eq(documents.id, decoy.id));
-    }
+        sessionId: '00000000-0000-0000-0000-000000000000',
+        userMessage: 'please draft a landing page for our new product',
+      },
+      repo,
+    );
+    expect(payload.blocks).toHaveLength(0);
   });
 });

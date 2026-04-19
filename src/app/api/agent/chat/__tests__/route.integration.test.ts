@@ -68,12 +68,10 @@ import {
   companies,
   documents,
   sessions,
-  skillManifests,
   usageRecords,
   users,
 } from '@/db/schema';
 import { buildAgentDefinitionDoc } from '@/lib/agents/definitions';
-import { rebuildManifest } from '@/lib/skills/loader';
 import { __clearScaffoldingCacheForTests } from '@/lib/context/repos';
 import { __resetContextHandlersForTests } from '@/lib/context/register';
 import { clearHooks } from '@/lib/agent/hooks';
@@ -309,14 +307,7 @@ beforeAll(async () => {
     .returning({ id: documents.id });
   agentDefinitionDocId = agentDef.id;
 
-  // 5. Compile the skill manifest so the UserPromptSubmit handler
-  //    finds the skill when the user's prompt contains the trigger.
-  //    We call `rebuildManifest` directly rather than the debounced
-  //    `scheduleManifestRebuild` so the manifest is guaranteed
-  //    present before the POST fires — no 5s wait in the test.
-  await rebuildManifest(companyId);
-
-  // 6. Create a session already bound to the agent. The sessions POST
+  // 5. Create a session already bound to the agent. The sessions POST
   //    route doesn't yet accept `agentDefinitionId` (follow-up work,
   //    tracked in the Task 9 implementation notes); for this test we
   //    seed the row directly.
@@ -350,9 +341,6 @@ afterAll(async () => {
   await db
     .delete(usageRecords)
     .where(eq(usageRecords.companyId, companyId));
-  await db
-    .delete(skillManifests)
-    .where(eq(skillManifests.companyId, companyId));
   // audit_events has an immutability trigger; drop inside a
   // transaction with it briefly disabled.
   await db.transaction(async (tx) => {

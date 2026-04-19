@@ -11,6 +11,8 @@ import { getDocumentDiffTool } from './implementations/get-document-diff';
 import { getDiffHistoryTool } from './implementations/get-diff-history';
 import { webSearchTool } from './implementations/web-search';
 import { webFetchTool } from './implementations/web-fetch';
+import { loadSkillTool } from './implementations/load-skill';
+import { readSkillFileTool } from './implementations/read-skill-file';
 import { createDocumentTool } from './implementations/create-document';
 import { updateDocumentTool } from './implementations/update-document';
 
@@ -29,6 +31,9 @@ export function registerLocusTools(): void {
   registerTool(getDiffHistoryTool);
   registerTool(webSearchTool);
   registerTool(webFetchTool);
+  // Skill tools
+  registerTool(loadSkillTool);
+  registerTool(readSkillFileTool);
   // Write tools (Task 2)
   registerTool(createDocumentTool);
   registerTool(updateDocumentTool);
@@ -47,6 +52,8 @@ export {
   getDiffHistoryTool,
   webSearchTool,
   webFetchTool,
+  loadSkillTool,
+  readSkillFileTool,
   createDocumentTool,
   updateDocumentTool,
 };

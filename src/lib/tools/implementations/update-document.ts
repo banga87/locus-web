@@ -22,7 +22,7 @@ import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db';
 import { documents, documentVersions } from '@/db/schema';
-import { extractDocumentTypeFromContent, maybeScheduleSkillManifestRebuild } from '@/lib/brain/save';
+import { extractDocumentTypeFromContent } from '@/lib/brain/save';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import type { LocusTool, ToolContext, ToolResult } from '../types';
@@ -281,12 +281,6 @@ export const updateDocumentTool: LocusTool<
 
     // ---- Side effects (best-effort, outside the transaction) ------------
     await tryRegenerateManifest(context.brainId);
-    // Fire on both old and new type so skill manifest stays consistent when
-    // a doc is re-typed (e.g. knowledge → skill or vice-versa).
-    maybeScheduleSkillManifestRebuild(context.companyId, existing.type);
-    if (newType !== existing.type) {
-      maybeScheduleSkillManifestRebuild(context.companyId, newType);
-    }
     // Invalidate the layout tree so the sidebar picks up title/status/
     // folder/pin changes on the next nav without a hard reload. Swallow
     // the invariant when called outside a Next request context (tests,

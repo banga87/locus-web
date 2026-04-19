@@ -33,7 +33,6 @@ import type { HookDecision, HookEvent } from '@/lib/agent/types';
 
 import { proposalPostToolUseHandler } from './proposals';
 import {
-  createDbAgentSkillsRepo,
   createDbScaffoldingRepo,
   createDbUserPromptRepo,
 } from './repos';
@@ -109,34 +108,12 @@ export function registerContextHandlers(): void {
         return { decision: 'allow' };
       }
       try {
-        // Extract a plain string from the harness's `message` payload.
-        // `runAgentTurn` passes a `ModelMessage | undefined` (see
-        // `src/lib/agent/run.ts` line ~249). v6 `UserModelMessage.content`
-        // is `string | Array<TextPart | ImagePart | FilePart>`; we
-        // concatenate all `TextPart.text` entries for the array case so
-        // the skill matcher sees everything the user typed. No message
-        // at all → nothing to match against → allow the turn through
-        // without injecting anything.
+        // Extract the user's text for parity with the builder input
+        // contract (the field is retained for future per-turn
+        // injections, even though the attachments-only builder does
+        // not currently consume it). No message → nothing to inject.
         const userMessage = extractUserMessageText(event.message);
         if (!userMessage) return { decision: 'allow' };
-
-        const agentDefinitionId = event.ctx.agentDefinitionId ?? null;
-
-        // Fetch the agent's skill candidate pool. For the default
-        // Platform Agent (no agentDefinitionId) or a session whose
-        // agent-definition has been soft-deleted, the pool is empty —
-        // the builder short-circuits skill matching in that case.
-        //
-        // Using a dedicated AgentSkillsRepo (rather than extending
-        // ScaffoldingRepo.getAgentDefinition) keeps SessionStart's
-        // read focused on scaffolding concerns. The two repos share
-        // no state, so the extra factory is essentially free.
-        let agentSkillIds: string[] = [];
-        if (agentDefinitionId) {
-          const agentRepo = createDbAgentSkillsRepo();
-          agentSkillIds =
-            (await agentRepo.getAgentSkillIds(agentDefinitionId)) ?? [];
-        }
 
         const repo = createDbUserPromptRepo();
         const payload = await buildUserPromptPayload(
@@ -145,11 +122,8 @@ export function registerContextHandlers(): void {
             // A null `sessionId` is possible for one-off invocations
             // (see `AgentContext.sessionId` — "rare"). The attachments
             // lookup has nothing to correlate on, so coerce to an
-            // empty string and let the (currently stubbed)
-            // getExtractedAttachments return `[]`. Task 8 will need
-            // to guard explicitly when it wires the real query.
+            // empty string and let the query return `[]`.
             sessionId: event.ctx.sessionId ?? '',
-            agentSkillIds,
             userMessage,
           },
           repo,
@@ -157,19 +131,15 @@ export function registerContextHandlers(): void {
 
         // Empty payload — short-circuit as `allow` so the harness
         // doesn't splice a no-op system-role message into the turn.
-        // `renderInjectedContext` would render an empty string and
-        // the harness already guards against that, but returning
-        // `allow` is cleaner and keeps the hook surface easy to read
-        // in traces.
         if (payload.blocks.length === 0) return { decision: 'allow' };
 
         return { decision: 'inject', payload };
       } catch (err) {
-        // Context injection is best-effort. Any throw — manifest
-        // parse error, transient DB blip, buggy repo method —
-        // degrades to a skill/attachment-less turn rather than a
-        // hard failure. The SessionStart scaffolding block and base
-        // system prompt still reach the LLM.
+        // Context injection is best-effort. Any throw — transient DB
+        // blip, buggy repo method — degrades to an attachment-less
+        // turn rather than a hard failure. The SessionStart
+        // scaffolding block and base system prompt still reach the
+        // LLM.
         console.warn(
           '[context/register] UserPromptSubmit handler failed; continuing without injected context',
           err,

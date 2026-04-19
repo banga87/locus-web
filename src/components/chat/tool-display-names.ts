@@ -23,7 +23,19 @@ interface ArgsLike {
   path?: unknown;
   query?: unknown;
   id?: unknown;
+  skill_id?: unknown;
+  relative_path?: unknown;
   [key: string]: unknown;
+}
+
+/**
+ * Shorten a UUID-like skill id to an 8-char prefix with an ellipsis so the
+ * fallback label is recognisable without being overwhelming.
+ * Non-UUID strings are returned unchanged (truncated at 12 chars).
+ */
+function truncateId(id: string): string {
+  if (id.length > 8) return `${id.slice(0, 8)}…`;
+  return id;
 }
 
 /**
@@ -90,6 +102,24 @@ export function displayToolName(name: string, args: unknown): string {
       return 'Comparing document versions';
     case 'get_diff_history':
       return 'Checking edit history';
+    case 'load_skill': {
+      const idLabel =
+        typeof a.skill_id === 'string' && a.skill_id.length > 0
+          ? truncateId(a.skill_id)
+          : 'skill';
+      return `Loading skill (${idLabel})`;
+    }
+    case 'read_skill_file': {
+      const idLabel =
+        typeof a.skill_id === 'string' && a.skill_id.length > 0
+          ? truncateId(a.skill_id)
+          : 'skill';
+      const pathLabel =
+        typeof a.relative_path === 'string' && a.relative_path.length > 0
+          ? a.relative_path
+          : 'file';
+      return `Reading skill file (${idLabel}) \u203a ${pathLabel}`;
+    }
   }
 
   if (name.startsWith('ext_')) {
@@ -121,6 +151,20 @@ export function pillToolName(name: string, args: unknown): string {
       return 'Diff';
     case 'get_diff_history':
       return 'Edit history';
+    case 'load_skill': {
+      const idLabel =
+        typeof a.skill_id === 'string' && a.skill_id.length > 0
+          ? truncateId(a.skill_id)
+          : 'skill';
+      return `Skill (${idLabel})`;
+    }
+    case 'read_skill_file': {
+      const pathLabel =
+        typeof a.relative_path === 'string' && a.relative_path.length > 0
+          ? a.relative_path
+          : 'file';
+      return `Skill file: ${pathLabel}`;
+    }
   }
 
   if (name.startsWith('ext_')) {

@@ -1,18 +1,10 @@
 ---
 type: skill
-title: Ingestion filing rules
-slug: ingestion-filing
-description: Guides how agents propose filing attached documents into the brain.
-triggers:
-  phrases:
-    - process this
-    - file this
-    - extract from
-    - categorize this
-  allOf: []
-  anyOf: []
-  minScore: 1
-priority: 10
+name: Ingestion filing rules
+description: >
+  Use when the user attaches a document and wants it filed into the brain.
+  Covers propose-vs-write rules, update-vs-create heuristics, and
+  large-attachment handling.
 ---
 
 When the user attaches a document, your goal is to help them decide where it

@@ -86,3 +86,55 @@ describe('buildSystemPrompt', () => {
     expect(out).not.toContain('**My Custom Server** (via MCP — `');
   });
 });
+
+describe('buildSystemPrompt availableSkills block', () => {
+  const base = {
+    brain: { name: 'Acme Brain', slug: 'acme' },
+    companyName: 'Acme',
+    folders: [],
+  };
+
+  it('omits the block when no skills are available', () => {
+    const out = buildSystemPrompt({ ...base, availableSkills: [] });
+    expect(out).not.toContain('<available-skills>');
+  });
+
+  it('omits the block when availableSkills is undefined', () => {
+    const out = buildSystemPrompt({ ...base });
+    expect(out).not.toContain('<available-skills>');
+  });
+
+  it('renders one entry per skill with id + name + description', () => {
+    const out = buildSystemPrompt({
+      ...base,
+      availableSkills: [
+        { id: 'abc', name: 'Test', description: 'Use when testing' },
+      ],
+    });
+    expect(out).toContain('<available-skills>');
+    expect(out).toContain('id: abc');
+    expect(out).toContain('name: Test');
+    expect(out).toContain('description: Use when testing');
+    expect(out).toContain('</available-skills>');
+  });
+
+  it('collapses newlines in description', () => {
+    const out = buildSystemPrompt({
+      ...base,
+      availableSkills: [
+        { id: 'x', name: 'Multi', description: 'line one\nline two' },
+      ],
+    });
+    expect(out).toContain('description: line one line two');
+  });
+
+  it('includes the skill-creator authoring nudge after the brain tools list', () => {
+    // Task 32: the agent needs a pointer at `skill-creator` + `propose_skill_create`
+    // so it knows how to codify a repeatable pattern. Rendered unconditionally
+    // — doesn't depend on availableSkills, since the agent can still request
+    // the skill by id via load_skill even if it's not in the visible list.
+    const out = buildSystemPrompt({ ...base });
+    expect(out).toContain("load_skill('skill-creator')");
+    expect(out).toContain('propose_skill_create');
+  });
+});

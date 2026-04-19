@@ -29,6 +29,12 @@ interface SystemPromptInput {
    * case no external-tools section is rendered.
    */
   externalConnections?: ConnectionToolGroup[];
+  /**
+   * Skills visible to this agent (root docs only, already filtered to the
+   * agent's `skillIds` allowlist). Rendered into the <available-skills>
+   * block so the agent can decide when to call load_skill.
+   */
+  availableSkills?: Array<{ id: string; name: string; description: string }>;
 }
 
 export function buildSystemPrompt(input: SystemPromptInput): string {
@@ -45,6 +51,7 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
       : '## Available folders\n_(No folders defined yet — the brain may be empty.)_';
 
   const externalBlock = renderExternalConnections(input.externalConnections);
+  const skillsBlock = renderAvailableSkills(input.availableSkills);
 
   return `You are Locus, the AI assistant for ${input.companyName}. You have access to the company's brain, a structured collection of documents about their business.
 
@@ -66,7 +73,33 @@ ${foldersBlock}
 - \`get_document\`: read a specific document by path, optionally a single section
 - \`get_document_diff\`: see recent changes to a specific document
 - \`get_diff_history\`: see changes across the brain since a timestamp, optionally filtered by folder slug
-${externalBlock}`;
+
+When the user asks to codify a repeatable pattern or process, call \`load_skill('skill-creator')\` to get authoring guidance, interview the user per that skill's Phase 1, then draft with \`propose_skill_create\`.
+${skillsBlock}${externalBlock}`;
+}
+
+function renderAvailableSkills(
+  skills: SystemPromptInput['availableSkills'],
+): string {
+  if (!skills || skills.length === 0) return '';
+  const entries = skills.flatMap((s) => [
+    `- id: ${s.id}`,
+    `  name: ${s.name}`,
+    `  description: ${s.description.replace(/\n/g, ' ').trim()}`,
+    '',
+  ]);
+  return [
+    '',
+    '<available-skills>',
+    "You have access to these skills. When a skill's description matches",
+    'the current task, call `load_skill(id)` to read its full instructions.',
+    'From there you may call `read_skill_file(skill_id, path)` to read any',
+    'nested files the skill references.',
+    '',
+    ...entries,
+    '</available-skills>',
+    '',
+  ].join('\n');
 }
 
 function renderExternalConnections(

@@ -2,82 +2,218 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "./(marketing)/marketing.css";
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-background: var(--paper);
-  --color-foreground: var(--ink);
-  --font-sans: var(--font-body), system-ui, sans-serif;
-  --font-mono: var(--font-mono), ui-monospace, monospace;
-  --font-display: var(--font-display), "Times New Roman", serif;
-  --font-heading: var(--font-display);
-  --color-sidebar: var(--paper-2);
-  --color-sidebar-foreground: var(--ink);
-  --color-sidebar-border: var(--rule-soft);
-  --color-sidebar-accent: var(--accent-soft);
-  --color-sidebar-accent-foreground: var(--accent);
-  --color-sidebar-primary: var(--accent);
-  --color-sidebar-primary-foreground: var(--paper);
-  --color-sidebar-ring: var(--accent);
-  --color-card: var(--paper);
-  --color-card-foreground: var(--ink);
-  --color-popover: var(--paper);
-  --color-popover-foreground: var(--ink);
-  --color-primary: var(--accent);
-  --color-primary-foreground: var(--paper);
-  --color-secondary: var(--paper-2);
-  --color-secondary-foreground: var(--ink);
-  --color-muted: var(--paper-2);
-  --color-muted-foreground: var(--ink-3);
-  --color-accent: var(--accent-soft);
-  --color-accent-foreground: var(--accent);
-  --color-destructive: oklch(0.577 0.245 27.325);
-  --color-border: var(--rule);
-  --color-input: var(--rule);
-  --color-ring: var(--accent);
-  --radius: 0.5rem;
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
+  --color-background:           var(--cream);
+  --color-foreground:           var(--ink-1);
+  --color-card:                 var(--cream-soft);
+  --color-card-foreground:      var(--ink-1);
+  --color-popover:              var(--indigo-deep);
+  --color-popover-foreground:   var(--cream);
+  --color-primary:              var(--indigo-darker);
+  --color-primary-foreground:   var(--cream);
+  --color-secondary:            var(--cream-soft);
+  --color-secondary-foreground: var(--ink-1);
+  --color-muted:                var(--cream-soft);
+  --color-muted-foreground:     var(--ink-3);
+  --color-accent:               var(--brass);
+  --color-accent-foreground:    var(--cream);
+  --color-destructive:          var(--state-error);
+  --color-border:               var(--paper-rule);
+  --color-input:                var(--paper-rule);
+  --color-ring:                 var(--ember-warm);
+  --color-sidebar:              var(--cream-soft);
+  --color-sidebar-foreground:   var(--ink-1);
+  --color-sidebar-border:       var(--paper-rule);
+  --color-sidebar-accent:       var(--agent-highlight);
+  --color-sidebar-accent-foreground: var(--indigo);
+  --color-sidebar-primary:      var(--brass);
+  --color-sidebar-primary-foreground: var(--cream);
+  --color-sidebar-ring:         var(--ember-warm);
+  --font-sans:                  var(--font-body), system-ui, sans-serif;
+  --font-mono:                  var(--font-mono), ui-monospace, monospace;
+  --font-display:               var(--font-display), Georgia, serif;
+  --font-heading:               var(--font-display);
 }
 
 :root, [data-theme="light"] {
-  --paper: #fdfcf9;
-  --paper-2: #f1ede2;
-  --ink: #1a1a17;
-  --ink-2: #4b4a44;
-  --ink-3: #6e6c62;
-  --rule: #e0dccf;
-  --rule-soft: #ecebe0;
-  --hover: #efeadb;
-  --accent: #2f5135;
-  --accent-2: #a85a3a;
-  --accent-soft: rgba(47, 81, 53, 0.08);
-  --draft-bg: #fff0c8;
-  --draft-fg: #7a5a00;
-  --active-bg: #c5e8d1;
-  --active-fg: #2f5135;
+  /* ---- Color: Ground (cream, warm paper) -------------------- */
+  --cream:          #F2EAD8;
+  --cream-soft:     #EBE2CF;
+  --cream-deep:     #E0D4BA;
+  --paper-rule:     #D7C9A8;
+
+  /* ---- Color: Indigo (the ink) ------------------------------ */
+  --indigo:         #2E3E5C;
+  --indigo-deep:    #1F2A3F;
+  --indigo-darker:  #162033;
+  --indigo-ink-2:   #3A4A68;
+  --indigo-ink-3:   #5A6B88;
+
+  /* ---- Color: Warm metals ----------------------------------- */
+  --brass:          #B8863A;
+  --brass-deep:     #8B6425;
+  --brass-soft:     #D7B96E;
+  --copper:         #A86B3D;
+  --copper-verdigris: #6B8570;
+  --iron:           #3A3430;
+  --iron-scale:     #5A5048;
+
+  /* ---- Color: Honey & Ember --------------------------------- */
+  --honey-gold:     #D4A660;
+  --honey-soft:     #E8C887;
+  --ember:          #C65A1F;
+  --ember-warm:     #E8813A;
+  --ember-glow:     #F2A870;
+
+  /* ---- Semantic surfaces (light) ---------------------------- */
+  --surface-0:      var(--cream);
+  --surface-1:      var(--cream-soft);
+  --surface-2:      var(--cream-deep);
+  --surface-inverse: var(--indigo-deep);
+
+  /* ---- Semantic ink ---------------------------------------- */
+  --ink-1:          var(--indigo);
+  --ink-2:          var(--indigo-ink-2);
+  --ink-3:          var(--indigo-ink-3);
+  --ink-muted:      #8894AB;
+  --ink-inverse:    var(--cream);
+  --ink-inverse-2:  rgba(242, 234, 216, 0.72);
+  --ink-inverse-3:  rgba(242, 234, 216, 0.5);
+
+  /* ---- Rules & borders ------------------------------------- */
+  --rule-1:         var(--paper-rule);
+  --rule-2:         #C8B994;
+  --rule-strong:    var(--indigo);
+  --rule-inverse:   rgba(242, 234, 216, 0.18);
+
+  /* ---- Affordances ----------------------------------------- */
+  --accent:         var(--brass);
+  --accent-strong:  var(--brass-deep);
+  --primary-action: var(--indigo-darker);
+  --primary-action-hover: var(--indigo);
+  --focus-ring:     var(--ember-warm);
+  --link:           var(--brass-deep);
+  --link-hover:     var(--ember);
+
+  /* ---- State colors ---------------------------------------- */
+  --state-draft:     #8894AB;
+  --state-active:    var(--ember);
+  --state-stale:     #B0A58A;
+  --state-ok:        #6B8570;
+  --state-warn:      var(--honey-gold);
+  --state-error:     #A84428;
+  --agent-highlight: rgba(198, 90, 31, 0.12);
+  --agent-edit:      rgba(184, 134, 58, 0.16);
+
+  /* ---- Radius (restrained — this is industrial) ------------ */
+  --r-none:         0;
+  --r-xs:           2px;
+  --r-sm:           3px;
+  --r-md:           4px;
+  --r-lg:           6px;  /* cap */
+
+  /* Shadcn-compat radius shim (clamps `rounded-2xl` to 6px) */
+  --radius:         4px;
+  --radius-sm:      2px;
+  --radius-md:      3px;
+  --radius-lg:      4px;
+  --radius-xl:      6px;
+  --radius-2xl:     6px;
+
+  /* ---- Elevation — letterpress ------------------------------ */
+  --shadow-0:       none;
+  --shadow-1:       0 1px 0 rgba(31, 42, 63, 0.08);
+  --shadow-2:       0 1px 0 rgba(31, 42, 63, 0.06), 0 2px 6px rgba(31, 42, 63, 0.08);
+  --shadow-3:       0 2px 0 rgba(31, 42, 63, 0.08), 0 8px 24px rgba(31, 42, 63, 0.12);
+  --shadow-inset:   inset 0 1px 0 rgba(31, 42, 63, 0.08);
+  --shadow-inverse: 0 2px 0 rgba(0,0,0,0.35), 0 12px 40px rgba(0,0,0,0.45);
+
+  /* Shadcn-compat shadow shim */
+  --shadow-sm:      var(--shadow-1);
+  --shadow-md:      var(--shadow-2);
+  --shadow-lg:      var(--shadow-3);
+  --shadow-xl:      var(--shadow-3);
+  --shadow-2xl:     var(--shadow-3);
+
+  /* ---- Spacing (8pt with 4pt half-step) -------------------- */
+  --s-0:  4px;
+  --s-1:  8px;
+  --s-2:  12px;
+  --s-3:  16px;
+  --s-4:  24px;
+  --s-5:  32px;
+  --s-6:  48px;
+  --s-7:  64px;
+  --s-8:  96px;
+  --s-9:  128px;
+
+  /* ---- Motion ---------------------------------------------- */
+  --ease-lever:     cubic-bezier(0.3, 0.7, 0.2, 1);
+  --ease-valve:     cubic-bezier(0.5, 0, 0.2, 1);
+  --ease-needle:    cubic-bezier(0.35, 0, 0.25, 1);
+  --dur-quick:      120ms;
+  --dur-base:       200ms;
+  --dur-calm:       360ms;
+
+  /* ---- Type families --------------------------------------- */
+  --font-display:   'EB Garamond', 'Hoefler Text', Georgia, serif;
+  --font-body:      'Source Sans 3', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --font-mono:      'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-wordmark-tagline: system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* ---- Type scale (display) -------------------------------- */
+  --d-display:  clamp(64px, 9vw, 140px);
+  --d-h1:       clamp(48px, 6vw, 96px);
+  --d-h2:       clamp(36px, 4.2vw, 64px);
+  --d-h3:       clamp(26px, 2.4vw, 36px);
+  --d-h4:       22px;
+  --d-eyebrow:  11px;
+
+  /* ---- Type scale (body / UI) ------------------------------ */
+  --t-lede:     20px;
+  --t-body:     16px;
+  --t-body-sm:  14px;
+  --t-ui:       14px;
+  --t-ui-sm:    13px;
+  --t-meta:     12px;
+  --t-micro:    11px;
+
+  /* ---- Line heights ---------------------------------------- */
+  --lh-tight:   1.0;
+  --lh-heading: 1.08;
+  --lh-snug:    1.3;
+  --lh-body:    1.6;
+  --lh-prose:   1.7;
 }
 
 [data-theme="dark"], .dark {
-  --paper: #161513;
-  --paper-2: #1e1c18;
-  --ink: #ebe7dc;
-  --ink-2: #a8a397;
-  --ink-3: #6b6759;
-  --rule: #2a2824;
-  --rule-soft: #221f1b;
-  --hover: #201e1a;
-  --accent: #a4c9a9;
-  --accent-2: #d99474;
-  --accent-soft: rgba(164, 201, 169, 0.1);
-  --draft-bg: #3a2f0a;
-  --draft-fg: #ffd966;
-  --active-bg: #1f3a29;
-  --active-fg: #a4c9a9;
+  --surface-0:       var(--indigo-deep);
+  --surface-1:       var(--indigo-darker);
+  --surface-2:       #0E1826;
+  --surface-inverse: var(--cream);
+
+  --ink-1:           var(--cream);
+  --ink-2:           rgba(242, 234, 216, 0.78);
+  --ink-3:           rgba(242, 234, 216, 0.58);
+  --ink-muted:       rgba(242, 234, 216, 0.38);
+  --ink-inverse:     var(--indigo);
+  --ink-inverse-2:   rgba(242, 234, 216, 0.72);
+  --ink-inverse-3:   rgba(242, 234, 216, 0.5);
+
+  --rule-1:          rgba(242, 234, 216, 0.14);
+  --rule-2:          rgba(242, 234, 216, 0.22);
+  --rule-strong:     var(--brass-soft);
+
+  --accent:          var(--brass-soft);
+  --accent-strong:   var(--brass);
+  --primary-action:  var(--cream);
+  --primary-action-hover: var(--honey-soft);
+  --link:            var(--honey-soft);
+  --link-hover:      var(--ember-glow);
 }
 
 @layer base {

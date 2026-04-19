@@ -5,10 +5,13 @@
 // Read-only for installed skills: renders markdown via DocumentRenderer.
 // For authored/forked skills an "Edit" toggle swaps to TiptapEditor.
 //
-// Save is STUBBED in Task 24 — the PATCH route lands in Task 25.
-// Clicking Save shows an alert and logs a TODO comment.
+// Known tradeoff: Tiptap operates on HTML internally. We pass raw markdown as
+// initialContent (Tiptap treats it as plain text) and save whatever getHTML()
+// emits. Markdown↔HTML fidelity is lossy on round-trip — a proper pipeline
+// (markdown-it → ProseMirror, prosemirror-to-markdown) is deferred post-MVP.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { PencilIcon, XIcon } from 'lucide-react';
 import { marked } from 'marked';
 
@@ -24,30 +27,81 @@ interface FileViewerProps {
   filename: string;
   /** Allow edit toggle (authored or forked skill). */
   canEdit: boolean;
+  /** Root skill document id — used to build the PATCH URL. */
+  skillId: string;
+  /**
+   * The relative path that identifies this file in the API:
+   *   'SKILL.md'           → PATCH updates root body
+   *   'references/foo.md'  → PATCH updates that child resource
+   */
+  relativePath: string;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function FileViewer({ content, filename, canEdit }: FileViewerProps) {
+export function FileViewer({
+  content,
+  filename,
+  canEdit,
+  skillId,
+  relativePath,
+}: FileViewerProps) {
+  const router = useRouter();
+
   const [editing, setEditing] = useState(false);
-  // Tiptap receives raw markdown as a string; Save is stubbed so fidelity
-  // doesn't matter here — Task 25 will add proper markdown↔HTML conversion.
+  // Tiptap receives raw markdown as a string; it treats it as plain text.
+  // See the known-tradeoff comment at the top of this file.
   const [draft, setDraft] = useState(content);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const abortRef = useRef<AbortController | null>(null);
 
   function handleEdit() {
     setDraft(content);
+    setSaveError(null);
     setEditing(true);
   }
 
   function handleCancel() {
+    abortRef.current?.abort();
     setEditing(false);
+    setSaveError(null);
   }
 
-  function handleSave() {
-    // TODO(Task 25): wire up PATCH /api/skills/[id]/resources/[path]
-    // Coming in next task — Save is stubbed here.
-    console.log('[FileViewer] stub: save not yet wired', { filename, draft });
-    alert('Save will be implemented in the next task.');
+  async function handleSave() {
+    setSaveError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setSaving(true);
+    try {
+      const encodedPath = relativePath
+        .split('/')
+        .map(encodeURIComponent)
+        .join('/');
+
+      const res = await fetch(`/api/skills/${skillId}/resources/${encodedPath}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: draft }),
+        signal: controller.signal,
+      });
+
+      if (res.ok) {
+        setEditing(false);
+        router.refresh();
+      } else {
+        const json = (await res.json()) as { error?: { message?: string } };
+        setSaveError(json?.error?.message ?? 'Failed to save.');
+      }
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') {
+        setSaveError('An unexpected error occurred.');
+      }
+    } finally {
+      setSaving(false);
+    }
   }
 
   const html = marked.parse(content, { async: false }) as string;
@@ -61,12 +115,15 @@ export function FileViewer({ content, filename, canEdit }: FileViewerProps) {
           <div className="flex items-center gap-1.5">
             {editing ? (
               <>
-                <Button variant="outline" size="sm" onClick={handleCancel}>
+                {saveError && (
+                  <span className="text-xs text-destructive mr-2">{saveError}</span>
+                )}
+                <Button variant="outline" size="sm" onClick={handleCancel} disabled={saving}>
                   <XIcon className="mr-1.5 size-3.5" />
                   Cancel
                 </Button>
-                <Button size="sm" onClick={handleSave}>
-                  Save
+                <Button size="sm" onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving…' : 'Save'}
                 </Button>
               </>
             ) : (

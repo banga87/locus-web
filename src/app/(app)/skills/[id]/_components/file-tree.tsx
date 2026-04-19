@@ -33,6 +33,8 @@ interface FileTreeProps {
   selectedId: string;
   onSelect: (id: string) => void;
   canEdit: boolean;
+  /** Called when the user clicks "+ Add file". Controller in parent. */
+  onAddFileClick?: () => void;
 }
 
 // ─── Tree node shapes ────────────────────────────────────────────────────────
@@ -178,6 +180,7 @@ export function FileTree({
   selectedId,
   onSelect,
   canEdit,
+  onAddFileClick,
 }: FileTreeProps) {
   const nodes = buildTree(resources);
 
@@ -218,13 +221,12 @@ export function FileTree({
         ),
       )}
 
-      {/* Add file affordance — inert in Task 24; wired in Task 25 */}
+      {/* Add file affordance */}
       {canEdit && (
         <button
           type="button"
-          disabled
-          className="mt-2 flex items-center gap-1.5 rounded px-2 py-1 text-left text-xs text-muted-foreground opacity-60 cursor-not-allowed"
-          title="Coming in next task"
+          onClick={onAddFileClick}
+          className="mt-2 flex items-center gap-1.5 rounded px-2 py-1 text-left text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         >
           + Add file
         </button>

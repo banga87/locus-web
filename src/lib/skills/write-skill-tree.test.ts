@@ -17,7 +17,13 @@ import {
   type Fixtures,
 } from '@/lib/tools/__tests__/_fixtures';
 
-import { writeSkillTree, replaceSkillResources } from './write-skill-tree';
+import {
+  writeSkillTree,
+  replaceSkillResources,
+  createResource,
+  updateResource,
+  deleteResource,
+} from './write-skill-tree';
 import { deriveResourceSlug, deriveResourcePath } from './resource-slug';
 
 // ---------------------------------------------------------------------------
@@ -382,5 +388,295 @@ describe('replaceSkillResources', () => {
         newResources: [],
       }),
     ).rejects.toThrow('skill is not an install (no source block); cannot replace resources');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createResource
+// ---------------------------------------------------------------------------
+
+describe('createResource', () => {
+  let f: Fixtures;
+
+  beforeEach(async () => {
+    f = await setupFixtures('create-resource');
+  });
+
+  afterEach(async () => {
+    await teardownFixtures(f);
+  });
+
+  it('happy path — inserts child row with correct shape', async () => {
+    const { rootId } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Authored Skill CR',
+      description: 'For createResource tests.',
+      skillMdBody: '# Root',
+      resources: [],
+    });
+
+    const { resourceId } = await createResource({
+      rootId,
+      relativePath: 'templates/short.md',
+      content: '# Short template\nContent here.',
+    });
+
+    expect(resourceId).toBeTruthy();
+
+    const [row] = await db
+      .select()
+      .from(documents)
+      .where(eq(documents.id, resourceId));
+
+    expect(row.type).toBe('skill-resource');
+    expect(row.parentSkillId).toBe(rootId);
+    expect(row.relativePath).toBe('templates/short.md');
+    expect(row.title).toBe('short');
+    expect(row.content).toBe('# Short template\nContent here.');
+    expect(row.status).toBe('active');
+    expect(row.version).toBe(1);
+    expect(row.deletedAt).toBeNull();
+  });
+
+  it('rejects installed skills with "installed skill is read-only"', async () => {
+    const { rootId } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Installed Skill CR',
+      description: 'From GitHub.',
+      skillMdBody: '# Root',
+      resources: [],
+      source: {
+        github: { owner: 'acme', repo: 'skills', skill: 'test' },
+        sha: 'abc',
+        imported_at: new Date().toISOString(),
+      },
+    });
+
+    await expect(
+      createResource({ rootId, relativePath: 'guide.md', content: '# Guide' }),
+    ).rejects.toThrow('installed skill is read-only');
+  });
+
+  it('rejects duplicate relativePath with "resource already exists"', async () => {
+    const { rootId } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Dup Resource Skill',
+      description: 'For dup test.',
+      skillMdBody: '# Root',
+      resources: [{ relative_path: 'guide.md', content: '# Existing' }],
+    });
+
+    await expect(
+      createResource({ rootId, relativePath: 'guide.md', content: '# Dup' }),
+    ).rejects.toThrow('resource already exists');
+  });
+
+  it('throws "skill root not found" for unknown rootId', async () => {
+    await expect(
+      createResource({
+        rootId: '00000000-0000-0000-0000-000000000000',
+        relativePath: 'guide.md',
+        content: '# Guide',
+      }),
+    ).rejects.toThrow('skill root not found');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// updateResource
+// ---------------------------------------------------------------------------
+
+describe('updateResource', () => {
+  let f: Fixtures;
+
+  beforeEach(async () => {
+    f = await setupFixtures('update-resource');
+  });
+
+  afterEach(async () => {
+    await teardownFixtures(f);
+  });
+
+  it('SKILL.md path — preserves frontmatter, replaces body, bumps version', async () => {
+    const { rootId } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Update Root Test',
+      description: 'For updateResource SKILL.md path.',
+      skillMdBody: '# Original body',
+      resources: [],
+    });
+
+    await updateResource({
+      rootId,
+      relativePath: 'SKILL.md',
+      newContent: '# Updated body\n\nNew content here.',
+    });
+
+    const [root] = await db
+      .select({ content: documents.content, version: documents.version })
+      .from(documents)
+      .where(eq(documents.id, rootId));
+
+    // Version bumped
+    expect(root.version).toBe(2);
+
+    // Frontmatter preserved
+    const fmBlock = root.content.slice(4, root.content.indexOf('\n---\n', 4));
+    const fm = yaml.load(fmBlock) as Record<string, unknown>;
+    expect(fm.name).toBe('Update Root Test');
+    expect(fm.description).toBe('For updateResource SKILL.md path.');
+
+    // New body present
+    expect(root.content).toContain('# Updated body');
+    expect(root.content).not.toContain('# Original body');
+  });
+
+  it('child path — updates resource content', async () => {
+    const { rootId, resourceIds } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Update Child Test',
+      description: 'For updateResource child path.',
+      skillMdBody: '# Root',
+      resources: [{ relative_path: 'guide.md', content: '# Old guide' }],
+    });
+
+    await updateResource({
+      rootId,
+      relativePath: 'guide.md',
+      newContent: '# New guide content',
+    });
+
+    const [child] = await db
+      .select({ content: documents.content })
+      .from(documents)
+      .where(eq(documents.id, resourceIds[0]));
+
+    expect(child.content).toBe('# New guide content');
+  });
+
+  it('rejects installed skills with "installed skill is read-only"', async () => {
+    const { rootId } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Installed Skill UR',
+      description: 'Installed.',
+      skillMdBody: '# Root',
+      resources: [],
+      source: {
+        github: { owner: 'acme', repo: 'skills', skill: 'test' },
+        sha: 'abc',
+        imported_at: new Date().toISOString(),
+      },
+    });
+
+    await expect(
+      updateResource({ rootId, relativePath: 'SKILL.md', newContent: '# New' }),
+    ).rejects.toThrow('installed skill is read-only');
+  });
+
+  it('throws "resource not found" for unknown child relativePath', async () => {
+    const { rootId } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Missing Child Skill',
+      description: 'No children.',
+      skillMdBody: '# Root',
+      resources: [],
+    });
+
+    await expect(
+      updateResource({ rootId, relativePath: 'nonexistent.md', newContent: '# x' }),
+    ).rejects.toThrow('resource not found');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deleteResource
+// ---------------------------------------------------------------------------
+
+describe('deleteResource', () => {
+  let f: Fixtures;
+
+  beforeEach(async () => {
+    f = await setupFixtures('delete-resource');
+  });
+
+  afterEach(async () => {
+    await teardownFixtures(f);
+  });
+
+  it('soft-deletes the matching child row', async () => {
+    const { rootId, resourceIds } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Delete Child Test',
+      description: 'For deleteResource.',
+      skillMdBody: '# Root',
+      resources: [{ relative_path: 'guide.md', content: '# Guide' }],
+    });
+
+    await deleteResource({ rootId, relativePath: 'guide.md' });
+
+    const [child] = await db
+      .select({ deletedAt: documents.deletedAt })
+      .from(documents)
+      .where(eq(documents.id, resourceIds[0]));
+
+    expect(child.deletedAt).not.toBeNull();
+  });
+
+  it('rejects relativePath === SKILL.md', async () => {
+    const { rootId } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Cannot Delete Root Test',
+      description: 'For deleteResource SKILL.md guard.',
+      skillMdBody: '# Root',
+      resources: [],
+    });
+
+    await expect(
+      deleteResource({ rootId, relativePath: 'SKILL.md' }),
+    ).rejects.toThrow('cannot delete SKILL.md; delete the skill itself');
+  });
+
+  it('rejects installed skills with "installed skill is read-only"', async () => {
+    const { rootId } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Installed Skill DR',
+      description: 'Installed.',
+      skillMdBody: '# Root',
+      resources: [{ relative_path: 'guide.md', content: '# Guide' }],
+      source: {
+        github: { owner: 'acme', repo: 'skills', skill: 'test' },
+        sha: 'abc',
+        imported_at: new Date().toISOString(),
+      },
+    });
+
+    await expect(
+      deleteResource({ rootId, relativePath: 'guide.md' }),
+    ).rejects.toThrow('installed skill is read-only');
+  });
+
+  it('throws "resource not found" for unknown relativePath', async () => {
+    const { rootId } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Missing Resource DR',
+      description: 'No children.',
+      skillMdBody: '# Root',
+      resources: [],
+    });
+
+    await expect(
+      deleteResource({ rootId, relativePath: 'nonexistent.md' }),
+    ).rejects.toThrow('resource not found');
   });
 });

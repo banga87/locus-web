@@ -24,6 +24,7 @@ import { FileTree } from './file-tree';
 import { FileViewer } from './file-viewer';
 import { ForkButton } from './fork-button';
 import { UpdateModal } from './update-modal';
+import { AddFileInline } from './add-file-inline';
 import type { SkillOrigin } from '@/lib/skills/types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -81,20 +82,23 @@ export function SkillDetailClient({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [addingFile, setAddingFile] = useState(false);
 
   // authored or forked skills can have files edited
   const canEditFiles = canEdit && (root.origin.kind === 'authored' || root.origin.kind === 'forked');
 
-  // Resolve the selected file's content + filename.
+  // Resolve the selected file's content + filename + relativePath for the PATCH URL.
   const selectedFile = (() => {
     if (selectedId === root.id) {
-      return { content: root.body, filename: 'SKILL.md' };
+      return { content: root.body, filename: 'SKILL.md', relativePath: 'SKILL.md' };
     }
     const res = resources.find((r) => r.id === selectedId);
-    if (!res) return { content: root.body, filename: 'SKILL.md' };
+    if (!res) return { content: root.body, filename: 'SKILL.md', relativePath: 'SKILL.md' };
+    const relPath = res.relativePath ?? res.title;
     return {
       content: res.content,
-      filename: res.relativePath ?? res.title,
+      filename: relPath,
+      relativePath: relPath,
     };
   })();
 
@@ -223,7 +227,16 @@ export function SkillDetailClient({
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 canEdit={canEditFiles}
+                onAddFileClick={() => setAddingFile(true)}
               />
+              {/* Add file inline form — shown below the tree when active */}
+              {addingFile && (
+                <AddFileInline
+                  skillId={root.id}
+                  onSaved={() => setAddingFile(false)}
+                  onCancel={() => setAddingFile(false)}
+                />
+              )}
             </div>
 
             {/* File viewer — right */}
@@ -232,6 +245,8 @@ export function SkillDetailClient({
                 content={selectedFile.content}
                 filename={selectedFile.filename}
                 canEdit={canEditFiles}
+                skillId={root.id}
+                relativePath={selectedFile.relativePath}
               />
             </div>
           </div>

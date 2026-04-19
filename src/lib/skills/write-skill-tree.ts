@@ -336,6 +336,288 @@ export async function replaceSkillResources(
 }
 
 // ---------------------------------------------------------------------------
+// createResource
+// ---------------------------------------------------------------------------
+
+export interface CreateResourceInput {
+  rootId: string;
+  relativePath: string;
+  content: string;
+}
+
+export interface CreateResourceResult {
+  resourceId: string;
+}
+
+/**
+ * Insert a new skill-resource child row under an existing authored/forked
+ * skill root. Rejects installed skills (source.github present).
+ *
+ * Throws:
+ *   'skill root not found'          — rootId missing or not type='skill'
+ *   'installed skill is read-only'  — root has source.github block
+ *   'resource already exists'       — live row with same (parent, relativePath)
+ */
+export async function createResource(
+  input: CreateResourceInput,
+): Promise<CreateResourceResult> {
+  const { rootId, relativePath, content } = input;
+
+  return db.transaction(async (tx) => {
+    // Lock the root so concurrent writes serialize.
+    const [existingRoot] = await tx
+      .select({
+        id: documents.id,
+        type: documents.type,
+        slug: documents.slug,
+        content: documents.content,
+        companyId: documents.companyId,
+        brainId: documents.brainId,
+      })
+      .from(documents)
+      .where(and(eq(documents.id, rootId), isNull(documents.deletedAt)))
+      .for('update')
+      .limit(1);
+
+    if (!existingRoot || existingRoot.type !== 'skill') {
+      throw new Error('skill root not found');
+    }
+
+    // Guard: reject installed skills.
+    const fmEndIdx = existingRoot.content.indexOf('\n---\n', 4);
+    const fmBlock = fmEndIdx !== -1 ? existingRoot.content.slice(4, fmEndIdx) : '';
+    const fm = (yaml.load(fmBlock) as Record<string, unknown> | null) ?? {};
+    const source = fm.source as { github?: unknown } | undefined;
+    if (source?.github) {
+      throw new Error('installed skill is read-only');
+    }
+
+    // Check for existing live row.
+    const [existing] = await tx
+      .select({ id: documents.id })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.parentSkillId, rootId),
+          eq(documents.relativePath, relativePath),
+          isNull(documents.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      throw new Error('resource already exists');
+    }
+
+    const resourceId = randomUUID();
+    const resSlug = deriveResourceSlug(resourceId);
+    const resPath = deriveResourcePath(existingRoot.slug, relativePath);
+
+    await tx.insert(documents).values({
+      id: resourceId,
+      companyId: existingRoot.companyId,
+      brainId: existingRoot.brainId,
+      folderId: null,
+      ownerId: null,
+      parentSkillId: rootId,
+      relativePath,
+      type: 'skill-resource',
+      title: resourceTitle(relativePath),
+      slug: resSlug,
+      path: resPath,
+      content,
+      summary: null,
+      status: 'active',
+      confidenceLevel: 'medium',
+      isCore: false,
+      version: 1,
+    });
+
+    return { resourceId };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// updateResource
+// ---------------------------------------------------------------------------
+
+export interface UpdateResourceInput {
+  rootId: string;
+  relativePath: string;
+  newContent: string;
+}
+
+/**
+ * Update a skill file's content.
+ *
+ * - relativePath === 'SKILL.md': rewrites the root doc's body, preserving
+ *   its YAML frontmatter, and bumps version.
+ * - Any other path: updates the matching child resource's content.
+ *
+ * Rejects installed skills (source.github present).
+ *
+ * Throws:
+ *   'skill root not found'          — rootId missing or not type='skill'
+ *   'installed skill is read-only'  — root has source.github block
+ *   'resource not found'            — child relativePath not found
+ */
+export async function updateResource(
+  input: UpdateResourceInput,
+): Promise<void> {
+  const { rootId, relativePath, newContent } = input;
+
+  await db.transaction(async (tx) => {
+    const [existingRoot] = await tx
+      .select({
+        id: documents.id,
+        type: documents.type,
+        content: documents.content,
+        version: documents.version,
+      })
+      .from(documents)
+      .where(and(eq(documents.id, rootId), isNull(documents.deletedAt)))
+      .for('update')
+      .limit(1);
+
+    if (!existingRoot || existingRoot.type !== 'skill') {
+      throw new Error('skill root not found');
+    }
+
+    // Guard: reject installed skills.
+    const fmEndIdx = existingRoot.content.indexOf('\n---\n', 4);
+    const fmBlock = fmEndIdx !== -1 ? existingRoot.content.slice(4, fmEndIdx) : '';
+    const fm = (yaml.load(fmBlock) as Record<string, unknown> | null) ?? {};
+    const source = fm.source as { github?: unknown } | undefined;
+    if (source?.github) {
+      throw new Error('installed skill is read-only');
+    }
+
+    if (relativePath === 'SKILL.md') {
+      // Update root body — preserve frontmatter.
+      // The content format is: `---\n<yaml>\n---\n\n<body>`.
+      // fmEndIdx points to the start of '\n---\n' after the YAML block.
+      const frontmatterEnd = fmEndIdx !== -1 ? fmEndIdx + 5 : 0; // skip '\n---\n'
+      const frontmatterBlock = frontmatterEnd > 0
+        ? existingRoot.content.slice(0, frontmatterEnd)
+        : '';
+      const updatedContent = frontmatterBlock
+        ? `${frontmatterBlock}\n${newContent}`
+        : newContent;
+
+      await tx
+        .update(documents)
+        .set({
+          content: updatedContent,
+          version: existingRoot.version + 1,
+          updatedAt: new Date(),
+        })
+        .where(eq(documents.id, rootId));
+    } else {
+      // Update a child resource.
+      const [child] = await tx
+        .select({ id: documents.id })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.parentSkillId, rootId),
+            eq(documents.relativePath, relativePath),
+            isNull(documents.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      if (!child) {
+        throw new Error('resource not found');
+      }
+
+      await tx
+        .update(documents)
+        .set({
+          content: newContent,
+          version: 1, // resources track their own version independently
+          updatedAt: new Date(),
+        })
+        .where(eq(documents.id, child.id));
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// deleteResource
+// ---------------------------------------------------------------------------
+
+export interface DeleteResourceInput {
+  rootId: string;
+  relativePath: string;
+}
+
+/**
+ * Soft-delete a skill-resource child row.
+ *
+ * Rejects:
+ *   relativePath === 'SKILL.md' → 'cannot delete SKILL.md; delete the skill itself'
+ *   installed skills             → 'installed skill is read-only'
+ *
+ * Throws:
+ *   'skill root not found'
+ *   'resource not found'
+ */
+export async function deleteResource(input: DeleteResourceInput): Promise<void> {
+  const { rootId, relativePath } = input;
+
+  if (relativePath === 'SKILL.md') {
+    throw new Error('cannot delete SKILL.md; delete the skill itself');
+  }
+
+  await db.transaction(async (tx) => {
+    const [existingRoot] = await tx
+      .select({
+        id: documents.id,
+        type: documents.type,
+        content: documents.content,
+      })
+      .from(documents)
+      .where(and(eq(documents.id, rootId), isNull(documents.deletedAt)))
+      .for('update')
+      .limit(1);
+
+    if (!existingRoot || existingRoot.type !== 'skill') {
+      throw new Error('skill root not found');
+    }
+
+    // Guard: reject installed skills.
+    const fmEndIdx = existingRoot.content.indexOf('\n---\n', 4);
+    const fmBlock = fmEndIdx !== -1 ? existingRoot.content.slice(4, fmEndIdx) : '';
+    const fm = (yaml.load(fmBlock) as Record<string, unknown> | null) ?? {};
+    const source = fm.source as { github?: unknown } | undefined;
+    if (source?.github) {
+      throw new Error('installed skill is read-only');
+    }
+
+    const [child] = await tx
+      .select({ id: documents.id })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.parentSkillId, rootId),
+          eq(documents.relativePath, relativePath),
+          isNull(documents.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!child) {
+      throw new Error('resource not found');
+    }
+
+    await tx
+      .update(documents)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(documents.id, child.id));
+  });
+}
+
+// ---------------------------------------------------------------------------
 // forkSkill
 // ---------------------------------------------------------------------------
 

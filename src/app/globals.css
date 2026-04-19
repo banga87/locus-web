@@ -533,8 +533,8 @@
 }
 
 .side {
-  background: var(--paper-2);
-  border-right: 1px solid var(--rule);
+  background: var(--cream-soft);
+  border-right: 1px solid var(--paper-rule);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -545,7 +545,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  border-bottom: 1px solid var(--rule-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--paper-rule) 60%, transparent);
 }
 .brand-name {
   font-family: var(--font-display);
@@ -553,7 +553,7 @@
   font-weight: 500;
   font-style: italic;
   letter-spacing: -0.02em;
-  color: var(--ink);
+  color: var(--ink-1);
   line-height: 1;
 }
 .brand-dot {
@@ -581,7 +581,7 @@
   height: 26px;
   border-radius: 4px;
   background: var(--accent);
-  color: var(--paper);
+  color: var(--cream);
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 14px;
@@ -604,7 +604,7 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  border-bottom: 1px solid var(--rule-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--paper-rule) 60%, transparent);
 }
 .quick-item {
   padding: 7px 12px;
@@ -619,8 +619,8 @@
   text-decoration: none;
 }
 .quick-item:hover {
-  background: var(--hover);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--ink-1) 4%, transparent);
+  color: var(--ink-1);
 }
 .quick-item.active {
   background: var(--accent-soft);
@@ -632,10 +632,10 @@
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--ink-3);
-  background: var(--paper);
+  background: var(--cream);
   padding: 2px 6px;
   border-radius: 3px;
-  border: 1px solid var(--rule);
+  border: 1px solid var(--paper-rule);
 }
 
 .side-body {
@@ -647,7 +647,7 @@
   width: 8px;
 }
 .side-body::-webkit-scrollbar-thumb {
-  background: var(--rule);
+  background: var(--paper-rule);
   border-radius: 4px;
 }
 
@@ -663,8 +663,8 @@
   text-decoration: none;
 }
 .node:hover {
-  background: var(--hover);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--ink-1) 4%, transparent);
+  color: var(--ink-1);
 }
 .node.selected,
 .node[data-active="true"] {
@@ -721,7 +721,7 @@
 }
 .node.open .chev {
   transform: rotate(90deg);
-  color: var(--ink);
+  color: var(--ink-1);
 }
 .node.leaf .chev {
   visibility: hidden;
@@ -731,14 +731,14 @@
   height: 14px;
   flex-shrink: 0;
   border-radius: 3px;
-  border: 1px solid var(--rule);
+  border: 1px solid var(--paper-rule);
   display: grid;
   place-items: center;
   font-size: 10px;
   color: var(--ink-3);
 }
 .node.folder .node-bullet {
-  background: var(--paper);
+  background: var(--cream);
 }
 .node.doc .node-bullet {
   border: none;
@@ -771,7 +771,7 @@
 }
 
 .nav-bottom {
-  border-top: 1px solid var(--rule-soft);
+  border-top: 1px solid color-mix(in srgb, var(--paper-rule) 60%, transparent);
   padding: 10px 10px 14px;
   display: flex;
   flex-direction: column;
@@ -782,7 +782,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border-top: 1px solid var(--rule-soft);
+  border-top: 1px solid color-mix(in srgb, var(--paper-rule) 60%, transparent);
 }
 .user-av {
   width: 28px;
@@ -791,9 +791,9 @@
   background: linear-gradient(
     135deg,
     var(--accent-2),
-    color-mix(in srgb, var(--accent-2) 50%, var(--paper))
+    color-mix(in srgb, var(--accent-2) 50%, var(--cream))
   );
-  color: var(--paper);
+  color: var(--cream);
   font-family: var(--font-display);
   font-size: 12px;
   font-weight: 600;
@@ -803,7 +803,7 @@
 .user-name {
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--ink-1);
 }
 .user-sub {
   font-size: 11px;
@@ -814,7 +814,7 @@
 .main {
   display: flex;
   flex-direction: column;
-  background: var(--paper);
+  background: var(--cream);
   overflow: hidden;
 }
 .topbar {
@@ -822,7 +822,7 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  border-bottom: 1px solid var(--rule-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--paper-rule) 60%, transparent);
 }
 .crumbs {
   font-family: var(--font-mono);
@@ -833,7 +833,7 @@
   gap: 6px;
 }
 .crumbs .cur {
-  color: var(--ink);
+  color: var(--ink-1);
 }
 .topbar-spacer {
   flex: 1;
@@ -850,15 +850,15 @@
   cursor: pointer;
 }
 .icon-btn:hover {
-  background: var(--hover);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--ink-1) 4%, transparent);
+  color: var(--ink-1);
 }
 .theme-pill {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  background: var(--paper-2);
+  background: var(--cream-soft);
   color: var(--ink-2);
-  border: 1px solid var(--rule);
+  border: 1px solid var(--paper-rule);
   padding: 6px 12px;
   border-radius: 20px;
   cursor: pointer;
@@ -915,8 +915,8 @@
   display: flex;
   gap: 20px;
   padding: 14px 0;
-  border-top: 1px solid var(--rule);
-  border-bottom: 1px solid var(--rule);
+  border-top: 1px solid var(--paper-rule);
+  border-bottom: 1px solid var(--paper-rule);
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-3);
@@ -930,7 +930,7 @@
   gap: 3px;
 }
 .meta-row .val {
-  color: var(--ink);
+  color: var(--ink-1);
   font-family: var(--font-body);
   font-size: 12.5px;
   font-weight: 500;
@@ -985,7 +985,7 @@
   touch-action: none;
 }
 .sidebar-resize-handle:hover {
-  background: var(--rule-soft);
+  background: color-mix(in srgb, var(--paper-rule) 60%, transparent);
 }
 .sidebar-resize-handle:focus-visible {
   background: var(--accent-soft);
@@ -1012,7 +1012,7 @@
   border-radius: 4px; color: var(--ink-3);
   cursor: pointer;
 }
-.brand-collapse:hover { background: var(--hover); color: var(--ink); }
+.brand-collapse:hover { background: color-mix(in srgb, var(--ink-1) 4%, transparent); color: var(--ink-1); }
 .brand-collapse:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
@@ -1023,8 +1023,8 @@
   align-items: center;
   padding: 14px 4px;
   gap: 6px;
-  background: var(--paper-2);
-  border-right: 1px solid var(--rule);
+  background: var(--cream-soft);
+  border-right: 1px solid var(--paper-rule);
   overflow: hidden;
 }
 .rail-brand {
@@ -1055,7 +1055,7 @@
   text-decoration: none;
   position: relative;
 }
-.rail-btn:hover { background: var(--hover); color: var(--ink); }
+.rail-btn:hover { background: color-mix(in srgb, var(--ink-1) 4%, transparent); color: var(--ink-1); }
 .rail-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -1098,8 +1098,8 @@
   position: fixed;
   top: 12px; left: 12px;
   width: 36px; height: 36px;
-  background: var(--paper);
-  border: 1px solid var(--rule);
+  background: var(--cream);
+  border: 1px solid var(--paper-rule);
   border-radius: 6px;
   cursor: pointer;
   z-index: 40;

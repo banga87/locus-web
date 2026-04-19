@@ -571,7 +571,7 @@
   width: 26px;
   height: 26px;
   border-radius: 4px;
-  background: var(--accent);
+  background: var(--brass);
   color: var(--cream);
   font-family: var(--font-display);
   font-weight: 600;
@@ -614,8 +614,8 @@
   color: var(--ink-1);
 }
 .quick-item.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--agent-highlight);
+  color: var(--indigo);
   font-weight: 550;
 }
 .quick-item .kbd {

@@ -1,13 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { Brain } from 'lucide-react';
 
 import { Section } from '@/components/shell/sidebar/section';
 
 describe('<Section>', () => {
   it('renders label and count', () => {
     render(
-      <Section id="brain" icon={Brain} label="Brain" count={42} expanded onToggle={() => {}}>
+      <Section id="brain" iconName="Brain" label="Brain" count={42} expanded onToggle={() => {}}>
         <div>inner</div>
       </Section>
     );
@@ -17,14 +16,14 @@ describe('<Section>', () => {
 
   it('reveals children when expanded, hides when collapsed', () => {
     const { rerender } = render(
-      <Section id="brain" icon={Brain} label="Brain" expanded onToggle={() => {}}>
+      <Section id="brain" iconName="Brain" label="Brain" expanded onToggle={() => {}}>
         <div data-testid="body">inner</div>
       </Section>
     );
     expect(screen.getByTestId('body')).toBeVisible();
 
     rerender(
-      <Section id="brain" icon={Brain} label="Brain" expanded={false} onToggle={() => {}}>
+      <Section id="brain" iconName="Brain" label="Brain" expanded={false} onToggle={() => {}}>
         <div data-testid="body">inner</div>
       </Section>
     );
@@ -37,7 +36,7 @@ describe('<Section>', () => {
   it('calls onToggle when header is clicked', () => {
     const onToggle = vi.fn();
     render(
-      <Section id="brain" icon={Brain} label="Brain" expanded onToggle={onToggle}>
+      <Section id="brain" iconName="Brain" label="Brain" expanded onToggle={onToggle}>
         <div>inner</div>
       </Section>
     );
@@ -51,7 +50,7 @@ describe('<Section>', () => {
     render(
       <Section
         id="brain"
-        icon={Brain}
+        iconName="Brain"
         label="Brain"
         expanded
         onToggle={onToggle}
@@ -67,7 +66,7 @@ describe('<Section>', () => {
 
   it('wires aria-controls to body id', () => {
     render(
-      <Section id="brain" icon={Brain} label="Brain" expanded onToggle={() => {}}>
+      <Section id="brain" iconName="Brain" label="Brain" expanded onToggle={() => {}}>
         <div>inner</div>
       </Section>
     );

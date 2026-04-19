@@ -1,15 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, Brain, Pin, Search, Home, Clock, Network, MessageSquare, Plug, Settings, PanelLeft } from 'lucide-react';
 
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
+import { Icon } from '@/components/tatara';
 
 import { ThemeToggleRail } from '../theme-toggle';
 
 const SECTIONS = [
-  { id: 'brain', icon: Brain, label: 'Brain' },
-  { id: 'pinned', icon: Pin, label: 'Pinned' },
+  { id: 'brain', iconName: 'Brain', label: 'Brain' },
+  { id: 'pinned', iconName: 'Pin', label: 'Pinned' },
 ] as const;
 
 export function SidebarRail() {
@@ -26,21 +26,21 @@ export function SidebarRail() {
         aria-label="Expand sidebar"
         aria-expanded={!collapsed}
       >
-        <PanelLeft size={18} />
+        <Icon name="PanelLeft" size={20} />
       </button>
 
       <div className="rail-quick">
         <button type="button" className="rail-btn" title="Search" aria-label="Search">
-          <Search size={18} />
+          <Icon name="Search" size={20} />
         </button>
-        <Link href="/home" className="rail-btn" title="Home" aria-label="Home"><Home size={18} /></Link>
-        <Link href="/recent" className="rail-btn" title="Recent" aria-label="Recent"><Clock size={18} /></Link>
-        <Link href="/neurons" className="rail-btn" title="Neurons" aria-label="Neurons"><Network size={18} /></Link>
-        <Link href="/skills" className="rail-btn" title="Skills" aria-label="Skills"><BookOpen size={18} /></Link>
+        <Link href="/home" className="rail-btn" title="Home" aria-label="Home"><Icon name="Home" size={20} /></Link>
+        <Link href="/recent" className="rail-btn" title="Recent" aria-label="Recent"><Icon name="Clock" size={20} /></Link>
+        <Link href="/neurons" className="rail-btn" title="Neurons" aria-label="Neurons"><Icon name="Network" size={20} /></Link>
+        <Link href="/skills" className="rail-btn" title="Skills" aria-label="Skills"><Icon name="BookOpen" size={20} /></Link>
       </div>
 
       <div className="rail-sections">
-        {SECTIONS.map(({ id, icon: Icon, label }) => {
+        {SECTIONS.map(({ id, iconName, label }) => {
           const active = sections[id] === true;
           return (
             <button
@@ -52,16 +52,16 @@ export function SidebarRail() {
               aria-current={active || undefined}
               onClick={() => expandSidebarWithSection(id)}
             >
-              <Icon size={18} />
+              <Icon name={iconName} size={20} />
             </button>
           );
         })}
       </div>
 
       <div className="rail-bottom">
-        <Link href="/chat" className="rail-btn" title="Chat" aria-label="Chat"><MessageSquare size={18} /></Link>
-        <Link href="/connectors" className="rail-btn" title="Connectors" aria-label="Connectors"><Plug size={18} /></Link>
-        <Link href="/settings" className="rail-btn" title="Settings" aria-label="Settings"><Settings size={18} /></Link>
+        <Link href="/chat" className="rail-btn" title="Chat" aria-label="Chat"><Icon name="MessageSquare" size={20} /></Link>
+        <Link href="/connectors" className="rail-btn" title="Connectors" aria-label="Connectors"><Icon name="Plug" size={20} /></Link>
+        <Link href="/settings" className="rail-btn" title="Settings" aria-label="Settings"><Icon name="Settings" size={20} /></Link>
         <ThemeToggleRail />
       </div>
     </aside>

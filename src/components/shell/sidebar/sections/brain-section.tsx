@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Brain, Plus } from 'lucide-react';
+import { Icon } from '@/components/tatara';
 
 import type { ManifestFolder } from '@/lib/brain/manifest';
 import { BrainTree } from '@/components/shell/brain-tree';
@@ -33,7 +33,7 @@ export function BrainSection({ tree }: BrainSectionProps) {
       aria-label="New top-level folder"
       className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
     >
-      <Plus size={12} />
+      <Icon name="Plus" size={14} />
     </button>
   );
 
@@ -41,7 +41,7 @@ export function BrainSection({ tree }: BrainSectionProps) {
     <>
       <Section
         id="brain"
-        icon={Brain}
+        iconName="Brain"
         label="Brain"
         count={countDocs(tree)}
         headerAction={action}

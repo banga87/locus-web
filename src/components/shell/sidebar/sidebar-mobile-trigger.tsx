@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Menu } from 'lucide-react';
+import { Icon } from '@/components/tatara';
 
 export function SidebarMobileTrigger() {
   const [open, setOpen] = useState(false);
@@ -36,7 +36,7 @@ export function SidebarMobileTrigger() {
       aria-expanded={open}
       onClick={handleClick}
     >
-      <Menu size={20} />
+      <Icon name="Menu" size={20} />
     </button>
   );
 }

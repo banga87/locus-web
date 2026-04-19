@@ -8,9 +8,7 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { BookOpen, PanelLeftClose, Plug } from 'lucide-react';
-
-import { Wordmark } from '@/components/tatara';
+import { Wordmark, Icon } from '@/components/tatara';
 
 import type { ManifestFolder } from '@/lib/brain/manifest';
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
@@ -54,7 +52,7 @@ export function SidebarExpanded({ companyName, user, tree, pinned, workflowsBadg
             className="brand-collapse"
             aria-expanded={!collapsed}
           >
-            <PanelLeftClose size={16} />
+            <Icon name="PanelLeftClose" size={16} />
           </button>
         </div>
       </div>
@@ -63,24 +61,24 @@ export function SidebarExpanded({ companyName, user, tree, pinned, workflowsBadg
 
       <div className="quick">
         <div className="quick-item">
-          <SearchIcon />
+          <Icon name="Search" size={16} />
           Search
           <span className="kbd">⌘K</span>
         </div>
         <Link href="/home" className="quick-item">
-          <HomeIcon />
+          <Icon name="Home" size={16} />
           Home
         </Link>
         <Link href="/recent" className="quick-item">
-          <RecentIcon />
+          <Icon name="Clock" size={16} />
           Recent
         </Link>
         <Link href="/neurons" className="quick-item">
-          <NeuronsIcon />
+          <Icon name="Network" size={16} />
           Neurons
         </Link>
         <Link href="/skills" className="quick-item">
-          <BookOpen size={15} />
+          <Icon name="BookOpen" size={16} />
           Skills
         </Link>
         {workflowsBadge}
@@ -93,15 +91,15 @@ export function SidebarExpanded({ companyName, user, tree, pinned, workflowsBadg
 
       <div className="nav-bottom">
         <Link href="/chat" className="quick-item">
-          <ChatIcon />
+          <Icon name="MessageSquare" size={16} />
           Chat
         </Link>
         <Link href="/connectors" className="quick-item">
-          <Plug size={15} />
+          <Icon name="Plug" size={16} />
           Connectors
         </Link>
         <Link href="/settings" className="quick-item">
-          <SettingsIcon />
+          <Icon name="Settings" size={16} />
           Settings
         </Link>
         <ThemeToggleNav />
@@ -118,13 +116,3 @@ export function SidebarExpanded({ companyName, user, tree, pinned, workflowsBadg
   );
 }
 
-// Inline SVG icons — copied verbatim from new-sidebar.tsx so rendering
-// is byte-identical. A follow-up task can consolidate into a shared
-// icons module; keeping them local for now avoids churn.
-
-function SearchIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>); }
-function HomeIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M3 12l9-9 9 9" /><path d="M5 10v10h14V10" /></svg>); }
-function RecentIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>); }
-function ChatIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>); }
-function SettingsIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 10-14 0 7 7 0 0014 0z" /></svg>); }
-function NeuronsIcon() { return (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3" /><circle cx="4" cy="6" r="2" /><circle cx="20" cy="6" r="2" /><circle cx="4" cy="18" r="2" /><circle cx="20" cy="18" r="2" /><path d="M6 7l4 4M18 7l-4 4M6 17l4-4M18 17l-4-4" /></svg>); }

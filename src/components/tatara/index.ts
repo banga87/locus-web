@@ -7,3 +7,4 @@ export * from "./letterpress-rule";
 export * from "./paper-grain";
 export * from "./plate-caption";
 export * from "./frame-card";
+export * from "./gauge-needle";

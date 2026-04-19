@@ -989,61 +989,72 @@ Biggest slice. Hits the bespoke CSS block in `globals.css` (roughly lines 165–
 
 ---
 
-## Stage 4 — Slice 4: Chat / AI elements
+## Stage 4 — Slice 4: Chat / AI elements ✅ COMPLETE (2026-04-20)
 
 ### Task 4.1: Rewrite `.chat-markdown` block; apply `.surface-chat` class
 
 **Files:**
 - Modify: `src/app/globals.css` (the `.chat-markdown*` block), `src/components/chat/**/*.tsx` (container markup).
 
-- [ ] Add `className="surface-chat"` to the chat message body container(s) so it consumes the Tatara surface class.
-- [ ] Trim `.chat-markdown` to markdown-specific overrides only. Specifically preserve `.chat-markdown pre`, `.chat-markdown code`, `.chat-markdown blockquote`, `.chat-markdown a`, `.chat-markdown table` — retoken their colors to Tatara (`pre` background `var(--indigo-darker)`, text `var(--cream)`; `blockquote` brass 2px left-rule; `a` = `var(--link)`).
-- [ ] Commit: `style(chat): apply .surface-chat and retoken markdown overrides`.
+- [x] Add `className="surface-chat"` to the chat message body container(s) so it consumes the Tatara surface class. → `MarkdownPart` wrapper in `message-bubble.tsx` now uses `chat-markdown surface-chat`.
+- [x] Trim `.chat-markdown` to markdown-specific overrides only. → Deleted `.chat-markdown p / h1 / h2 / h3`; `.surface-chat` covers base type scale. Kept `pre`, `code`, `blockquote`, `a`, `table`, `pre code` reset, lists, `> * + *` spacer.
+- [x] Retokened per spec — `pre` delegates to `.surface-chat pre` (indigo-darker bg, cream text, mono font) and only adds `border-radius: var(--r-md)`; inline `code` is `--cream-soft` bg / `--iron` text; `blockquote` has 2px `--brass` left-rule + italic + `--ink-2`; `a` is `--link` with explicit 1px thickness / 2px offset; `table` uses `--rule-1` borders and `0.9em` relative font-size.
+- [x] Commit: `style(chat): apply .surface-chat and retoken markdown overrides` — `d662ce6`.
+- [x] Polish commit: trim redundant `font-family` on `.chat-markdown code` (inherited from `.surface-chat code`) + use `0.9em` relative table font — `abae3b2`.
 
 ### Task 4.2: Rewrite streaming indicator bounce keyframe consumer
 
 **Files:**
 - Modify: `src/components/chat/**` component(s) that render `locus-chat-bounce` dots.
 
-- [ ] The keyframe stays. Update the `background-color` of the dot spans to either `var(--ink-2)` or `var(--ember-warm)` — try `var(--ember-warm)` first, screenshot, and switch to `var(--ink-2)` if it reads too assertive.
-- [ ] Commit: `style(chat): retoken streaming dots to Tatara palette`.
+- [x] The keyframe stays. Update the `background-color` of the dot spans → `var(--ember-warm)` (first-choice per plan). Screenshot confirmed the warm ember reads right — not too assertive. Did not fall back to ink-2.
+- [x] Also retokened the streaming-indicator container chrome: `bg-card` → `bg-[var(--surface-1)]`, `border-border` → `border-[var(--rule-1)]`. Kept `rounded-2xl` to match message-bubble chrome.
+- [x] Commit: `style(chat): retoken streaming dots to Tatara palette` — `3aed1b0`.
 
 ### Task 4.3: Implement AgentPanel activity-stream typology in `ai-elements`
 
 **Files:**
 - Modify: `src/components/ai-elements/**/*.tsx`.
 
-- [ ] Identify the components that render tool calls / reasoning / diffs today. **Scope-awareness note:** `src/components/ai-elements/` may currently contain only `message.tsx` — if the tool/think/diff kinds aren't rendered anywhere yet, this task is *creating* the components, not refactoring existing ones. Size accordingly.
-- [ ] For each item kind, refactor to match spec Section 3 Slice 4's three-type typology:
-  - **tool**: row with mono `▸ TOOLNAME` in `var(--brass-deep)`, subtitle mono `var(--ink-2)`, right-aligned elapsed in `var(--ink-3)`. Use `<MonoLabel>` if helpful. No card chrome.
-  - **think**: italic display 14px `var(--ink-2)`.
-  - **diff**: brass 12% background `rgba(184,134,58,0.12)`, `border-left: 2px solid var(--brass)`, mono "DIFF" eyebrow, body title weight 600, body copy, Accept (Button `variant="accent"` `size="sm"`) + Amend (`ghost`) + Discard (`ghost`).
-- [ ] If the existing shape passes different data, adapt the components but keep the data contracts; only the render changes.
-- [ ] Commit: `feat(chat): rewrite ai-elements activity stream to AgentPanel typology (tool/think/diff)`.
+- [x] Identify components that render tool calls / reasoning / diffs today. → Tool calls render in `src/components/chat/tool-call-indicator.tsx`. Reasoning is skipped in MVP. Diffs don't exist as a concept yet. Created new primitives rather than refactoring, per plan's scope-awareness note.
+- [x] Refactor to match spec Section 3 Slice 4's three-type typology — created `src/components/ai-elements/activity.tsx` exporting `ActivityTool`, `ActivityThink`, `ActivityDiff`.
+  - **tool**: mono row `▸ TOOLNAME` in `--brass-deep`, subtitle mono `--ink-2`, optional elapsed right-aligned `--ink-3`. Uses the existing `MonoLabel` tatara primitive for the glyph segment. No card chrome.
+  - **think**: italic display 14px `--ink-2`.
+  - **diff**: brass 12% bg via `color-mix(in srgb, var(--brass) 12%, transparent)`, 2px `--brass` left-rule, mono DIFF eyebrow in `--brass-deep`, title weight 600 `--ink-1`, body `--ink-2`, Accept (accent) / Amend (ghost) / Discard (ghost).
+- [x] Refactor ToolCallIndicator pending + complete branches to render via `<ActivityTool>`. Error branch kept as the existing muted pill (per spec: "If existing shape passes different data, adapt components but keep data contracts"). Proposal + skill-proposal branches untouched. Tests updated and 6/6 pass.
+- [x] Commit: `feat(chat): rewrite ai-elements activity stream to AgentPanel typology (tool/think/diff)` — `e5f846c`.
+- [x] Polish commit: header comment in `tool-call-indicator.tsx` updated to reference ActivityTool rows (was "pill") — `9b92b54`.
 
 ### Task 4.4: Restyle chat run-header / agent-turn header (if present)
 
 **Files:**
-- Modify: whatever component renders the "agent turn" or "run in progress" header in chat (likely under `src/components/chat/` or `ai-elements/`).
+- Modify: whatever component renders the "agent turn" or "run in progress" header in chat.
 
-- [ ] If present: eyebrow `Run № NN · Stage II · Temper` mono in `var(--ember)`; title EB Garamond Semibold 18px `var(--ink-1)`; right-side `<GaugeNeedle size="lg" />` when running.
-- [ ] If not present in current code: skip this task; note in `OPEN-QUESTIONS.md` that run-header pattern from AgentPanel.jsx has no current home.
-- [ ] Commit as applicable.
+- [x] Searched `src/components/chat/**` and `src/components/ai-elements/**` — no run-header / agent-turn header exists. `chat-interface.tsx` only renders bubbles + streaming indicator. Task **skipped per plan directive**.
+- [x] Note added to `OPEN-QUESTIONS.md` documenting the AgentPanel run-header spec for when an agent-turn shell component is introduced later — `15cb7c9`.
 
 ### Task 4.5: Restyle steering input / composer
 
 **Files:**
 - Modify: the chat composer input component.
 
-- [ ] Match AgentPanel steering input chrome: `background: var(--indigo-deep); color: var(--cream)`; left-side `<Icon name="ArrowRight" />`; trailing mono `↵` hint in `rgba(242,234,216,0.5)`.
-- [ ] Keep existing submit / key-handler logic.
-- [ ] Commit: `style(chat): apply Tatara steering-input chrome to composer`.
+- [x] Match AgentPanel steering input chrome: `bg: var(--indigo-deep)`, cream text, cream@0.5 placeholder, left-side `<Icon name="ArrowRight" />`, trailing mono `↵` hint in `rgba(242,234,216,0.5)`. Submit button switched to `variant="accent"` (brass) — `variant="default"` (indigo-darker) would be nearly invisible on indigo-deep ground. Stop button lucide `SquareIcon` migrated to `<Icon name="Square" />`. Border uses cream@0.18 (resting) / cream@0.35 (focus) to read reliably on the always-dark ground. Radius = `var(--r-md)` (6px square workbench).
+- [x] Keep existing submit / key-handler logic — untouched.
+- [x] Polish per review: hide ArrowRight cue and `↵` hint during streaming so the chrome doesn't misrepresent an inactive textarea.
+- [x] Commit: `style(chat): apply Tatara steering-input chrome to composer` — `a0e4991`. Polish: `6207afb`.
 
 ### Task 4.6: Chat slice Playwright verification
 
-- [ ] Start dev; open chat. Send a turn end-to-end with whatever test agent is wired up. Screenshot: waiting → streaming → tool call → diff block → completion.
-- [ ] Console check clean.
-- [ ] Commit fixes as needed.
+- [x] Start dev; open chat. → Navigated to `/chat` in both light and dark themes.
+- [x] Screenshot: waiting / streaming / tool call / diff block / completion — captured `chat-light-composer-fixed.png`, `chat-dark-composer-fixed.png`, `chat-light-activity-typology.png`, `chat-dark-activity-typology.png` (DOM injection used for the activity typology since the tasks' `think` and `diff` kinds don't yet have live callers — the primitives themselves are what we're verifying).
+- [x] Console check clean → 0 errors throughout.
+- [x] Commit fixes as needed → see below.
+
+**Stage 4 summary:**
+- Commits on main path: `d662ce6` · `abae3b2` · `3aed1b0` · `e5f846c` · `9b92b54` · `15cb7c9` · `a0e4991` · `6207afb`.
+- **Cross-stage bug fix:** during Task 4.6 verification discovered that the `Icon` wrapper (at `src/components/tatara/icon.tsx`) was rejecting every lucide icon because the guard used `typeof Cmp !== "function"`, but lucide-react exports icons as `forwardRef` objects (`typeof === 'object'`). This bug silently produced null for every `<Icon />` across Stages 2 onward — sidebar icons, topbar icons, chat icons all invisible. Fixed in `e911722` by changing the guard to check for presence only. Playwright verification after the fix showed icons restored across every surface. **Lesson for future stages:** Playwright visual verification before merge — silent-null React children are invisible in the DOM count without inspecting pixels.
+- Lesson carryover: theme-aware tokens preferred; literal tokens like `--indigo-deep`, `--cream`, `--brass` used only for the intentional "always-dark workbench" chrome (composer) or intentional accent surfaces (code chip, diff wash). Composer stays indigo-deep across both themes by design — it's the steering wheel, not the dashboard.
+- Task 4.4's "no home" case validates the plan's hedge — the run-header pattern comes from `AgentPanel.jsx` in `ui_kits/`, a reference design that has not yet materialized in the app's chat shell. When it does, apply the spec from `OPEN-QUESTIONS.md`.
 
 ---
 

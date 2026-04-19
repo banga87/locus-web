@@ -1,10 +1,11 @@
 import type { BuiltInAgentDefinition } from './types';
+import { BRAIN_EXPLORE_AGENT } from './built-in/brainExploreAgent';
 
 // Built-in agents registered here. Add new built-ins by importing the
 // definition from ./built-in/<slug>Agent.ts and pushing into this array.
 // Order affects the Agent tool description rendering — most-used first.
 const BUILT_IN_AGENTS: BuiltInAgentDefinition[] = [
-  // BRAIN_EXPLORE_AGENT registered in Task 13.
+  BRAIN_EXPLORE_AGENT,
 ];
 
 export function getBuiltInAgents(): BuiltInAgentDefinition[] {

@@ -73,6 +73,8 @@ ${foldersBlock}
 - \`get_document\`: read a specific document by path, optionally a single section
 - \`get_document_diff\`: see recent changes to a specific document
 - \`get_diff_history\`: see changes across the brain since a timestamp, optionally filtered by folder slug
+
+When the user asks to codify a repeatable pattern or process, call \`load_skill('skill-creator')\` to get authoring guidance, interview the user per that skill's Phase 1, then draft with \`propose_skill_create\`.
 ${skillsBlock}${externalBlock}`;
 }
 

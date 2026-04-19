@@ -127,4 +127,14 @@ describe('buildSystemPrompt availableSkills block', () => {
     });
     expect(out).toContain('description: line one line two');
   });
+
+  it('includes the skill-creator authoring nudge after the brain tools list', () => {
+    // Task 32: the agent needs a pointer at `skill-creator` + `propose_skill_create`
+    // so it knows how to codify a repeatable pattern. Rendered unconditionally
+    // — doesn't depend on availableSkills, since the agent can still request
+    // the skill by id via load_skill even if it's not in the visible list.
+    const out = buildSystemPrompt({ ...base });
+    expect(out).toContain("load_skill('skill-creator')");
+    expect(out).toContain('propose_skill_create');
+  });
 });

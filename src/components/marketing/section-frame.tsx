@@ -1,19 +1,31 @@
 // Shared wrapper for the marketing mid-page sections (HowItWorks, Features,
-// Positioning — and later PricingTeaser). Server Component. Keeps section
-// chrome (id anchor, padding, max-width, SpecLabel header) in one place so
-// per-section files focus on content.
+// Positioning, PricingTeaser). Server Component.
 //
-// Ported from Tatara/components/Sections.jsx lines 3–17. Extended with a
-// `dark` prop that flips background + text + spec-label color.
+// Task 5.5 refactor: delegates the section header to the Tatara design
+// system. When `title` is passed, renders the full <SectionHeader> (eyebrow
+// + h2 + rule). When it's omitted (the current behavior for Features /
+// Positioning / PricingTeaser, which each own their own <h2>), renders just
+// the <Eyebrow> so those callers stay unbroken.
+//
+// The `--mk-*` marketing tokens are gone. We use the semantic Tatara tokens
+// (`--surface-0`, `--ink-1`, `--ink-inverse`, `--brass-soft`) plus a
+// `#1B1410` literal for the dark background (no exact surface token maps
+// to that warm near-black in the current palette).
 
 import type { ReactNode } from 'react';
-import { SpecLabel } from '@/components/marketing/primitives';
+import { Eyebrow, SectionHeader } from '@/components/tatara';
 import { cn } from '@/lib/utils';
 
 export interface SectionFrameProps {
   id: string;
   number: string;
   kicker: string;
+  /**
+   * When present, delegates to `<SectionHeader>` so the big `<h2>` is
+   * owned by the frame. When absent, only the eyebrow is rendered and
+   * the caller keeps ownership of its own heading.
+   */
+  title?: string;
   children: ReactNode;
   /** When true, flips to the ink-dark treatment used by Features. */
   dark?: boolean;
@@ -24,10 +36,17 @@ export function SectionFrame({
   id,
   number,
   kicker,
+  title,
   children,
   dark = false,
   className,
 }: SectionFrameProps) {
+  // Dark sections need the eyebrow in brass so it reads over the ink
+  // background. SectionHeader's internal Eyebrow doesn't expose a color
+  // prop, so on dark we always render our own Eyebrow (and the caller's
+  // own <h2> continues to live inside children).
+  const eyebrowColor = dark ? 'var(--brass-soft)' : undefined;
+
   return (
     <section
       id={id}
@@ -38,25 +57,19 @@ export function SectionFrame({
         className,
       )}
       style={{
-        background: dark ? 'var(--mk-ink)' : 'var(--mk-paper)',
-        color: dark ? 'var(--mk-paper)' : 'var(--mk-ink)',
+        background: dark ? '#1B1410' : 'var(--surface-0)',
+        color: dark ? 'var(--ink-inverse)' : 'var(--ink-1)',
       }}
     >
       <div className="mx-auto max-w-[1320px]">
-        <div className="mb-14 flex items-start gap-8">
-          <SpecLabel
-            number={number}
-            // Dark override: re-color both the root text and the little
-            // horizontal divider span (hardcoded to --mk-ink-3 in the
-            // primitive) so the label reads over the ink background.
-            className={
-              dark
-                ? 'text-[color:var(--mk-gold)] [&>span[aria-hidden]]:!bg-[color:var(--mk-gold)]'
-                : undefined
-            }
-          >
-            {kicker}
-          </SpecLabel>
+        <div className="mb-14">
+          {title && !dark ? (
+            <SectionHeader number={number} eyebrow={kicker} title={title} />
+          ) : (
+            <Eyebrow number={number} color={eyebrowColor}>
+              {kicker}
+            </Eyebrow>
+          )}
         </div>
         {children}
       </div>

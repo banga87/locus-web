@@ -101,11 +101,7 @@ function LoginForm() {
             </div>
 
             {error ? (
-              <p
-                role="alert"
-                className="text-sm"
-                style={{ color: 'var(--state-error)' }}
-              >
+              <p role="alert" className="text-sm text-[var(--state-error)]">
                 {error}
               </p>
             ) : null}

@@ -16,10 +16,9 @@
 
 import { redirect } from 'next/navigation';
 
-import { Eyebrow } from '@/components/tatara';
+import { Eyebrow, PaperGrain } from '@/components/tatara';
 import {
   Card,
-  CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
@@ -58,39 +57,42 @@ export default async function McpConsentPage({
   if (!client) return <ExpiredView />;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center bg-[var(--surface-0)] p-8">
-      <Card>
-        <CardHeader>
-          <Eyebrow number="03">AUTHORIZE</Eyebrow>
-          <CardTitle>
-            {client.clientName} wants to connect to your Tatara brain.
-          </CardTitle>
-          <CardDescription>
-            It will be able to read your documents, folders, skills, and
-            traverse your brain graph.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter>
-          <ConsentForm sessionRef={session} />
-        </CardFooter>
-      </Card>
+    <main className="bg-[var(--surface-0)]">
+      <PaperGrain className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-8">
+        <Card>
+          <CardHeader>
+            <Eyebrow number="03">AUTHORIZE</Eyebrow>
+            <CardTitle>
+              {client.clientName} wants to connect to your Tatara brain.
+            </CardTitle>
+            <CardDescription>
+              It will be able to read your documents, folders, skills, and
+              traverse your brain graph.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <ConsentForm sessionRef={session} />
+          </CardFooter>
+        </Card>
+      </PaperGrain>
     </main>
   );
 }
 
 function ExpiredView() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center bg-[var(--surface-0)] p-8">
-      <Card>
-        <CardHeader>
-          <Eyebrow number="00">EXPIRED</Eyebrow>
-          <CardTitle>This sign-in request has expired</CardTitle>
-          <CardDescription>
-            Please restart the connection from your app.
-          </CardDescription>
-        </CardHeader>
-        <CardContent />
-      </Card>
+    <main className="bg-[var(--surface-0)]">
+      <PaperGrain className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-8">
+        <Card>
+          <CardHeader>
+            <Eyebrow number="00">EXPIRED</Eyebrow>
+            <CardTitle>This sign-in request has expired</CardTitle>
+            <CardDescription>
+              Please restart the connection from your app.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </PaperGrain>
     </main>
   );
 }

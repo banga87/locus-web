@@ -814,7 +814,7 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--paper-rule) 60%, transparent);
+  border-bottom: 1px solid var(--paper-rule);
 }
 .crumbs {
   font-family: var(--font-mono);
@@ -833,7 +833,7 @@
 .icon-btn {
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   border: none;
   color: var(--ink-2);
@@ -852,7 +852,7 @@
   color: var(--ink-2);
   border: 1px solid var(--paper-rule);
   padding: 6px 12px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   letter-spacing: 0.08em;
   text-transform: uppercase;

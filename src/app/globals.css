@@ -659,8 +659,8 @@
 }
 .node.selected,
 .node[data-active="true"] {
-  background: var(--accent-soft);
-  color: var(--ink);
+  background: var(--agent-highlight);
+  color: var(--ink-1);
   font-weight: 500;
 }
 .node.selected::after,
@@ -673,7 +673,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--brass);
 }
 
 /* Staleness cues — confidence-weighted dimming on document rows.
@@ -699,7 +699,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--accent-2);
+  background: var(--ember);
   pointer-events: none;
 }
 .chev {

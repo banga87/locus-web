@@ -3,26 +3,26 @@
 // Inline tool-call indicator rendered inside an assistant message bubble.
 //
 // States map from the AI SDK v6 `DynamicToolUIPart` `state` field:
-//   - 'input-streaming' / 'input-available'           → pending
+//   - 'input-streaming' / 'input-available'           → pending (ActivityTool row)
 //   - 'approval-requested' / 'approval-responded'     → pending (we
 //     don't surface approval UI in MVP — all tools are read-scoped)
-//   - 'output-available'                               → complete (pill)
-//   - 'output-error'                                   → error (muted)
-//   - 'output-denied'                                  → error (muted)
+//   - 'output-available'                               → complete (ActivityTool row)
+//   - 'output-error'                                   → error (muted inline pill)
+//   - 'output-denied'                                  → error (muted inline pill)
 //
 // All Locus tools (brain tools + MCP OUT tools) are built via
 // `dynamicTool`, so the part type is always `'dynamic-tool'` with
 // `toolName` as a field — see `src/lib/agent/tool-bridge.ts` and
 // `src/lib/mcp-out/bridge.ts`.
 //
-// We intentionally DON'T offer click-to-expand in MVP — the pill is
-// just a chip. The plan lists expansion as optional.
+// We intentionally DON'T offer click-to-expand in MVP. The plan lists
+// expansion as optional.
 //
 // Special-case: `propose_document_*` tool results carry
 // `isProposal: true` on their output and are rendered as a full
-// <ProposalCard> with Approve/Discard controls instead of a pill.
-// That branch preempts every other state because a completed
-// proposal call does not look like a "tool was used" chip — it's a
+// <ProposalCard> with Approve/Discard controls instead of an
+// ActivityTool row. That branch preempts every other state because a
+// completed proposal call is not a "tool was used" marker — it's a
 // live prompt to the user for a decision. See
 // `proposal-card.tsx` for the approval flow and
 // `propose-document.ts` for the tool definitions.

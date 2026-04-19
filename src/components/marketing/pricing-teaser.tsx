@@ -1,19 +1,15 @@
 // Section 06 — "Grades & Rates". Three-tier pricing grid: Apprentice,
-// Journeyman, Foundry. Server Component. Ported from
-// Tatara/components/Sections.jsx lines 400–519.
+// Journeyman, Foundry. Server Component.
 //
 // Layout notes:
-// - Desktop (≥900px): 3 equal columns, single 1px outer rule, 1px vertical
-//   dividers between tiers (implemented per-cell via borderRight on all but
-//   the last).
-// - Mobile (<900px): stacks to 1 column; the vertical dividers collapse and
-//   we show horizontal rules between tiers instead.
-// - Featured Journeyman tier: --mk-paper-2 background plate plus a ~4px
-//   amber (--mk-ember) strip pinned to the tier's top edge.
+// - Desktop (≥900px): 3 equal columns. Featured (Journeyman) tier is wrapped
+//   in <FrameCard/> which provides a brass top-rule signaling "featured".
+//   Non-featured tiers render as plain cells with a 1px paper rule border.
+// - Mobile (<900px): stacks to 1 column.
 
 import Link from 'next/link';
-import type { CSSProperties } from 'react';
-import { BrassButton, GhostButton } from '@/components/marketing/primitives';
+import { Button } from '@/components/ui/button';
+import { FrameCard } from '@/components/tatara';
 import { SectionFrame } from '@/components/marketing/section-frame';
 
 interface Tier {
@@ -71,63 +67,96 @@ const TIERS: readonly Tier[] = [
   },
 ];
 
-const H2_STYLE: CSSProperties = {
-  fontFamily: 'var(--font-display), serif',
-  fontWeight: 400,
-  fontSize: 'clamp(44px, 5vw, 72px)',
-  lineHeight: 1.02,
-  letterSpacing: '-0.02em',
-  margin: 0,
-  fontVariationSettings: '"SOFT" 40, "opsz" 144',
-};
-
-const GRADE_H3_STYLE: CSSProperties = {
-  fontFamily: 'var(--font-display), serif',
-  fontWeight: 500,
-  fontSize: 36,
-  lineHeight: 1,
-  letterSpacing: '-0.02em',
-  margin: 0,
-  color: 'var(--mk-ink)',
-  fontVariationSettings: '"SOFT" 40',
-};
-
-const PRICE_STYLE: CSSProperties = {
-  fontFamily: 'var(--font-display), serif',
-  fontWeight: 400,
-  fontSize: 44,
-  lineHeight: 1,
-  letterSpacing: '-0.02em',
-  color: 'var(--mk-ink)',
-};
-
 function TierCta({ kind }: { kind: Tier['cta'] }) {
   if (kind === 'journeyman') {
     return (
-      <BrassButton arrow={false} asChild>
-        <Link href="#invitation">
-          Request access
-          <span
-            className="italic leading-none"
-            style={{ fontFamily: 'var(--font-display), serif', fontSize: 17 }}
-          >
-            →
-          </span>
-        </Link>
-      </BrassButton>
+      <Button asChild variant="accent" size="lg">
+        <Link href="#invitation">Request access</Link>
+      </Button>
     );
   }
   if (kind === 'foundry') {
     return (
-      <GhostButton asChild>
+      <Button asChild variant="ghost" size="lg">
         <a href="mailto:info@fairytalefactory.io">Talk to us</a>
-      </GhostButton>
+      </Button>
     );
   }
   return (
-    <GhostButton asChild>
+    <Button asChild variant="ghost" size="lg">
       <Link href="#invitation">Start free</Link>
-    </GhostButton>
+    </Button>
+  );
+}
+
+function TierBody({ tier, index }: { tier: Tier; index: number }) {
+  return (
+    <div className="flex flex-col">
+      {/* Numbered kicker */}
+      <div
+        className="t-mono-label"
+        style={{ color: tier.featured ? 'var(--ember)' : 'var(--ink-3)' }}
+      >
+        № 0{index + 1} &middot; {tier.tagline}
+      </div>
+
+      {/* Grade title */}
+      <h3 className="t-h3 mt-4">{tier.grade}</h3>
+
+      {/* Divider + price row */}
+      <div
+        className="mt-6 flex items-baseline gap-[10px] pt-6"
+        style={{ borderTop: '1px solid var(--paper-rule)' }}
+      >
+        <span
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontStyle: 'italic',
+            fontWeight: 500,
+            fontSize: '44px',
+            lineHeight: 1,
+            color: 'var(--ink-1)',
+          }}
+        >
+          {tier.price}
+        </span>
+        <span className="t-body-sm" style={{ color: 'var(--ink-3)' }}>
+          {tier.sub}
+        </span>
+      </div>
+
+      {/* Feature list — dashed separators, italic brass em-dash bullets */}
+      <ul className="mt-8 flex-1 list-none p-0">
+        {tier.items.map((it) => (
+          <li
+            key={it}
+            className="flex items-start gap-3 border-b border-dashed py-[10px] text-[14px] leading-[1.5]"
+            style={{
+              borderBottomColor: 'var(--paper-rule)',
+              color: 'var(--ink-2)',
+            }}
+          >
+            <span
+              aria-hidden
+              className="italic"
+              style={{
+                fontFamily: 'var(--font-display)',
+                color: 'var(--brass)',
+                marginTop: -1,
+              }}
+            >
+              &mdash;
+            </span>
+            <span>{it}</span>
+          </li>
+        ))}
+      </ul>
+
+      {/* CTA */}
+      <div className="mt-7">
+        <TierCta kind={tier.cta} />
+      </div>
+    </div>
   );
 }
 
@@ -136,122 +165,36 @@ export function PricingTeaser() {
     <SectionFrame id="pricing" number="06" kicker="Grades & Rates">
       {/* Heading + lede — 1 col mobile, 1fr / 1.6fr from 900px up */}
       <div className="mb-14 grid grid-cols-1 items-start gap-10 min-[900px]:grid-cols-[1fr_1.6fr] min-[900px]:gap-[72px]">
-        <h2 style={H2_STYLE}>
+        <h2 className="t-h2">
           Three grades
           <br />
           <span style={{ fontStyle: 'italic', fontWeight: 300 }}>of operator.</span>
         </h2>
-        <p
-          className="m-0 max-w-[560px] text-[16px] leading-[1.65] [text-wrap:pretty]"
-          style={{
-            fontFamily: 'var(--font-body), system-ui, sans-serif',
-            color: 'var(--mk-ink-2)',
-          }}
-        >
+        <p className="t-body max-w-[560px] [text-wrap:pretty]">
           Final rates are still being set. During the private beta, Tatara is free for solo
           use &mdash; bring your own model keys and work at your own pace.
         </p>
       </div>
 
-      {/* Tier grid — stacks on mobile, 3 cols from 900px. Outer 1px rule. */}
-      <div
-        className="grid grid-cols-1 min-[900px]:grid-cols-3"
-        style={{ border: '1px solid var(--mk-rule)' }}
-      >
+      {/* Tier grid — stacks on mobile, 3 cols from 900px. Featured tier wraps
+          in <FrameCard/> for the brass top-rule; non-featured tiers are plain
+          cells on cream. */}
+      <div className="grid grid-cols-1 gap-6 min-[900px]:grid-cols-3 min-[900px]:items-start">
         {TIERS.map((t, i) => {
-          const isLast = i === TIERS.length - 1;
+          if (t.featured) {
+            return (
+              <FrameCard key={t.grade} className="px-8 py-10">
+                <TierBody tier={t} index={i} />
+              </FrameCard>
+            );
+          }
           return (
             <div
               key={t.grade}
-              className={[
-                'relative flex flex-col px-8 py-10',
-                // Horizontal divider between tiers when stacked (mobile).
-                !isLast ? 'border-b border-[color:var(--mk-rule)]' : '',
-                // On desktop: right divider between tiers, no bottom.
-                !isLast
-                  ? 'min-[900px]:border-b-0 min-[900px]:border-r min-[900px]:border-[color:var(--mk-rule)]'
-                  : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              style={{
-                background: t.featured ? 'var(--mk-paper-2)' : 'var(--mk-paper)',
-              }}
+              className="px-8 py-10"
+              style={{ border: '1px solid var(--paper-rule)' }}
             >
-              {t.featured && (
-                <div
-                  aria-hidden
-                  className="absolute left-0 right-0"
-                  style={{
-                    top: -1,
-                    height: 4,
-                    background: 'var(--mk-ember)',
-                  }}
-                />
-              )}
-
-              {/* Numbered kicker */}
-              <div
-                className="mb-[14px] text-[10px] uppercase tracking-[0.18em]"
-                style={{
-                  fontFamily: 'var(--font-mono), monospace',
-                  color: t.featured ? 'var(--mk-ember)' : 'var(--mk-ink-3)',
-                }}
-              >
-                № 0{i + 1} &middot; {t.tagline}
-              </div>
-
-              {/* Grade title */}
-              <h3 style={GRADE_H3_STYLE}>{t.grade}</h3>
-
-              {/* Divider + price row */}
-              <div
-                className="mt-6 flex items-baseline gap-[10px] pt-6"
-                style={{ borderTop: '1px solid var(--mk-rule)' }}
-              >
-                <span style={PRICE_STYLE}>{t.price}</span>
-                <span
-                  className="text-[13px]"
-                  style={{
-                    fontFamily: 'var(--font-body), system-ui, sans-serif',
-                    color: 'var(--mk-ink-3)',
-                  }}
-                >
-                  {t.sub}
-                </span>
-              </div>
-
-              {/* Feature list — dashed separators, italic brass em-dash bullets */}
-              <ul className="mt-8 flex-1 list-none p-0">
-                {t.items.map((it) => (
-                  <li
-                    key={it}
-                    className="flex items-start gap-3 border-b border-dashed border-[color:var(--mk-rule)] py-[10px] text-[14px] leading-[1.5]"
-                    style={{
-                      fontFamily: 'var(--font-body), system-ui, sans-serif',
-                      color: 'var(--mk-ink-2)',
-                    }}
-                  >
-                    <span
-                      aria-hidden
-                      className="italic"
-                      style={{
-                        fontFamily: 'var(--font-display), serif',
-                        color: 'var(--mk-brass)',
-                        marginTop: -1,
-                      }}
-                    >
-                      &mdash;
-                    </span>
-                    <span>{it}</span>
-                  </li>
-                ))}
-              </ul>
-
-              {/* CTA */}
-              <div className="mt-7">
-                <TierCta kind={t.cta} />
-              </div>
+              <TierBody tier={t} index={i} />
             </div>
           );
         })}

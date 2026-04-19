@@ -58,7 +58,7 @@ export interface ReplaceSkillResourcesResult {
  * trim leading/trailing dashes. E.g. "My Cool Skill" → "my-cool-skill".
  * Written inline — no extra dep.
  */
-function slugify(name: string): string {
+export function slugify(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -332,5 +332,188 @@ export async function replaceSkillResources(
       .where(eq(documents.id, rootId));
 
     return { resourceIds };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// forkSkill
+// ---------------------------------------------------------------------------
+
+export interface ForkSkillInput {
+  rootId: string;
+  companyId: string;
+  brainId: string;
+}
+
+export interface ForkSkillResult {
+  newRootId: string;
+}
+
+/**
+ * Clone a skill tree into a fork within the same company/brain.
+ * In a single transaction:
+ *   1. Read the existing root + all live resource children.
+ *   2. Strip the `source.github` block; set `source.forked_from` to the
+ *      upstream path so parseOrigin identifies the clone as 'forked'.
+ *   3. Append " (fork)" to the skill name (idempotent).
+ *   4. Re-slugify. If the slug collides, return a slug_taken error.
+ *   5. Insert new root doc + resource children with fresh UUIDs.
+ */
+export async function forkSkill(input: ForkSkillInput): Promise<ForkSkillResult> {
+  const { rootId, companyId, brainId } = input;
+
+  return db.transaction(async (tx) => {
+    // 1. Read the existing root.
+    const [existingRoot] = await tx
+      .select({
+        id: documents.id,
+        title: documents.title,
+        slug: documents.slug,
+        content: documents.content,
+        type: documents.type,
+      })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.id, rootId),
+          eq(documents.brainId, brainId),
+          isNull(documents.deletedAt),
+          eq(documents.type, 'skill'),
+        ),
+      )
+      .limit(1);
+
+    if (!existingRoot) throw new Error('skill root not found');
+
+    // 2. Parse frontmatter.
+    const fmEndIdx = existingRoot.content.indexOf('\n---\n', 4);
+    const existingFmBlock =
+      fmEndIdx !== -1 ? existingRoot.content.slice(4, fmEndIdx) : '';
+    const existingFm = (
+      yaml.load(existingFmBlock) as Record<string, unknown> | null
+    ) ?? {};
+
+    const existingSource = existingFm.source as
+      | {
+          github?: { owner?: string; repo?: string; skill?: string | null };
+          sha?: string;
+          imported_at?: string;
+          forked_from?: string;
+        }
+      | undefined;
+
+    // Build forked_from string (for parseOrigin to pick up).
+    let forkedFrom = 'unknown';
+    if (existingSource?.github?.owner && existingSource.github.repo) {
+      const { owner, repo, skill } = existingSource.github;
+      forkedFrom = skill
+        ? `github.com/${owner}/${repo}/skills/${skill}`
+        : `github.com/${owner}/${repo}`;
+    }
+
+    // 3. Build new name, slug.
+    const existingName = typeof existingFm.name === 'string' ? existingFm.name : existingRoot.title;
+    const newName = existingName.endsWith(' (fork)') ? existingName : `${existingName} (fork)`;
+    const newSlug = slugify(newName);
+
+    if (!newSlug) throw new Error('forked name produces an empty slug');
+
+    // Check slug uniqueness (let DB constraint catch races, but proactively check here).
+    const [collision] = await tx
+      .select({ id: documents.id })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.brainId, brainId),
+          eq(documents.slug, newSlug),
+          isNull(documents.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (collision) throw new Error('slug_taken');
+
+    // 4. Build new root content (new source: forked_from, no github block).
+    const existingDescription =
+      typeof existingFm.description === 'string' ? existingFm.description : '';
+    const skillMdBody = existingRoot.content.slice(fmEndIdx + 5); // skip '\n---\n'
+
+    const newFm: Record<string, unknown> = {
+      type: 'skill',
+      name: newName,
+      description: existingDescription,
+      source: { forked_from: forkedFrom },
+    };
+    const fmBlock = yaml.dump(newFm, { lineWidth: -1 }).trimEnd();
+    const newContent = `---\n${fmBlock}\n---\n\n${skillMdBody}`;
+    const newPath = `skills/${newSlug}`;
+
+    // 5. Insert new root.
+    const [newRootRow] = await tx
+      .insert(documents)
+      .values({
+        companyId,
+        brainId,
+        folderId: null,
+        ownerId: null,
+        parentSkillId: null,
+        relativePath: null,
+        type: 'skill',
+        title: newName,
+        slug: newSlug,
+        path: newPath,
+        content: newContent,
+        summary: null,
+        status: 'active',
+        confidenceLevel: 'medium',
+        isCore: false,
+        version: 1,
+      })
+      .returning({ id: documents.id });
+
+    const newRootId = newRootRow.id;
+
+    // 6. Read existing children and clone them.
+    const children = await tx
+      .select({
+        relativePath: documents.relativePath,
+        title: documents.title,
+        content: documents.content,
+      })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.parentSkillId, rootId),
+          isNull(documents.deletedAt),
+        ),
+      );
+
+    for (const child of children) {
+      const childId = randomUUID();
+      const childSlug = deriveResourceSlug(childId);
+      const childPath = deriveResourcePath(newSlug, child.relativePath ?? child.title);
+
+      await tx.insert(documents).values({
+        id: childId,
+        companyId,
+        brainId,
+        folderId: null,
+        ownerId: null,
+        parentSkillId: newRootId,
+        relativePath: child.relativePath,
+        type: 'skill-resource',
+        title: child.title,
+        slug: childSlug,
+        path: childPath,
+        content: child.content,
+        summary: null,
+        status: 'active',
+        confidenceLevel: 'medium',
+        isCore: false,
+        version: 1,
+      });
+    }
+
+    return { newRootId };
   });
 }

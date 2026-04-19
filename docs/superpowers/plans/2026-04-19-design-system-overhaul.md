@@ -1058,128 +1058,132 @@ Biggest slice. Hits the bespoke CSS block in `globals.css` (roughly lines 165–
 
 ---
 
-## Stage 5 — Slice 5: Marketing
+## Stage 5 — Slice 5: Marketing ✅ COMPLETE (2026-04-20)
 
 Biggest primitive-consumption slice. Two new surface treatments (dark-inverse Features, Positioning ledger).
 
-### Task 5.1: Inventory marketing surfaces
+**Summary:** every marketing component migrated from the scoped `--mk-*` palette + bespoke marketing primitives to the Tatara design system. `marketing/primitives.tsx` deleted; `(marketing)/marketing.css` deleted (overlay replaced by `<PaperGrain>`); `@import` dropped from globals.css. Only one cross-primitive fix required: `Wordmark` now accepts a `color` prop (Playwright caught that `.t-wordmark`'s own `color` rule was blocking inline-style overrides on its parent). See commits `51dadd6` → `59651fd` on branch `design-system`.
+
+### Task 5.1: Inventory marketing surfaces ✅
 
 **Files:**
 - Read: `src/app/(marketing)/**`, `src/components/marketing/**`, `src/app/(marketing)/marketing.css`.
 
-- [ ] Read every file. Note every rule in `marketing.css` and match each to either a Tatara primitive, a utility we'll keep inline, or a rule we'll delete.
+- [x] Read every file. Note every rule in `marketing.css` and match each to either a Tatara primitive, a utility we'll keep inline, or a rule we'll delete.
 
-### Task 5.2: Retire `marketing.css` progressively
+### Task 5.2: Retire `marketing.css` progressively ✅
 
 **Files:**
 - Modify: `src/app/(marketing)/marketing.css`, and whichever consumer imports rely on its classes.
 
-- [ ] Delete any rule whose concern is now handled by Tatara primitives or semantic classes (`.t-*`, `.surface-*`, `.rule-h`, `.paper`).
-- [ ] For rules you're uncertain about, migrate their consumer to Tatara primitives first (subsequent tasks), then delete.
-- [ ] By end of Slice 5, this file should be near-empty (or removed entirely if possible — also remove the `@import` from `globals.css` if so).
-- [ ] This task is a continuous cleanup across the slice; commit incrementally.
+- [x] Delete any rule whose concern is now handled by Tatara primitives or semantic classes (`.t-*`, `.surface-*`, `.rule-h`, `.paper`).
+- [x] For rules you're uncertain about, migrate their consumer to Tatara primitives first (subsequent tasks), then delete.
+- [x] By end of Slice 5, this file should be near-empty (or removed entirely if possible — also remove the `@import` from `globals.css` if so). **→ File deleted entirely in `f4ed2c5`; `@import` removed from globals.css; `.tatara-marketing` wrapper replaced by `<PaperGrain>`.**
+- [x] This task is a continuous cleanup across the slice; commit incrementally.
 
-### Task 5.3: Restyle `nav.tsx`
+### Task 5.3: Restyle `nav.tsx` ✅
 
 **Files:**
 - Modify: `src/components/marketing/nav.tsx`.
 
-- [ ] Use `<Wordmark />` in the brand slot.
-- [ ] Add a 1×16px brass vertical rule beside the wordmark and an italic display "est. 2026" — per `ui_kits/marketing/Nav.jsx`.
-- [ ] Nav items: `color: var(--ink-2)`; hover `color: var(--ink-1)`; focus ring ember-warm.
-- [ ] If rendered over the hero plate, apply `color: var(--ink-inverse)` + `--ink-inverse-2` variants while the top gradient overlay from HeroPlate provides contrast.
-- [ ] Commit: `style(marketing): restyle Nav with Wordmark + est. 2026 lockup`.
+- [x] Use `<Wordmark />` in the brand slot.
+- [x] Add a 1×16px brass vertical rule beside the wordmark and an italic display "est. 2026" — per `ui_kits/marketing/Nav.jsx`.
+- [x] Nav items: `color: var(--ink-2)`; hover `color: var(--ink-1)`; focus ring ember-warm.
+- [x] If rendered over the hero plate, apply `color: var(--ink-inverse)` + `--ink-inverse-2` variants while the top gradient overlay from HeroPlate provides contrast.
+- [x] Commit: `style(marketing): restyle Nav with Wordmark + est. 2026 lockup`. (`51dadd6`)
 
-### Task 5.4: Restyle `hero.tsx`
+### Task 5.4: Restyle `hero.tsx` ✅
 
 **Files:**
 - Modify: `src/components/marketing/hero.tsx`.
 
-- [ ] Wrap the hero contents in `<HeroPlate image="/hero.jpg" alt="The engine hall, at working temperature">`.
-- [ ] Inside: big display headline using `.t-display` or `<h1 className="t-h1">` — copy: "The operator's console for AI labor."
-- [ ] Subtext: `.t-lede` class on `<p>` — use "Hire AI employees and feel every turn of the crank."
-- [ ] CTA row: primary `<Button variant="default">Get started</Button>` (or similar) plus a secondary `<Button variant="accent">Come and stoke the fire.</Button>` or ghost.
-- [ ] Below hero: `<PlateCaption plateNumber={1}>The engine hall, at working temperature.</PlateCaption>`.
-- [ ] Commit: `style(marketing): restyle Hero with HeroPlate and canonical voice`.
+- [x] Wrap the hero contents in `<HeroPlate image="/hero.jpg" alt="The engine hall, at working temperature">`. (Path used: `/images/hero-2400.jpg`, matching existing asset.)
+- [x] Inside: big display headline using `.t-display` or `<h1 className="t-h1">` — copy: "The operator's console for AI labor."
+- [x] Subtext: `.t-lede` class on `<p>` — use "Hire AI employees and feel every turn of the crank."
+- [x] CTA row: primary `<Button variant="default">Get started</Button>` (or similar) plus a secondary `<Button variant="accent">Come and stoke the fire.</Button>` or ghost.
+- [x] Below hero: `<PlateCaption plateNumber={1}>The engine hall, at working temperature.</PlateCaption>`.
+- [x] Commit: `style(marketing): restyle Hero with HeroPlate and canonical voice`. (`fc72cba`)
 
-### Task 5.5: Restyle `section-frame.tsx` and `how-it-works.tsx`
+### Task 5.5: Restyle `section-frame.tsx` and `how-it-works.tsx` ✅
 
 **Files:**
 - Modify: `src/components/marketing/section-frame.tsx`, `src/components/marketing/how-it-works.tsx`.
 
-- [ ] `section-frame.tsx`: replace its current markup with a thin delegation to `<SectionHeader number=... eyebrow=... title=... />`. Keep any prop compatibility it had.
-- [ ] `how-it-works.tsx`: title "Three stages, one fire kept lit." via `<SectionHeader number="02" eyebrow="HOW IT WORKS" title="Three stages, one fire kept lit." />`. Three columns/rows, each with `<Eyebrow number="01/02/03">ANNEAL|TEMPER|STOKE</Eyebrow>` and a short body copy.
-- [ ] Commit: `style(marketing): use SectionHeader and Eyebrow in how-it-works`.
+- [x] `section-frame.tsx`: replace its current markup with a thin delegation to `<SectionHeader number=... eyebrow=... title=... />`. Keep any prop compatibility it had. (Delegates when `title` prop is present; otherwise falls back to a plain `<Eyebrow>` so Features/Positioning/PricingTeaser — which each own their own `<h2>` — stay unbroken.)
+- [x] `how-it-works.tsx`: title "Three stages, one fire kept lit." via `<SectionHeader number="02" eyebrow="HOW IT WORKS" title="Three stages, one fire kept lit." />`. Three columns/rows, each with `<Eyebrow number="01/02/03">ANNEAL|TEMPER|STOKE</Eyebrow>` and a short body copy.
+- [x] Commit: `style(marketing): use SectionHeader and Eyebrow in how-it-works`. (`7a0c6f2`)
 
-### Task 5.6: Restyle `features.tsx` — dark-inverse surface
+### Task 5.6: Restyle `features.tsx` — dark-inverse surface ✅
 
 **Files:**
 - Modify: `src/components/marketing/features.tsx`.
 
-- [ ] Wrap the entire Features section in a wrapper with `background: #1B1410; color: var(--ink-inverse);`.
-- [ ] Use `<FrameCard variant="inverse">` for each feature (or at minimum the featured one). Borders `rgba(242,234,216,0.15)`.
-- [ ] Heading + subhead use `.t-h2`/`.t-h3` overridden to cream via inline `style={{color:'var(--ink-inverse)'}}` if the class doesn't already respect the inverse surface.
-- [ ] Accent in this block is `--brass-soft` (not `--brass`) since it reads better against dark.
-- [ ] Commit: `style(marketing): Features section on dark-inverse surface per Tatara`.
+- [x] Wrap the entire Features section in a wrapper with `background: #1B1410; color: var(--ink-inverse);`. (Provided by `<SectionFrame dark>`.)
+- [x] Use `<FrameCard variant="inverse">` for each feature (or at minimum the featured one). Borders `rgba(242,234,216,0.15)`. (All 6 tiles.)
+- [x] Heading + subhead use `.t-h2`/`.t-h3` overridden to cream via inline `style={{color:'var(--ink-inverse)'}}` if the class doesn't already respect the inverse surface.
+- [x] Accent in this block is `--brass-soft` (not `--brass`) since it reads better against dark.
+- [x] Commit: `style(marketing): Features section on dark-inverse surface per Tatara`. (`f14b58b`)
 
-### Task 5.7: Restyle `positioning.tsx` — Elsewhere vs At Tatara ledger
+### Task 5.7: Restyle `positioning.tsx` — Elsewhere vs At Tatara ledger ✅
 
 **Files:**
 - Modify: `src/components/marketing/positioning.tsx`.
 
-- [ ] Replace the current layout with a two-column grid inside a `<Card>` (or plain div with `bg-[var(--cream-soft)] border border-[var(--paper-rule)]`).
+- [x] Replace the current layout with a two-column grid inside a `<Card>` (or plain div with `bg-[var(--cream-soft)] border border-[var(--paper-rule)]`).
   - Left column: "Elsewhere" — each phrase in `<span>` with inline `style={{fontFamily: 'var(--font-display)', fontStyle: 'italic', fontWeight: 300, textDecoration: 'line-through'}}`.
   - Right column: "At Tatara" — each phrase in `<span>` with inline `style={{fontFamily: 'var(--font-display)', fontWeight: 500}}`.
-- [ ] Provide at least 3–5 rows of contrast (e.g., "Seamless AI integration" → "Every tool call, labeled and logged"). Use copy that won't drift into banned-phrase territory.
-- [ ] Headings above each column: `<Eyebrow>ELSEWHERE</Eyebrow>` / `<Eyebrow>AT TATARA</Eyebrow>`.
-- [ ] Commit: `style(marketing): Positioning ledger (Elsewhere / At Tatara)`.
+- [x] Provide at least 3–5 rows of contrast (6 rows kept from existing copy, all pass banned-phrase filter).
+- [x] Headings above each column: `<Eyebrow>ELSEWHERE</Eyebrow>` / `<Eyebrow>AT TATARA</Eyebrow>`.
+- [x] Commit: `style(marketing): Positioning ledger (Elsewhere / At Tatara)`. (`67cf77e`)
 
-### Task 5.8: Restyle `pricing-teaser.tsx`
+### Task 5.8: Restyle `pricing-teaser.tsx` ✅
 
 **Files:**
 - Modify: `src/components/marketing/pricing-teaser.tsx`.
 
-- [ ] Wrap the featured tier in `<FrameCard>` (the brass top-rule signals "featured").
-- [ ] Featured CTA: `<Button variant="accent" size="lg">`.
-- [ ] Prices rendered in italic display (`font-family: var(--font-display); font-style: italic; font-weight: 500;`).
-- [ ] Commit: `style(marketing): pricing teaser with FrameCard and brass CTA`.
+- [x] Wrap the featured tier in `<FrameCard>` (the brass top-rule signals "featured").
+- [x] Featured CTA: `<Button variant="accent" size="lg">`.
+- [x] Prices rendered in italic display (`font-family: var(--font-display); font-style: italic; font-weight: 500;`).
+- [x] Commit: `style(marketing): pricing teaser with FrameCard and brass CTA`. (`2449d50`)
 
-### Task 5.9: Restyle `final-cta.tsx`
+### Task 5.9: Restyle `final-cta.tsx` ✅
 
 **Files:**
 - Modify: `src/components/marketing/final-cta.tsx`.
 
-- [ ] Wrap in `<HeroPlate image="/hero.jpg" bottomFade={false}>` (bottom fade off — this is the last visual band before the footer).
-- [ ] Display copy: "Come and stoke the fire."
-- [ ] Primary `<Button variant="accent" size="lg">` CTA.
-- [ ] Commit: `style(marketing): final CTA with HeroPlate and canonical voice`.
+- [x] Wrap in `<HeroPlate image="/hero.jpg" bottomFade={false}>` (bottom fade off — this is the last visual band before the footer).
+- [x] Display copy: "Come and stoke the fire."
+- [x] Primary `<Button variant="accent" size="lg">` CTA.
+- [x] Commit: `style(marketing): final CTA with HeroPlate and canonical voice`. (`59e4207`)
 
-### Task 5.10: Restyle `footer.tsx`
+### Task 5.10: Restyle `footer.tsx` ✅
 
 **Files:**
 - Modify: `src/components/marketing/footer.tsx`.
 
-- [ ] **Grep for Japanese characters** in this file and any siblings: `rg '[\p{Han}\p{Hiragana}\p{Katakana}]' src/components/marketing/`. If `鑪 · est. MMXXVI` or similar is found, remove — leave `est. MMXXVI` or use the new Vol./Iss. pattern below.
-- [ ] Apply Vol./Iss. mono metadata pattern: `<span className="t-mono-label" style={{letterSpacing: '0.18em', opacity: 0.5}}>© 2026 · Vol. I · Iss. 01 · est. 2026</span>`.
-- [ ] Footer links: `var(--ink-3)` default, `var(--ink-1)` hover.
-- [ ] Commit: `style(marketing): footer Vol./Iss. pattern; remove Japanese chars if present`.
+- [x] **Grep for Japanese characters** in this file and any siblings: `rg '[\p{Han}\p{Hiragana}\p{Katakana}]' src/components/marketing/`. If `鑪 · est. MMXXVI` or similar is found, remove — leave `est. MMXXVI` or use the new Vol./Iss. pattern below. (None found — prior cleanup removed them.)
+- [x] Apply Vol./Iss. mono metadata pattern: `<span className="t-mono-label" style={{letterSpacing: '0.18em', opacity: 0.5}}>© 2026 · Vol. I · Iss. 01 · est. 2026</span>`.
+- [x] Footer links: `var(--ink-3)` default, `var(--ink-1)` hover.
+- [x] Commit: `style(marketing): footer Vol./Iss. pattern; remove Japanese chars if present`. (`ab7ca91`)
 
-### Task 5.11: Audit `primitives.tsx`
+### Task 5.11: Audit `primitives.tsx` ✅
 
 **Files:**
 - Modify / delete: `src/components/marketing/primitives.tsx`.
 
-- [ ] For each export: does a Tatara primitive already cover it? If yes, migrate consumers to the Tatara primitive and delete the export.
-- [ ] If an export is genuinely marketing-specific and doesn't belong in `tatara/`, keep it as a thin wrapper calling Tatara primitives.
-- [ ] If the file ends up empty, delete it and remove any `import` lines that referenced it.
-- [ ] Commit: `refactor(marketing): consolidate marketing/primitives into tatara/`.
+- [x] For each export: does a Tatara primitive already cover it? If yes, migrate consumers to the Tatara primitive and delete the export.
+- [x] If an export is genuinely marketing-specific and doesn't belong in `tatara/`, keep it as a thin wrapper calling Tatara primitives.
+- [x] If the file ends up empty, delete it and remove any `import` lines that referenced it. (**→ All consumers already migrated; file deleted in `cd24670`.**)
+- [x] Commit: `refactor(marketing): consolidate marketing/primitives into tatara/`. (Merged into `cd24670 — refactor(marketing): delete primitives.tsx — fully superseded by @/components/tatara`.)
 
-### Task 5.12: Marketing Playwright verification
+### Task 5.12: Marketing Playwright verification ✅
 
-- [ ] Start dev, navigate to `/` (marketing root). Full-page screenshots at 1440px and 768px widths, light + dark.
-- [ ] Walk through all sections: nav, hero, how-it-works, features (verify dark-inverse surface), positioning (verify ledger pattern), pricing, final CTA, footer.
-- [ ] Run a quick banned-phrase pass manually over the copy: "unlock," "leverage," "seamless," "magical," "autopilot," "revolutionize," etc. Nothing should match.
-- [ ] Commit fixes as needed.
+- [x] Start dev, navigate to `/` (marketing root). Full-page screenshots at 1440px and 768px widths, light + dark. (`marketing-1440-light-v2.png`, `marketing-1440-dark.png`, `marketing-768-light.png`.)
+- [x] Walk through all sections: nav, hero, how-it-works, features (verify dark-inverse surface), positioning (verify ledger pattern), pricing, final CTA, footer.
+- [x] Run a quick banned-phrase pass manually over the copy: "unlock," "leverage," "seamless," "magical," "autopilot," "revolutionize," etc. Nothing should match. (Only occurrences are "magical" used as anti-marketing negation and "autopilot" used as critique — per plan this is fine.)
+- [x] Commit fixes as needed. (`59651fd — fix(tatara): expose color prop on Wordmark` — caught via Playwright: `.t-wordmark`'s stylesheet `color` rule overrode inline-style parent spans; added explicit `color` prop so nav wordmark reads cream over hero image.)
+
+**Observation (not a spec violation):** In dark theme the marketing surface inverts to indigo because `SectionFrame` uses `--surface-0`, which resolves to `--cream` in light and `--indigo-deep` in dark. The plan doesn't mandate marketing keep its cream aesthetic in both themes — if a future slice wants marketing to stay cream regardless of the app theme, swap `--surface-0` → literal `var(--cream)` on `SectionFrame` and `PaperGrain`.
 
 ---
 

@@ -55,6 +55,29 @@ describe('displayToolName', () => {
       'Searching brain',
     );
   });
+
+  it('renders a truncated skill_id fallback for load_skill', () => {
+    const result = displayToolName('load_skill', { skill_id: 'abc12345-1234-1234-1234-123456789abc' });
+    expect(result).toBe('Loading skill (abc12345…)');
+  });
+
+  it('renders generic fallback for load_skill with no skill_id', () => {
+    expect(displayToolName('load_skill', {})).toBe('Loading skill (skill)');
+  });
+
+  it('renders a truncated skill_id + path fallback for read_skill_file', () => {
+    const result = displayToolName('read_skill_file', {
+      skill_id: 'abc12345-1234-1234-1234-123456789abc',
+      relative_path: 'references/foo.md',
+    });
+    expect(result).toBe('Reading skill file (abc12345…) › references/foo.md');
+  });
+
+  it('renders generic fallback for read_skill_file with no args', () => {
+    expect(displayToolName('read_skill_file', {})).toBe(
+      'Reading skill file (skill) › file',
+    );
+  });
 });
 
 describe('pillToolName', () => {
@@ -76,5 +99,30 @@ describe('pillToolName', () => {
 
   it('humanises unknown internal tools', () => {
     expect(pillToolName('do_thing', {})).toBe('Do Thing');
+  });
+
+  it('returns truncated skill_id label for load_skill', () => {
+    expect(
+      pillToolName('load_skill', { skill_id: 'abc12345-1234-1234-1234-123456789abc' }),
+    ).toBe('Skill (abc12345…)');
+  });
+
+  it('returns generic pill label for load_skill with no skill_id', () => {
+    expect(pillToolName('load_skill', {})).toBe('Skill (skill)');
+  });
+
+  it('returns path-based label for read_skill_file', () => {
+    expect(
+      pillToolName('read_skill_file', {
+        skill_id: 'abc12345-1234-1234-1234-123456789abc',
+        relative_path: 'references/foo.md',
+      }),
+    ).toBe('Skill file: references/foo.md');
+  });
+
+  it('returns generic label for read_skill_file with no path', () => {
+    expect(pillToolName('read_skill_file', { skill_id: 'abc12345' })).toBe(
+      'Skill file: file',
+    );
   });
 });

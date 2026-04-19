@@ -8,3 +8,5 @@ export * from "./paper-grain";
 export * from "./plate-caption";
 export * from "./frame-card";
 export * from "./gauge-needle";
+export * from "./hero-plate";
+export * from "./section-header";

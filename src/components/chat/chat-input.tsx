@@ -26,7 +26,6 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import { SquareIcon } from 'lucide-react';
 
 import { Icon } from '@/components/tatara';
 import { Button } from '@/components/ui/button';
@@ -185,13 +184,17 @@ export function ChatInput({
           'transition-colors',
         )}
       >
-        {/* Left-side arrow cue — always shown as a visual anchor for the input */}
-        <Icon
-          name="ArrowRight"
-          size={16}
-          aria-hidden="true"
-          className="mb-[5px] shrink-0 text-[var(--cream)] opacity-50"
-        />
+        {/* Left-side arrow cue — hidden while streaming so it doesn't
+            compete visually with the stop button or misrepresent an
+            inactive input as accepting. */}
+        {!isStreaming && (
+          <Icon
+            name="ArrowRight"
+            size={16}
+            aria-hidden="true"
+            className="mb-[5px] shrink-0 text-[var(--cream)] opacity-50"
+          />
+        )}
 
         {canAttach && sessionId ? (
           <AttachmentInput
@@ -222,13 +225,15 @@ export function ChatInput({
           )}
         />
 
-        {/* Inline ↵ hint before the action button */}
-        <span
-          className="mb-[5px] shrink-0 font-mono text-[11px] text-[rgba(242,234,216,0.5)]"
-          aria-hidden="true"
-        >
-          ↵
-        </span>
+        {/* Inline ↵ hint — hidden while streaming since Enter is a no-op then */}
+        {!isStreaming && (
+          <span
+            className="mb-[5px] shrink-0 font-mono text-[11px] text-[rgba(242,234,216,0.5)]"
+            aria-hidden="true"
+          >
+            ↵
+          </span>
+        )}
 
         {isStreaming ? (
           <Button
@@ -238,7 +243,7 @@ export function ChatInput({
             aria-label="Stop generating"
             onClick={onStop}
           >
-            <SquareIcon className="size-3.5" aria-hidden="true" />
+            <Icon name="Square" size={14} aria-hidden="true" />
           </Button>
         ) : (
           // variant="accent" (brass) gives visible contrast against indigo-deep ground

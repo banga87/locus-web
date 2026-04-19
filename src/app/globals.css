@@ -533,8 +533,8 @@
 }
 
 .side {
-  background: var(--cream-soft);
-  border-right: 1px solid var(--paper-rule);
+  background: var(--surface-1);
+  border-right: 1px solid var(--rule-1);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -545,7 +545,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--paper-rule) 60%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--rule-1) 60%, transparent);
 }
 .brand-dot {
   width: 6px;
@@ -595,7 +595,7 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  border-bottom: 1px solid color-mix(in srgb, var(--paper-rule) 60%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--rule-1) 60%, transparent);
 }
 .quick-item {
   padding: 7px 12px;
@@ -623,10 +623,10 @@
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--ink-3);
-  background: var(--cream);
+  background: var(--surface-2);
   padding: 2px 6px;
   border-radius: 3px;
-  border: 1px solid var(--paper-rule);
+  border: 1px solid var(--rule-1);
 }
 
 .side-body {
@@ -638,7 +638,7 @@
   width: 8px;
 }
 .side-body::-webkit-scrollbar-thumb {
-  background: var(--paper-rule);
+  background: var(--rule-1);
   border-radius: 4px;
 }
 
@@ -722,14 +722,14 @@
   height: 14px;
   flex-shrink: 0;
   border-radius: 3px;
-  border: 1px solid var(--paper-rule);
+  border: 1px solid var(--rule-1);
   display: grid;
   place-items: center;
   font-size: 10px;
   color: var(--ink-3);
 }
 .node.folder .node-bullet {
-  background: var(--cream);
+  background: var(--surface-0);
 }
 .node.doc .node-bullet {
   border: none;
@@ -762,7 +762,7 @@
 }
 
 .nav-bottom {
-  border-top: 1px solid color-mix(in srgb, var(--paper-rule) 60%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--rule-1) 60%, transparent);
   padding: 10px 10px 14px;
   display: flex;
   flex-direction: column;
@@ -773,7 +773,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--paper-rule) 60%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--rule-1) 60%, transparent);
 }
 .user-av {
   width: 28px;
@@ -806,16 +806,16 @@
 .main {
   display: flex;
   flex-direction: column;
-  background: var(--cream);
+  background: var(--surface-0);
   overflow: hidden;
 }
-/* Topbar uses solid paper-rule (harder divider than internal sidebar sections). */
+/* Topbar uses solid rule-1 (harder divider than internal sidebar sections). */
 .topbar {
   padding: 14px 32px;
   display: flex;
   align-items: center;
   gap: 16px;
-  border-bottom: 1px solid var(--paper-rule);
+  border-bottom: 1px solid var(--rule-1);
 }
 .crumbs {
   font-family: var(--font-mono);
@@ -849,9 +849,9 @@
 .theme-pill {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  background: var(--cream-soft);
+  background: var(--surface-2);
   color: var(--ink-2);
-  border: 1px solid var(--paper-rule);
+  border: 1px solid var(--rule-1);
   padding: 6px 12px;
   border-radius: var(--radius-lg);
   cursor: pointer;
@@ -908,8 +908,8 @@
   display: flex;
   gap: 20px;
   padding: 14px 0;
-  border-top: 1px solid var(--paper-rule);
-  border-bottom: 1px solid var(--paper-rule);
+  border-top: 1px solid var(--rule-1);
+  border-bottom: 1px solid var(--rule-1);
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-3);
@@ -1016,8 +1016,8 @@
   align-items: center;
   padding: 14px 4px;
   gap: 6px;
-  background: var(--cream-soft);
-  border-right: 1px solid var(--paper-rule);
+  background: var(--surface-1);
+  border-right: 1px solid var(--rule-1);
   overflow: hidden;
 }
 .rail-brand {
@@ -1091,8 +1091,8 @@
   position: fixed;
   top: 12px; left: 12px;
   width: 36px; height: 36px;
-  background: var(--cream);
-  border: 1px solid var(--paper-rule);
+  background: var(--surface-0);
+  border: 1px solid var(--rule-1);
   border-radius: 6px;
   cursor: pointer;
   z-index: 40;

@@ -123,6 +123,19 @@ Fonts continue to load via Google Fonts `@import` for now; self-hosting is flagg
 
 **Type scale (display, body, line-heights):** all `--d-*`, `--t-*`, `--lh-*` tokens from the Tatara source — verbatim.
 
+**Inverse ink tokens (for dark surfaces and imagery backdrops):**
+- `--ink-inverse: var(--cream)`
+- `--ink-inverse-2: rgba(242, 234, 216, 0.72)` (secondary ink on inverse)
+- `--ink-inverse-3: rgba(242, 234, 216, 0.5)` (tertiary ink on inverse)
+
+### 1.1b Semantic type-role and surface-utility classes
+
+In addition to the `--*` CSS variables, the full class layer from `Tatara Design System/colors_and_type.css` is copied verbatim into `globals.css` so consumers can apply Tatara typography and surface rules by className directly. **These are explicit deliverables, not implied.** The implementer must not stop at token variables:
+
+- **Typography roles:** `.t-wordmark`, `.t-wordmark-tagline`, `.t-display`, `.t-h1`, `.t-h2`, `.t-h3`, `.t-h4`, `.t-eyebrow`, `.t-lede`, `.t-body`, `.t-body-sm`, `.t-ui`, `.t-meta`, `.t-mono`, `.t-mono-label`.
+- **Surface classes:** `.surface-editor` (used by Slice 3), `.surface-chat` (used by Slice 4), `.surface-page`, `.surface-inset`, `.surface-dark`. Editor and chat surface rules (headings sizing, code chip, blockquote, pre styling) ship as part of these classes — Slices 3 and 4 then consume the class rather than re-expressing the rules.
+- **Utility primitives:** `.rule-h`, `.rule-h-strong`, `.paper` (SVG-noise overlay applied via `::before`), and the global `::selection` rule (`background: var(--ember); color: var(--cream);`).
+
 ### 1.2 Rewrite `@theme inline` — shadcn-semantic → Tatara-token mapping
 
 Tailwind v4's `@theme inline` block is rewritten so shadcn's generic color/radius/shadow semantic tokens resolve to Tatara values:
@@ -212,6 +225,8 @@ Three mechanisms, layered:
 
 **`input.tsx` + `textarea.tsx`:** fill `--cream-soft`, border `--paper-rule`, text `--ink-1`, placeholder `--ink-muted`. Focus ring ember-warm, 2px, no border-color change. Radius `--radius-md`.
 
+> **Intentional divergence from `preview/comp-inputs.html`:** the Tatara preview changes the input border color to ember on focus AND adds a halo ring. This spec chooses **no border-color change** — the ember ring alone does the affordance work, and keeping the border static avoids layout jitter. Documented here so review doesn't re-litigate.
+
 **`select.tsx`:** trigger styled as Input. Content: `--indigo-deep` ground, cream ink, `var(--shadow-inverse)`.
 
 **`card.tsx`:** `bg-[var(--cream-soft)]`, border `--paper-rule`, `shadow-none` default. Featured variant is **not** in this component — see `FrameCard` under `tatara/`.
@@ -237,7 +252,7 @@ Three mechanisms, layered:
 - **`tabs.tsx`** — underline tab style per `Tatara Design System/preview/comp-tabs.html`. 1px indigo underline on active, ink-3 default, ink-1 hover.
 - **`toast.tsx`** — per `preview/comp-toast.html`. Cream ground + paper-rule border (light), indigo-deep (dark). Pulls in `sonner` if not already present.
 - **`command.tsx`** — per `preview/comp-command.html`. Shadcn's `cmdk` with Tatara styling.
-- **`callout.tsx`** — per `preview/comp-callout.html`. Brass left-rule + italic display copy. Distinct from Tiptap's inline callout (Agent note) in the editor surface.
+- **`callout.tsx`** — per `preview/comp-callout.html`. Brass left-rule + italic display copy + `※` ornament mark as the visual anchor. Distinct from Tiptap's inline callout (Agent note) in the editor surface.
 
 Note: `preview/comp-tree.html` is present, but the current repo has `components/shell/brain-tree.tsx` which covers that concern in-product. Consolidation is a Slice 2 (App shell) decision — keep `brain-tree.tsx` and apply Tatara tree styling there; don't add a separate `ui/tree.tsx` unless reviewer disagrees.
 
@@ -248,15 +263,17 @@ New folder. Each primitive is a small TSX file, no shadcn coupling, API-stable. 
 | File | Purpose | Notes |
 |---|---|---|
 | `wordmark.tsx` | EB Garamond Semibold upright, Title Case "Tatara"; optional `tagline` prop | Replaces `.brand-name` italic. Reference: `Tatara Design System/preview/type-wordmark.html`. |
-| `eyebrow.tsx` | `§ 01 · LABEL` pattern; mono uppercase tracked 0.2em | Reference: `preview/brand-eyebrow-rule.html`. Props: `number?`, `ornament?`, `children` |
+| `eyebrow.tsx` | `№ 01` italic display number + 1px×18 rule + uppercase mono label | Reference: `preview/brand-eyebrow-rule.html`, `ui_kits/app/Primitives.jsx`. Tatara uses **`№`** (italic EB Garamond), not `§`. Props: `number?`, `children` |
 | `plate-caption.tsx` | `Pl. 01 — Caption text` italic display over imagery backdrop-blur | Reference: `preview/brand-imagery.html`. |
 | `letterpress-rule.tsx` | Horizontal rule: `hairline` / `ornament` / `strong` variants | Reference: `preview/brand-eyebrow-rule.html`. |
 | `mono-label.tsx` | JetBrains Mono uppercase tracked 0.16em, small caps label | For spec labels, metadata, kbd. |
 | `paper-grain.tsx` | SVG-noise overlay multiply | Opt-in per surface via `<PaperGrain />` wrapper class. |
 | `frame-card.tsx` | Featured catalogue-plate card: 4px `--brass` top-rule + cream-soft body | Reference: `preview/comp-card.html`. |
 | `gauge-needle.tsx` | Branded spinner — gauge-needle sweep; replaces circular spinner on observation surfaces | Reference: `preview/motion-gauge.html`, `ui_kits/app/GaugeNeedle.jsx`. Sizes `sm` (16), `md` (20), `lg` (24). |
-| `hero-plate.tsx` | Full-bleed imagery + caption plate with 6px backdrop-blur | Reference: `ui_kits/marketing/Hero.jsx`. The only sanctioned backdrop-blur usage. |
-| `section-header.tsx` | `§ 02` eyebrow + display H2 + long horizontal paper-rule | Marketing structural pattern. Reference: `ui_kits/marketing/Sections.jsx`. |
+| `hero-plate.tsx` | Full-bleed imagery + caption plate with 6px backdrop-blur + **functional gradient fades** | Reference: `ui_kits/marketing/Hero.jsx`. The only sanctioned backdrop-blur usage. Ships two **functional** gradients (not decoration — required for legibility): (1) top overlay `linear-gradient(rgba(27,20,16,0.35) → 0)` for nav contrast over imagery, (2) bottom overlay `linear-gradient(rgba(245,239,227,0) → 0.5 → #F5EFE3)` to dissolve hero into page copy. These are not in violation of the "no gradients as decoration" rule — they're load-bearing for nav legibility and visual transition. |
+| `section-header.tsx` | `№ 02` eyebrow + display H2 + long horizontal paper-rule | Marketing structural pattern. Reference: `ui_kits/marketing/Sections.jsx`. |
+| `icon.tsx` | Lucide icon wrapper that pre-applies `strokeWidth={1.5}` (at size ≤16) or `1.75` (at size ≥20) | Enforces Tatara's icon stroke-weight rule system-wide. Every consumer imports `<Icon name="..." />` instead of individual lucide-react components. Sizes constrained to 14/16/20/24. **Lands in Step 0**, not Slice 2 — every subsequent slice consumes it. |
+| `ornament.tsx` | Inline `※` / `·` / `—` / `№` Unicode ornaments, EB Garamond italic where appropriate | Used by Eyebrow, PlateCaption, callout, section dividers. |
 
 ### 2.5 GaugeNeedle usage rules (canonical)
 
@@ -299,7 +316,7 @@ Land in three sub-commits within the same overall step:
 **Work:**
 - Replace any bespoke auth CSS with shadcn primitives.
 - Insert `<Wordmark />` above auth card, centered.
-- Eyebrow labels ("§ Sign in" / "§ Create account") above card titles.
+- Eyebrow labels (`<Eyebrow number="01">SIGN IN</Eyebrow>` / `<Eyebrow number="01">CREATE ACCOUNT</Eyebrow>`) above card titles — renders as `№ 01 · SIGN IN` per Tatara's Primitives.jsx convention.
 - Primary button = default variant; secondary actions = ghost.
 - Error states use `--state-error` deep ember.
 - Focus rings visible and ember-warm.
@@ -320,7 +337,7 @@ Land in three sub-commits within the same overall step:
 - `.side-body`: scrollbar thumb `--paper-rule`.
 - `.node`, `.node:hover`, `.node.selected`, `.node[data-active="true"]`: active-dot `::after` → brass. Staleness `.node.doc[data-freshness="stale"]::before` → ember.
 - `.children` nesting preserved.
-- `.nav-bottom`, `.user-row`, `.user-av`, `.user-name`, `.user-sub`: user avatar gradient → copper wash / indigo chip. Mono metadata.
+- `.nav-bottom`, `.user-row`, `.user-av`, `.user-name`, `.user-sub`: user avatar gradient → copper wash / indigo chip. `.user-sub` uses `.t-mono-label`-like treatment — JetBrains Mono at `--t-micro` (11px) with 0.12em tracking, `--ink-3`, matching `ui_kits/app/Sidebar.jsx`'s "Workshop · Atelier" subtitle pattern.
 - `.topbar`, `.crumbs`, `.topbar-spacer`, `.icon-btn`, `.icon-btn:hover`, `.theme-pill`, `.combo-pill`: icon-btn hover is `rgba(ink, 0.04)` wash; theme-pill mono uppercase tracked.
 - `.article-wrap`, `.article`: margins preserved.
 - `.eyebrow` in article context: **rewrite.** Currently italic EB Garamond green; Tatara eyebrow is mono uppercase tracked 0.2em ink-3. Replace with `<Eyebrow />` component usage where possible; fall back to rewritten CSS for unstructured cases.
@@ -364,13 +381,33 @@ Land in three sub-commits within the same overall step:
 **Surfaces:** `src/components/chat/*`, `src/components/ai-elements/*`, `.chat-markdown` block in `globals.css`.
 
 **Work:**
-- Rewrite `.chat-markdown` to match Tatara `surface-chat`: 15px Source Sans, 1.55 line-height, EB Garamond headings at 22/18/16.
-- `.chat-markdown pre`: `--indigo-darker` background, cream text, 12.5px mono.
-- `.chat-markdown code`: `--font-mono`, 0.85em, iron on cream-soft chip.
-- `.chat-markdown blockquote`: brass left-rule 2px, matching editor.
+- Apply `.surface-chat` class (now a shipped utility per Section 1.1b) to the chat message body container rather than re-expressing the rules. `.chat-markdown` becomes a narrow overlay for markdown-specific edge cases.
+- Per-rule detail that lives in `.surface-chat`: 15px Source Sans, 1.55 line-height, EB Garamond headings at 22/18/16, pre blocks `--indigo-darker` background + cream text + 12.5px mono, code chips `--font-mono` 0.85em + iron on cream-soft chip, blockquote brass left-rule 2px.
 - Message bubble differentiation: user = cream-soft, agent = cream (page surface). Tool-call chrome and reasoning panels use `--agent-highlight` (ember 12%) and `--agent-edit` (brass 16%) washes.
 - Streaming dots stay: `locus-chat-bounce` keyframe preserved, retokened to `--ink-2` or `--ember-warm` (visual decision during implementation).
-- `ai-elements` tool-call displays: cream-soft chip, 1px paper-rule, MonoLabel heading.
+
+**Activity-stream item typology** (from `ui_kits/app/AgentPanel.jsx` — canonical):
+
+The `ai-elements` activity stream (and the agent panel if/where it's rendered) MUST support three item kinds with these exact signatures. Implementer adapts to current data shape; visual identity is non-negotiable:
+
+1. **`tool`** — inline mono row: `▸ TOOLNAME` (mono 10px, 0.16em tracking, uppercase, `--brass-deep` color) + `subtitle` (mono 12px, `--ink-2`) + right-aligned elapsed time (mono 10px, `--ink-3`). Spacer bar below. No chip, no card — it's a typographic row.
+2. **`think`** — italic display 14px, weight 400, `--ink-2`, line-height 1.5. No chrome. Reads as the agent's narration.
+3. **`diff`** — brass 12% background wash (`rgba(184,134,58,0.12)`) + 2px `--brass` left-rule + padding. Inside: mono eyebrow "DIFF" (`--brass-deep`) + body title (Source Sans 600, 12px, `--ink-1`) + body text (Source Sans 12.5px, `--ink-2`) + action row with three buttons: **Accept** (brass variant, small), **Amend** (ghost), **Discard** (ghost).
+
+**Run-header composition** (per `AgentPanel.jsx` lines 8–14 — canonical for any "agent turn in progress" header):
+
+- Left column:
+  - Eyebrow: mono 10px 0.18em uppercase, `--ember` color — `Run № 42 · Stage II · Temper` pattern.
+  - Title: EB Garamond 600, 18px, `--ink-1`, letter-spacing `-0.01em` — typically the agent/role name.
+- Right: `<GaugeNeedle size="28" />` when running.
+
+**Gauges strip** (per AgentPanel lines 17–29): three-column grid showing Tokens / Tools / Time with mono eyebrow labels + display-500 values (22px) + body subtitle.
+
+**Controls row** (per AgentPanel lines 74–89): mono status line (`● Running · hold the lever` when active, ember; `○ Paused` when not, ink-3) + Pause/Resume ghost button + Stop button with `rgba(168,68,40,.35)` border and `#8C2E18` text.
+
+**Steering input** (per AgentPanel lines 90–100): full-width row, `--indigo-deep` background, cream text, left arrow icon, mono `↵` hint on the right. This is the canonical chat composer chrome for in-product agent steering — distinct from the marketing-page CTA inputs.
+
+**`ai-elements` tool-call displays:** the old "cream-soft chip + paper-rule + MonoLabel heading" pattern is **superseded** by the `tool` item typology above. If existing `ai-elements` components render as boxed chips, rewrite to the inline mono-row pattern.
 
 **Acceptance:** Send an agent turn end-to-end: waiting → first token → stream → tool calls → completion. Code blocks indigo-dark. Tool-call cards Tatara chrome. No glowing/neon highlights. Playwright MCP captures screenshots of each state; console-error check clean.
 
@@ -380,16 +417,26 @@ Land in three sub-commits within the same overall step:
 
 **Work:**
 - **Retire `marketing.css`.** Audit; Tatara-shaped pieces migrate into `tatara/` primitives or inline utilities. Fraunces-forest deleted.
-- `nav.tsx`: `<Wordmark />` for brand; nav items ink-2 default / ink-1 hover; focus rings.
-- `hero.tsx`: wrap in `<HeroPlate>` with `assets/hero.jpg` from Tatara design system (copy into `public/hero.jpg`); caption via `<PlateCaption>` — "Pl. 01 — The engine hall, at working temperature."
-- `section-frame.tsx`: delegate to `<SectionHeader>`: `§ 01` eyebrow + display h2 + long paper-rule.
-- `features.tsx`: two-column grid per Tatara layout rules; `<FrameCard>` for featured features (brass top-rule).
-- `how-it-works.tsx`: display H2 ("Three stages, one fire kept lit."), numbered sub-sections using `<Eyebrow>`.
-- `positioning.tsx`: copy review for any sentence that would pattern-match to banned phrases. Implementer flags during work.
+- `nav.tsx`: **Nav lockup per `ui_kits/marketing/Nav.jsx`** — `<Wordmark />` + 1px × 16 vertical brass divider + italic display `est. 2026` lockup. Nav items ink-2 default / ink-1 hover; focus rings. When rendered over the hero imagery, nav uses the `--ink-inverse` / `--ink-inverse-2` token pair against the HeroPlate top-gradient overlay for legibility.
+- `hero.tsx`: wrap in `<HeroPlate>` with `assets/hero.jpg` from Tatara design system (copy into `public/hero.jpg`); caption via `<PlateCaption>` — "Pl. 01 — The engine hall, at working temperature." Hero copy uses the canonical voice palette (below).
+- `section-frame.tsx`: delegate to `<SectionHeader>`: `№ 01` eyebrow + display h2 + long paper-rule.
+- `features.tsx`: **Dark-inverse surface treatment** per `ui_kits/marketing/Sections.jsx` Features block — `#1B1410` ground, `--ink-inverse` (cream at ~0.7 for body), brass-soft accents, borders at `rgba(cream, 0.15)`. Tatara uses this inverse ground for the "The Console" / Features band specifically. Two-column grid; `<FrameCard>` variant styled for inverse (brass top-rule on dark) for featured features. Do not ship Features on cream.
+- `how-it-works.tsx`: display H2 ("Three stages, one fire kept lit."), numbered sub-sections using `<Eyebrow number="01/02/03">` — each section names one of: `ANNEAL` / `TEMPER` / `STOKE` (the Tatara craft-word triptych).
+- `positioning.tsx`: **Two-column "Elsewhere vs At Tatara" ledger pattern** per `Sections.jsx` — left column uses italic display 300 weight with strikethrough for the "Elsewhere" phrasings; right column uses upright display for the "At Tatara" phrasings. Presented inside a `--cream-soft` card with 1px `--paper-rule`. The ledger is the visual identity of this section, not a stylistic choice. Plus: copy review for any banned phrase.
 - `pricing-teaser.tsx`: `<FrameCard>` for featured tier; **brass** button variant on the featured CTA.
 - `final-cta.tsx`: full-bleed `<HeroPlate>`; CTA copy aligned with voice palette ("Come and stoke the fire.").
-- `footer.tsx`: sweep for Japanese characters (Tatara README flags upstream `components/Sections.jsx` as having `鑪 · est. MMXXVI` — check here). Remove if present. Keep `est. MMXXVI` pattern.
+- `footer.tsx`: **Volume/Issue metadata pattern** per `Sections.jsx` footer — mono at 0.18em tracking, 50% opacity: `© 2026 · Vol. I · Iss. 01 · est. 2026`. Also sweep for Japanese characters (Tatara README flags upstream `components/Sections.jsx` as having `鑪 · est. MMXXVI` — check here and remove if present).
 - `primitives.tsx`: audit; most content migrates to `tatara/` or becomes thin wrappers.
+
+**Canonical voice palette (use verbatim where the component calls for hero/section/CTA copy):**
+
+- One-liner: "The operator's console for AI labor."
+- Positioning thesis: "Hire AI employees and feel every turn of the crank."
+- How-it-works head: "Three stages, one fire kept lit."
+- Feature head: "Gauges, not black boxes."
+- CTA: "Come and stoke the fire."
+
+The implementer may adapt surrounding copy, but these five lines are the pinned anchors.
 
 **Acceptance:** Home page walks hero → positioning → how-it-works → features → pricing → final-cta with Tatara voice, rhythm, palette. No green, no rust, no 8px+ radius, no filled icons, no emoji, no kanji. Section transitions use letterpress rules. Copy doesn't pattern-match banned phrases. Both themes verified. Playwright MCP full-page screenshots captured.
 
@@ -455,7 +502,7 @@ Checks:
 
 - Outline only. Manual inspect for `fill=` attributes.
 - Sizes 14/16/20/24. Grep `size={(\d+)}` and audit.
-- Stroke 1.5px default. **Proposal: add a thin `<Icon>` wrapper under `tatara/` that pre-applies `strokeWidth={1.5}`, or enforce via lint/convention in Slice 2.** Implementer chooses; flagged explicitly.
+- Stroke 1.5px default. Enforced by the `<Icon>` wrapper (Step 0 deliverable under `tatara/icon.tsx`). Every slice consumes `<Icon name="..." />` — no direct `lucide-react` component imports in consumer code after Step 0.
 
 ### 4.5 Copy compliance
 
@@ -513,6 +560,8 @@ Commit granularity lets bisect-by-slice work if a regression surfaces. Collapse 
 - Updated consumers in `src/components/shell/`, `editor/`, `chat/`, `ai-elements/`, `marketing/`, `layout/`.
 - `src/app/(marketing)/marketing.css` retired or pared to near-zero.
 - `scripts/check-tatara-violations.sh`.
+- `public/wordmark.svg` and `public/wordmark-inverse.svg` — copied from `Tatara Design System/assets/` for OG cards, email, favicon, and any place that needs the wordmark as a raster-safe SVG rather than the TSX component.
+- `public/hero.jpg` — copied from `Tatara Design System/assets/hero.jpg`.
 - Companion doc already written at `locus-brain/design/tatara-design-system-tier-3-deferred.md`.
 
 ### 5.5 Out of scope (explicit non-goals)
@@ -529,7 +578,6 @@ Commit granularity lets bisect-by-slice work if a regression surfaces. Collapse 
 ## Open questions flagged for reviewer / implementer
 
 - **Avatar shape.** Tatara is silent on avatars; spec proposes circular user avatars (only sanctioned exception to 6px cap) and square workspace avatars at `--r-md`. Revisit if reviewer disagrees.
-- **Icon stroke-width enforcement.** Wrapper component (`<Icon>` under `tatara/` with `strokeWidth={1.5}`) vs convention. Implementer decides during Slice 2.
 - **Chat waiting-state dot retokenization color.** `--ink-2` vs `--ember-warm` for the `locus-chat-bounce` dots. Visual decision during Slice 4 implementation.
 - **`ui/tree.tsx` vs `components/shell/brain-tree.tsx`.** Spec proposes keeping `brain-tree.tsx` and styling it Tatara; no new `ui/tree.tsx`. Revisit if reviewer disagrees.
 - **Chat pre-first-token gauge vs dots.** Spec currently preserves dots for the whole chat flow. Worth seeing in action during Slice 4 and possibly switching the pre-first-token state to gauge-needle-small if it reads better.

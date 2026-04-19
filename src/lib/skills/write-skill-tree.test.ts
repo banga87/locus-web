@@ -535,7 +535,7 @@ describe('updateResource', () => {
     expect(root.content).not.toContain('# Original body');
   });
 
-  it('child path — updates resource content', async () => {
+  it('child path — updates resource content and bumps version', async () => {
     const { rootId, resourceIds } = await writeSkillTree({
       companyId: f.companyId,
       brainId: f.brainId,
@@ -552,11 +552,44 @@ describe('updateResource', () => {
     });
 
     const [child] = await db
-      .select({ content: documents.content })
+      .select({ content: documents.content, version: documents.version })
       .from(documents)
       .where(eq(documents.id, resourceIds[0]));
 
     expect(child.content).toBe('# New guide content');
+    // Version must increment (1 → 2) — not reset to 1
+    expect(child.version).toBe(2);
+  });
+
+  it('child path — version increments monotonically across multiple updates', async () => {
+    const { rootId, resourceIds } = await writeSkillTree({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      name: 'Monotonic Version Test',
+      description: 'Verifies child version goes 1 → 2 → 3.',
+      skillMdBody: '# Root',
+      resources: [{ relative_path: 'notes.md', content: '# v1' }],
+    });
+
+    const childId = resourceIds[0];
+
+    // First update: 1 → 2
+    await updateResource({ rootId, relativePath: 'notes.md', newContent: '# v2' });
+
+    const [after1] = await db
+      .select({ version: documents.version })
+      .from(documents)
+      .where(eq(documents.id, childId));
+    expect(after1.version).toBe(2);
+
+    // Second update: 2 → 3
+    await updateResource({ rootId, relativePath: 'notes.md', newContent: '# v3' });
+
+    const [after2] = await db
+      .select({ version: documents.version })
+      .from(documents)
+      .where(eq(documents.id, childId));
+    expect(after2.version).toBe(3);
   });
 
   it('rejects installed skills with "installed skill is read-only"', async () => {

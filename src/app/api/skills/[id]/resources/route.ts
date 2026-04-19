@@ -23,6 +23,10 @@ import { createResource } from '@/lib/skills/write-skill-tree';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
+// Whitelist regex for individual path segments: alphanumerics, dots, underscores, hyphens.
+// Must match the same rule enforced on the PATCH/DELETE [...path] route.
+const SAFE_SEGMENT_RE = /^[\w.\-]+$/;
+
 const postSchema = z
   .object({
     relative_path: z
@@ -30,7 +34,10 @@ const postSchema = z
       .min(1, 'relative_path is required')
       .max(256, 'relative_path too long')
       .refine((p) => !p.startsWith('/'), 'relative_path must not start with /')
-      .refine((p) => !p.split('/').includes('..'), 'relative_path must not contain .. segments'),
+      .refine(
+        (p) => p.split('/').every((seg) => SAFE_SEGMENT_RE.test(seg)),
+        'invalid path segment',
+      ),
     content: z.string(),
   })
   .strict();

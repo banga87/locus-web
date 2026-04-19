@@ -38,6 +38,18 @@ const patchSchema = z
   })
   .strict();
 
+// Whitelist regex for individual path segments: alphanumerics, dots, underscores, hyphens.
+// Rejects '..' traversals, whitespace, and any other unexpected characters.
+const SAFE_SEGMENT_RE = /^[\w.\-]+$/;
+
+/**
+ * Validate every segment of a decoded path array.
+ * Returns true if all segments are safe; false otherwise.
+ */
+function validatePathSegments(segments: string[]): boolean {
+  return segments.every((seg) => SAFE_SEGMENT_RE.test(seg));
+}
+
 // ─── Shared skill lookup ──────────────────────────────────────────────────────
 
 async function lookupSkill(id: string, brainId: string) {
@@ -74,6 +86,11 @@ function mapHelperError(msg: string, relativePath: string): Response | null {
 export const PATCH = (req: Request, { params }: RouteCtx) =>
   withAuth(async (ctx) => {
     const { id, path: pathSegments } = await params;
+
+    if (!validatePathSegments(pathSegments)) {
+      return error('invalid_input', 'invalid path segment', 400);
+    }
+
     const relativePath = pathSegments.join('/');
 
     const companyIdOrResponse = requireCompany(ctx);
@@ -116,6 +133,11 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
 export const DELETE = (_req: Request, { params }: RouteCtx) =>
   withAuth(async (ctx) => {
     const { id, path: pathSegments } = await params;
+
+    if (!validatePathSegments(pathSegments)) {
+      return error('invalid_input', 'invalid path segment', 400);
+    }
+
     const relativePath = pathSegments.join('/');
 
     const companyIdOrResponse = requireCompany(ctx);

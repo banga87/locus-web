@@ -97,6 +97,7 @@ export function AddFileInline({ skillId, onSaved, onCancel }: AddFileInlineProps
           placeholder="templates/short.md"
           className="h-7 font-mono text-xs"
           disabled={saving}
+          autoFocus
         />
       </div>
 

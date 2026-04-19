@@ -452,7 +452,8 @@ export interface UpdateResourceInput {
  *
  * - relativePath === 'SKILL.md': rewrites the root doc's body, preserving
  *   its YAML frontmatter, and bumps version.
- * - Any other path: updates the matching child resource's content.
+ * - Any other path: updates the matching child resource's content and bumps
+ *   the child's own version (version + 1) so audit history is preserved.
  *
  * Rejects installed skills (source.github present).
  *
@@ -515,7 +516,7 @@ export async function updateResource(
     } else {
       // Update a child resource.
       const [child] = await tx
-        .select({ id: documents.id })
+        .select({ id: documents.id, version: documents.version })
         .from(documents)
         .where(
           and(
@@ -534,7 +535,7 @@ export async function updateResource(
         .update(documents)
         .set({
           content: newContent,
-          version: 1, // resources track their own version independently
+          version: child.version + 1, // monotonically increment to preserve audit history
           updatedAt: new Date(),
         })
         .where(eq(documents.id, child.id));

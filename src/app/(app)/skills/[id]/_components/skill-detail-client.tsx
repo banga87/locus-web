@@ -94,11 +94,14 @@ export function SkillDetailClient({
     }
     const res = resources.find((r) => r.id === selectedId);
     if (!res) return { content: root.body, filename: 'SKILL.md', relativePath: 'SKILL.md' };
-    const relPath = res.relativePath ?? res.title;
+    if (!res.relativePath) {
+      console.error('[SkillDetailClient] resource missing relativePath', { id: res.id, title: res.title });
+      return { content: res.content, filename: res.title, relativePath: null };
+    }
     return {
       content: res.content,
-      filename: relPath,
-      relativePath: relPath,
+      filename: res.relativePath,
+      relativePath: res.relativePath,
     };
   })();
 
@@ -241,13 +244,19 @@ export function SkillDetailClient({
 
             {/* File viewer — right */}
             <div className="flex-1 overflow-hidden flex flex-col">
-              <FileViewer
-                content={selectedFile.content}
-                filename={selectedFile.filename}
-                canEdit={canEditFiles}
-                skillId={root.id}
-                relativePath={selectedFile.relativePath}
-              />
+              {selectedFile.relativePath !== null ? (
+                <FileViewer
+                  content={selectedFile.content}
+                  filename={selectedFile.filename}
+                  canEdit={canEditFiles}
+                  skillId={root.id}
+                  relativePath={selectedFile.relativePath}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                  (missing path)
+                </div>
+              )}
             </div>
           </div>
 

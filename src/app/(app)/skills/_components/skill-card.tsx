@@ -5,6 +5,8 @@
 //   forked    → "Forked from {from}"
 //   authored  → "Authored"
 
+import Link from 'next/link';
+
 import { Badge } from '@/components/ui/badge';
 import { formatDistance } from '@/lib/format/time';
 import type { SkillOrigin } from '@/lib/skills/types';
@@ -36,6 +38,7 @@ function originBadgeText(origin: SkillOrigin): string {
 }
 
 export function SkillCard({
+  id,
   title,
   description,
   origin,
@@ -50,7 +53,10 @@ export function SkillCard({
       : description;
 
   return (
-    <div className="rounded-lg border border-border bg-card px-5 py-4 flex flex-col gap-3">
+    <Link
+      href={`/skills/${id}`}
+      className="rounded-lg border border-border bg-card px-5 py-4 flex flex-col gap-3 transition-colors hover:bg-accent/40 hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-base font-medium text-ink leading-snug">{title}</h3>
@@ -74,6 +80,6 @@ export function SkillCard({
         <span>·</span>
         <span>{formatDistance(updatedAt)}</span>
       </div>
-    </div>
+    </Link>
   );
 }

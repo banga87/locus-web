@@ -434,6 +434,8 @@
   body { @apply bg-background text-foreground font-sans; }
 }
 
+/* Typographic scale (h1/h2/h3, blockquote, code, a) mirrors .surface-editor —
+   keep both in sync when the design scale changes. */
 /* Tiptap editor surface. Scoped via the `.tiptap` class so it doesn't bleed
    into the read-only document renderer (which uses `.prose`). */
 .tiptap {
@@ -460,7 +462,6 @@
   font-weight: 500;
   line-height: 1.1;
   letter-spacing: -0.015em;
-  color: var(--ink-1);
   margin: 1.4em 0 0.4em;
 }
 .tiptap h2 {
@@ -469,7 +470,6 @@
   font-weight: 600;
   line-height: 1.15;
   letter-spacing: -0.015em;
-  color: var(--ink-1);
   margin: 1.6em 0 0.35em;
 }
 .tiptap h3 {
@@ -478,10 +478,9 @@
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.015em;
-  color: var(--ink-1);
   margin: 1.5em 0 0.3em;
 }
-.tiptap p { @apply my-3; }
+.tiptap p { margin: 0.4em 0 1em; }
 .tiptap ul { @apply my-3 pl-6 list-disc; }
 .tiptap ol { @apply my-3 pl-6 list-decimal; }
 .tiptap blockquote {

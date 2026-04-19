@@ -27,12 +27,12 @@
 // `proposal-card.tsx` for the approval flow and
 // `propose-document.ts` for the tool definitions.
 
-import { Loader2Icon, CheckIcon, AlertTriangleIcon } from 'lucide-react';
+import { AlertTriangleIcon } from 'lucide-react';
 
+import { ActivityTool } from '@/components/ai-elements/activity';
 import { PROPOSE_TOOL_PREFIX } from '@/lib/context/proposals';
 import { useSkillNames } from '@/lib/skills/use-skill-names';
 import { PROPOSE_SKILL_CREATE_TOOL_NAME } from '@/lib/tools/propose-skill-create';
-import { cn } from '@/lib/utils';
 
 import { ProposalCard, type Proposal } from './proposal-card';
 import {
@@ -201,14 +201,18 @@ export function ToolCallIndicator({
   }
 
   if (state === 'pending') {
-    const label = isSkillTool
+    const subtitle = isSkillTool
       ? resolvedDisplayName(toolName, args, skillNames)
       : displayToolName(toolName, args);
+    const pill = isSkillTool
+      ? resolvedPillName(toolName, args, skillNames)
+      : pillToolName(toolName, args);
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Loader2Icon className="size-3.5 animate-spin" aria-hidden="true" />
-        <span>{label}…</span>
-      </div>
+      <ActivityTool
+        state="pending"
+        toolName={pill}
+        subtitle={subtitle}
+      />
     );
   }
 
@@ -228,24 +232,18 @@ export function ToolCallIndicator({
   }
 
   // complete
-  const label = isSkillTool
+  const pill = isSkillTool
     ? resolvedPillName(toolName, args, skillNames)
     : pillToolName(toolName, args);
+  const subtitle = isSkillTool
+    ? resolvedDisplayName(toolName, args, skillNames)
+    : displayToolName(toolName, args);
   return (
-    <div
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60',
-        'px-2 py-0.5 text-xs text-muted-foreground',
-      )}
-    >
-      <CheckIcon className="size-3" aria-hidden="true" />
-      <span>
-        Used:{' '}
-        <span className="font-medium text-foreground">
-          {label}
-        </span>
-      </span>
-    </div>
+    <ActivityTool
+      state="complete"
+      toolName={pill}
+      subtitle={`Used: ${subtitle}`}
+    />
   );
 }
 

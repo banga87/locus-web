@@ -1,33 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "./(marketing)/marketing.css";
-@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-background:           var(--cream);
+  --color-background:           var(--surface-0);
   --color-foreground:           var(--ink-1);
-  --color-card:                 var(--cream-soft);
+  --color-card:                 var(--surface-1);
   --color-card-foreground:      var(--ink-1);
   --color-popover:              var(--indigo-deep);
   --color-popover-foreground:   var(--cream);
   --color-primary:              var(--indigo-darker);
   --color-primary-foreground:   var(--cream);
-  --color-secondary:            var(--cream-soft);
+  --color-secondary:            var(--surface-1);
   --color-secondary-foreground: var(--ink-1);
-  --color-muted:                var(--cream-soft);
+  --color-muted:                var(--surface-1);
   --color-muted-foreground:     var(--ink-3);
   --color-accent:               var(--brass);
   --color-accent-foreground:    var(--cream);
   --color-destructive:          var(--state-error);
-  --color-border:               var(--paper-rule);
-  --color-input:                var(--paper-rule);
+  --color-border:               var(--rule-1);
+  --color-input:                var(--rule-1);
   --color-ring:                 var(--ember-warm);
-  --color-sidebar:              var(--cream-soft);
+  --color-sidebar:              var(--surface-1);
   --color-sidebar-foreground:   var(--ink-1);
-  --color-sidebar-border:       var(--paper-rule);
+  --color-sidebar-border:       var(--rule-1);
   --color-sidebar-accent:       var(--agent-highlight);
   --color-sidebar-accent-foreground: var(--indigo);
   --color-sidebar-primary:      var(--brass);

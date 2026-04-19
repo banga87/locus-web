@@ -10,6 +10,8 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { BookOpen, PanelLeftClose, Plug } from 'lucide-react';
 
+import { Wordmark } from '@/components/tatara';
+
 import type { ManifestFolder } from '@/lib/brain/manifest';
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
 
@@ -41,7 +43,7 @@ export function SidebarExpanded({ companyName, user, tree, pinned, workflowsBadg
   return (
     <aside className="side">
       <div className="brand">
-        <span className="brand-name">Locus</span>
+        <Wordmark size={22} />
         <span className="brand-dot" aria-hidden="true" />
         <div className="brand-right">
           <span className="brand-tag">v0.1</span>

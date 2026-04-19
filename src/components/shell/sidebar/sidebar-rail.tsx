@@ -16,7 +16,7 @@ export function SidebarRail() {
   const { collapsed, sections, toggleCollapsed, expandSidebarWithSection } = useSidebarLayout();
   return (
     <aside className="side side-rail">
-      <div className="rail-brand" title="Locus">
+      <div className="rail-brand" title="Tatara">
         <span className="brand-dot" aria-hidden="true" />
       </div>
       <button

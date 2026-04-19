@@ -80,13 +80,15 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
       style={{ color: rootColor }}
     >
       {/* Left: wordmark + 1x16 brass rule + (desktop only) est. 2026 lockup.
-          Wordmark inherits color from `var(--ink-1)`; wrapping in a span
-          that overrides `color` flips it to `--ink-inverse` over the hero. */}
+          Wordmark's `color` prop is the only reliable override for its
+          inner `.t-wordmark` span's stylesheet rule (specificity war). */}
       <div className="flex min-w-0 items-center gap-4">
         <Link href="/" aria-label="Tatara home" className="inline-flex items-center">
-          <span style={{ color: rootColor }}>
-            <Wordmark size={22} className="min-[1180px]:text-[24px]" />
-          </span>
+          <Wordmark
+            size={22}
+            color={rootColor}
+            className="min-[1180px]:text-[24px]"
+          />
         </Link>
         <div
           aria-hidden

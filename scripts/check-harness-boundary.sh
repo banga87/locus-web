@@ -26,6 +26,19 @@ for TARGET_DIR in "${TARGET_DIRS[@]}"; do
   fi
 done
 
+# Subagent boundary: src/lib/agent/ must not import from src/lib/subagent/.
+# The subagent dispatch layer depends on the harness, never the reverse.
+SUBAGENT_PATTERN="from[[:space:]]+['\"](@/lib/subagent|\.\./subagent|\./subagent)"
+for TARGET_DIR in "${TARGET_DIRS[@]}"; do
+  if [ ! -d "${TARGET_DIR}" ]; then continue; fi
+  if [ "${TARGET_DIR}" = "${ROOT_DIR}/src/lib/agent" ] && \
+     grep -rEn --include="*.ts" --include="*.tsx" "${SUBAGENT_PATTERN}" "${TARGET_DIR}"; then
+    echo ""
+    echo "ERROR: src/lib/agent/ must not import from src/lib/subagent/ — see AGENTS.md."
+    exit 1
+  fi
+done
+
 # Second invariant: only run.ts may import streamText from 'ai'. Catches
 # accidental `import { streamText } from 'ai'` outside the harness entry.
 STREAMTEXT_PATTERN="from[[:space:]]+['\"]ai['\"]"

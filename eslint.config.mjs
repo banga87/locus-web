@@ -102,6 +102,11 @@ const eslintConfig = defineConfig([
               message:
                 "src/lib/agent/ must stay platform-agnostic — see src/lib/agent/README.md",
             },
+            {
+              group: ["@/lib/subagent", "@/lib/subagent/*"],
+              message:
+                "src/lib/agent/ must not import from src/lib/subagent/ — see AGENTS.md.",
+            },
           ],
         },
       ],
@@ -127,6 +132,11 @@ const eslintConfig = defineConfig([
               group: ["@vercel/functions"],
               message:
                 "src/lib/agent/ must stay platform-agnostic — see src/lib/agent/README.md",
+            },
+            {
+              group: ["@/lib/subagent", "@/lib/subagent/*"],
+              message:
+                "src/lib/agent/ must not import from src/lib/subagent/ — see AGENTS.md.",
             },
           ],
         },

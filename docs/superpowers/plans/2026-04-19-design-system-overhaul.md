@@ -948,21 +948,22 @@ Biggest slice. Hits the bespoke CSS block in `globals.css` (roughly lines 165–
 
 ---
 
-## Stage 3 — Slice 3: Editor surface
+## Stage 3 — Slice 3: Editor surface ✅ COMPLETE (2026-04-19)
 
 ### Task 3.1: Update Tiptap CSS block in `globals.css`
 
 **Files:**
 - Modify: `src/app/globals.css` (the `.tiptap*` block and `.prose [data-type="callout"]`).
 
-- [ ] Apply the `.surface-editor` treatment: either (a) set `.tiptap { @apply ...; }` using Tailwind `@apply` against the `t-body`-equivalent, or (b) inline the rules matching Section 3 Slice 3 of the spec.
-- [ ] `.tiptap h1/h2/h3`: font sizes 40/28/21, weights 500/600/600, family EB Garamond via `var(--font-display)`.
-- [ ] `.tiptap blockquote`: `border-left: 2px solid var(--brass)`, italic display, 19px, `var(--ink-1)`.
-- [ ] `.tiptap code`: `background: var(--cream-soft); color: var(--iron); border-radius: var(--r-xs);`.
-- [ ] `.tiptap a`: `color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 3px;`.
-- [ ] `.tiptap [data-type="callout"]`, `.prose [data-type="callout"]`: preserve the letterpress "Agent note —" eyebrow. Border-top: `var(--ink-1)`, border-bottom: `var(--paper-rule)`. The `::before` pseudo-content `"Agent note —"` color: `var(--brass)` (was `var(--accent)`).
-- [ ] `.tiptap p.is-editor-empty:first-child::before`: color `var(--ink-muted)`.
-- [ ] Commit: `style(editor): retoken Tiptap surface to Tatara`.
+- [x] Apply the `.surface-editor` treatment: either (a) set `.tiptap { @apply ...; }` using Tailwind `@apply` against the `t-body`-equivalent, or (b) inline the rules matching Section 3 Slice 3 of the spec. → Chose (b): rules inlined directly in `.tiptap` block so the scoping over placeholder/callout/code/link stays local.
+- [x] `.tiptap h1/h2/h3`: font sizes 40/28/21, weights 500/600/600, family EB Garamond via `var(--font-display)`.
+- [x] `.tiptap blockquote`: `border-left: 2px solid var(--brass)`, italic display, 19px, `var(--ink-1)`.
+- [x] `.tiptap code`: `background: var(--cream-soft); color: var(--iron); border-radius: var(--r-xs);`.
+- [x] `.tiptap a`: `color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 3px;`.
+- [x] `.tiptap [data-type="callout"]`, `.prose [data-type="callout"]`: preserve the letterpress "Agent note —" eyebrow. Border-top: `var(--ink-1)`, border-bottom: `var(--paper-rule)`. The `::before` pseudo-content `"Agent note —"` color: `var(--brass)` (was `var(--accent)`).
+- [x] `.tiptap p.is-editor-empty:first-child::before`: color `var(--ink-muted)`.
+- [x] Commit: `style(editor): retoken Tiptap surface to Tatara` — `61597b4`.
+- [x] Polish commit (post-review): trim redundant heading `color: var(--ink-1)` (inherited from `.tiptap` base), add cross-reference comment linking typographic scale to `.surface-editor`, align `.tiptap p` margin with `.surface-editor p` — `c70c933`.
 
 ### Task 3.2: Audit editor components
 
@@ -970,15 +971,21 @@ Biggest slice. Hits the bespoke CSS block in `globals.css` (roughly lines 165–
 - Read: `src/components/editor/**/*`.
 - Modify: any file with direct `lucide-react` import (replace with `<Icon />`) or hardcoded retired tokens.
 
-- [ ] Read each file in `src/components/editor/`. For each, note color literals, icon imports, and any ambient `.tiptap-*` class names.
-- [ ] Migrate icon imports; migrate any hardcoded colors. Do NOT change the editor's structural logic.
-- [ ] Commit: `style(editor): migrate icons and retoken editor components`.
+- [x] Read each file in `src/components/editor/`. For each, note color literals, icon imports, and any ambient `.tiptap-*` class names. → Directory contains only `tiptap-editor.tsx` + `callout-extension.ts`.
+- [x] Migrate icon imports; migrate any hardcoded colors. Do NOT change the editor's structural logic. → Audit found **zero** hits: no lucide imports, no retired tokens, no Tailwind retired classes. Nothing to migrate.
+- [x] Commit: `style(editor): migrate icons and retoken editor components`. → No commit needed — nothing to migrate. Audit result recorded here.
 
 ### Task 3.3: Editor Playwright verification
 
-- [ ] Start dev; open a document in the editor. Take screenshots: heading, paragraph, blockquote, code chip, link hover, callout, empty-state placeholder, focused caret.
-- [ ] Console check clean.
-- [ ] Fix and commit as needed.
+- [x] Start dev; open a document in the editor. Take screenshots: heading, paragraph, blockquote, code chip, link hover, callout, empty-state placeholder, focused caret. → Used `/brain/new` page (which embeds Tiptap). Injected rich demo content (h1/h2/h3/p/blockquote/code/a/callout) via `browser_evaluate` and captured full-page screenshots in both light (`editor-light-demo-content.png`) and dark (`editor-dark-demo-content.png`) themes, plus dark empty-state (`editor-dark-empty-state.png`).
+- [x] Console check clean. → 0 errors across navigations (188 warnings, all non-blocking React/axiom noise).
+- [x] Fix and commit as needed. → No fixes required; all spec'd treatments render as intended in both themes.
+
+**Stage 3 summary:**
+- Commits: `61597b4` (retoken Tiptap) · `c70c933` (polish).
+- Spec review passed first try (Task 3.1). Code quality review flagged three Important items (redundant heading colors, scale-drift risk, paragraph margin mismatch with `.surface-editor`) — addressed in polish commit.
+- Lesson carryover: confirmed that prefer-theme-aware principle from Stages 1/2 held. The spec's literal `--cream-soft` / `--iron` / `--paper-rule` tokens used here are intentional for intimate letterpress accents (code chip, callout rule) — they look correct in dark because the "paper chip" metaphor is supposed to stay light regardless of surrounding theme. Not a regression; a deliberate contrast cue.
+- Editor component directory (`src/components/editor/`) is already clean — the Tiptap wrapper and Callout extension have no lucide imports or retired tokens. No work to do there now or likely later.
 
 ---
 

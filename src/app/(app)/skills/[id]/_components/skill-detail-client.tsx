@@ -80,6 +80,7 @@ export function SkillDetailClient({
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // authored or forked skills can have files edited
   const canEditFiles = canEdit && (root.origin.kind === 'authored' || root.origin.kind === 'forked');
@@ -107,11 +108,17 @@ export function SkillDetailClient({
 
   async function handleDelete() {
     setDeleting(true);
+    setDeleteError(null);
     try {
       const res = await fetch(`/api/skills/${root.id}`, { method: 'DELETE' });
       if (res.ok) {
+        setDeleteDialogOpen(false);
         router.push('/skills');
+      } else {
+        setDeleteError('Failed to delete skill. Please try again.');
       }
+    } catch {
+      setDeleteError('An unexpected error occurred. Please try again.');
     } finally {
       setDeleting(false);
     }
@@ -159,15 +166,19 @@ export function SkillDetailClient({
                       resource files. This action cannot be undone.
                     </DialogDescription>
                   </DialogHeader>
+                  {deleteError && (
+                    <p className="text-sm text-destructive px-1">{deleteError}</p>
+                  )}
                   <DialogFooter>
-                    <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                    <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
                       Cancel
                     </Button>
                     <Button
                       variant="destructive"
-                      onClick={() => { setDeleteDialogOpen(false); handleDelete(); }}
+                      disabled={deleting}
+                      onClick={handleDelete}
                     >
-                      Delete
+                      {deleting ? 'Deleting…' : 'Delete'}
                     </Button>
                   </DialogFooter>
                 </DialogContent>

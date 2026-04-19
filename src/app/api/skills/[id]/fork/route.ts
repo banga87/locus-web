@@ -41,7 +41,12 @@ export const POST = (_req: Request, { params }: RouteCtx) =>
       if (msg === 'skill root not found') {
         return error('not_found', 'Skill not found.', 404);
       }
-      if (msg === 'slug_taken') {
+      if (
+        msg === 'slug_taken' ||
+        // Raw Postgres unique_violation that bypasses the proactive check
+        // (e.g. concurrent fork race). The postgres driver exposes `.code`.
+        (e != null && typeof e === 'object' && 'code' in e && (e as { code: unknown }).code === '23505')
+      ) {
         return error('slug_taken', 'A skill with that name already exists in this workspace.', 409);
       }
 

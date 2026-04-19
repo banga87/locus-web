@@ -363,7 +363,8 @@ export async function forkSkill(input: ForkSkillInput): Promise<ForkSkillResult>
   const { rootId, companyId, brainId } = input;
 
   return db.transaction(async (tx) => {
-    // 1. Read the existing root.
+    // 1. Read the existing root with a row-level lock so a concurrent
+    //    soft-delete cannot race the fork read and produce an orphaned clone.
     const [existingRoot] = await tx
       .select({
         id: documents.id,
@@ -381,6 +382,7 @@ export async function forkSkill(input: ForkSkillInput): Promise<ForkSkillResult>
           eq(documents.type, 'skill'),
         ),
       )
+      .for('update')
       .limit(1);
 
     if (!existingRoot) throw new Error('skill root not found');

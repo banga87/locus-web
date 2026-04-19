@@ -13,6 +13,7 @@
 // `model` override via the params.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stepCountIs } from 'ai';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
 import type {
   LanguageModelV3,
@@ -24,6 +25,7 @@ vi.mock('@ai-sdk/anthropic', () => ({
   anthropic: vi.fn((modelId: string) => mockProvider.currentModel(modelId)),
 }));
 
+import { anthropic } from '@ai-sdk/anthropic';
 import { clearHooks, registerHook } from '../hooks';
 import { runAgentTurn } from '../run';
 import type { AgentContext, AgentEvent, HookEvent } from '../types';
@@ -871,6 +873,89 @@ describe('agent/run — Stop reason: error', () => {
       name: 'Stop',
       reason: 'error',
     });
+  });
+});
+
+describe('agent/run — modelHandle + stopWhen passthrough (Task 12.5)', () => {
+  it('uses params.modelHandle directly and does NOT construct a model via anthropic()', async () => {
+    // When modelHandle is supplied (by the subagent layer routing via
+    // the AI Gateway), the harness must use it as-is and skip the
+    // default anthropic() factory. Spy on the mocked factory to assert.
+    const anthropicSpy = vi.mocked(anthropic);
+    anthropicSpy.mockClear();
+
+    const directModel = mockModelWithStream([
+      { type: 'text-start', id: 't1' },
+      { type: 'text-delta', id: 't1', delta: 'via-handle' },
+      { type: 'text-end', id: 't1' },
+    ]);
+    // Deliberately do NOT call mockProvider.setModel — if the harness
+    // wrongly falls back to anthropic(), the mock will throw.
+
+    const { result } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'sys',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+      modelHandle: directModel,
+    });
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
+    const text = await result!.text;
+    expect(text).toBe('via-handle');
+
+    expect(anthropicSpy).not.toHaveBeenCalled();
+  });
+
+  it('accepts a stopWhen passthrough and runs to completion without maxSteps', async () => {
+    // stopWhen is the v6-native step cap. Callers (subagents) pass
+    // `stopWhen: stepCountIs(N)` directly. The turn must type-check
+    // and run normally when stopWhen is supplied without maxSteps.
+    mockProvider.setModel(
+      mockModelWithStream([
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: 'ok' },
+        { type: 'text-end', id: 't1' },
+      ]),
+    );
+
+    const { result } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'sys',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+      stopWhen: stepCountIs(1),
+    });
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
+    const text = await result!.text;
+    expect(text).toBe('ok');
+  });
+
+  it('prefers stopWhen over maxSteps when both are supplied', async () => {
+    // Both specified: stopWhen wins. We assert indirectly — the turn
+    // completes without error; explicit precedence is encoded in
+    // runAgentTurn's translation logic (stopWhen ?? stepCountIs(maxSteps)).
+    mockProvider.setModel(
+      mockModelWithStream([
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: 'ok' },
+        { type: 'text-end', id: 't1' },
+      ]),
+    );
+
+    const { result } = await runAgentTurn({
+      ctx: buildCtx(),
+      system: 'sys',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: {},
+      maxSteps: 99,
+      stopWhen: stepCountIs(1),
+    });
+    expect(result).not.toBeNull();
+    await result!.consumeStream();
+    const text = await result!.text;
+    expect(text).toBe('ok');
   });
 });
 

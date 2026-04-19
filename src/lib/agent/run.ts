@@ -46,6 +46,7 @@
 import {
   stepCountIs,
   streamText,
+  type LanguageModel,
   type ModelMessage,
   type StreamTextOnFinishCallback,
   type StreamTextResult,
@@ -53,6 +54,11 @@ import {
   type ToolSet,
 } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
+
+// Derive the stopWhen shape from streamText itself — the exported
+// public type name has varied across v6 minor versions, so take it
+// off the function signature directly.
+type StreamTextStopWhen = NonNullable<Parameters<typeof streamText>[0]['stopWhen']>;
 
 import { runHook } from './hooks';
 import type { AgentContext, AgentEvent } from './types';
@@ -74,11 +80,23 @@ interface RunAgentTurnParams {
   tools: Record<string, Tool>;
   /**
    * Cap on sequential LLM steps (each tool round-trip counts as one).
-   * Translated to `stopWhen: stepCountIs(N)` for `streamText`.
+   * Translated to `stopWhen: stepCountIs(N)` when `stopWhen` is not
+   * provided. Kept for backward compat with the Phase 1 chat route.
    */
   maxSteps?: number;
-  /** Override the default model id. Cost map must contain a matching key. */
+  /** Override the default model id (string-based Anthropic path). */
   model?: string;
+  /**
+   * Pre-resolved model handle. Takes precedence over `model`. Used by
+   * the subagent layer to route via the Vercel AI Gateway without this
+   * file needing to know about the gateway.
+   */
+  modelHandle?: LanguageModel;
+  /**
+   * AI SDK v6 step-cap. Takes precedence over `maxSteps`. Supply as
+   * `stopWhen: stepCountIs(N)` from the caller.
+   */
+  stopWhen?: StreamTextStopWhen;
   /** Forwarded to streamText. Fires after the response + all tool calls finish. */
   onFinish?: StreamTextOnFinishCallback<ToolSet>;
 }
@@ -284,11 +302,22 @@ export async function runAgentTurn(
 
   // --- Stream -----------------------------------------------------------
   const result = streamText({
-    model: anthropic(params.model ?? DEFAULT_MODEL),
+    // `modelHandle` wins when supplied (gateway-routed subagent callers
+    // hand us a pre-resolved LanguageModel so this file stays decoupled
+    // from `@ai-sdk/gateway`). Otherwise fall back to the Anthropic
+    // string-based path.
+    model: params.modelHandle ?? anthropic(params.model ?? DEFAULT_MODEL),
     system: systemPrompt,
     messages: effectiveMessages,
     tools: params.tools,
-    stopWhen: stepCountIs(params.maxSteps ?? 6),
+    // `stopWhen` wins when supplied (AI SDK v6 native shape). Otherwise
+    // translate the backward-compat `maxSteps` wrapper param. Default
+    // cap of 6 steps preserves the Phase 1 chat-route behaviour.
+    stopWhen:
+      params.stopWhen ??
+      (params.maxSteps !== undefined
+        ? stepCountIs(params.maxSteps)
+        : stepCountIs(6)),
     abortSignal: params.ctx.abortSignal,
     providerOptions: {
       anthropic: {

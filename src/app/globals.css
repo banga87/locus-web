@@ -513,7 +513,7 @@
 /* === App shell === */
 /* Layout primitives copied verbatim from mockups/ui-exploration/fraunces-forest.html
    so the sidebar/tree/topbar classes match the design reference. Palette tokens
-   (`--paper`, `--ink`, `--accent`, etc.) are already defined above. */
+   (`--cream`, `--ink-1`, `--brass`, etc.) are already defined above. */
 
 .app {
   display: grid;
@@ -602,7 +602,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border-radius: 6px;
+  border-radius: var(--r-lg);
   cursor: pointer;
   color: var(--ink-2);
   font-size: 13.5px;
@@ -809,6 +809,7 @@
   background: var(--cream);
   overflow: hidden;
 }
+/* Topbar uses solid paper-rule (harder divider than internal sidebar sections). */
 .topbar {
   padding: 14px 32px;
   display: flex;

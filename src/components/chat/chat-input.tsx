@@ -26,8 +26,9 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import { ArrowUpIcon, SquareIcon } from 'lucide-react';
+import { SquareIcon } from 'lucide-react';
 
+import { Icon } from '@/components/tatara';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -176,11 +177,22 @@ export function ChatInput({
 
       <div
         className={cn(
-          'flex items-end gap-2 rounded-2xl border border-input bg-background px-3 py-2',
-          'focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30',
+          // Tatara steering-input chrome: indigo-deep workbench surface
+          'flex items-end gap-2 rounded-[var(--r-md)]',
+          'border border-[rgba(242,234,216,0.18)]',
+          'bg-[var(--indigo-deep)] px-3 py-2',
+          'focus-within:border-[rgba(242,234,216,0.35)] focus-within:ring-3 focus-within:ring-[var(--ember-warm)]/30',
           'transition-colors',
         )}
       >
+        {/* Left-side arrow cue — always shown as a visual anchor for the input */}
+        <Icon
+          name="ArrowRight"
+          size={16}
+          aria-hidden="true"
+          className="mb-[5px] shrink-0 text-[var(--cream)] opacity-50"
+        />
+
         {canAttach && sessionId ? (
           <AttachmentInput
             sessionId={sessionId}
@@ -205,8 +217,18 @@ export function ChatInput({
             // so the whole composer gets the focus ring.
             'min-h-0 max-h-52 resize-none border-0 bg-transparent px-0 py-1 shadow-none',
             'focus-visible:border-0 focus-visible:ring-0',
+            // Cream text on indigo-deep ground
+            'text-[var(--cream)] placeholder:text-[rgba(242,234,216,0.5)]',
           )}
         />
+
+        {/* Inline ↵ hint before the action button */}
+        <span
+          className="mb-[5px] shrink-0 font-mono text-[11px] text-[rgba(242,234,216,0.5)]"
+          aria-hidden="true"
+        >
+          ↵
+        </span>
 
         {isStreaming ? (
           <Button
@@ -219,10 +241,11 @@ export function ChatInput({
             <SquareIcon className="size-3.5" aria-hidden="true" />
           </Button>
         ) : (
+          // variant="accent" (brass) gives visible contrast against indigo-deep ground
           <Button
             type="submit"
             size="icon-sm"
-            variant="default"
+            variant="accent"
             aria-label="Send message"
             disabled={
               disabled ||
@@ -230,13 +253,12 @@ export function ChatInput({
               attachments.some((a) => a.status === 'uploading')
             }
           >
-            <ArrowUpIcon className="size-3.5" aria-hidden="true" />
+            <Icon name="ArrowUp" size={14} aria-hidden="true" />
           </Button>
         )}
       </div>
-      <p className="px-1 text-[11px] text-muted-foreground">
-        Enter to send · Shift+Enter for newline
-      </p>
+      {/* Screen-reader hint replaces the visible "Enter to send" paragraph */}
+      <span className="sr-only">Enter to send, Shift+Enter for newline</span>
     </form>
   );
 }

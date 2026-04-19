@@ -738,57 +738,59 @@ export function Callout({ children, className }: { children: React.ReactNode; cl
 
 ---
 
-## Stage 1 — Slice 1: Auth (canary)
+## Stage 1 — Slice 1: Auth (canary) ✅ COMPLETE (2026-04-19)
 
 Smallest consumer slice. Canary for the new primitives.
+
+**Completion summary:** 4 auth surfaces migrated to Tatara primitives (layout, login, signup, verify, mcp-consent). 5 commits on `design-system`: `eb9ce6e` (login) → `11a405b` (signup) → `407f79c` (callbacks) → `cfd35d1` (review drift fix) → `99d7825` (`fix(ui)`: Card/Input theme-aware surface tokens, uncovered by dark-mode verification). See `OPEN-QUESTIONS.md` for the inventory and frozen server-action list.
+
+**Known Stage 0 carryover (defer to Stage 2 or 7):** The `<Button variant="default">` uses `bg-[var(--indigo-darker)]`, which resolves to the same value as `var(--surface-1)` in dark mode (indigo-darker = #162033). Text remains readable (cream on indigo-darker), but the button shape loses its boundary against the card. Recommend routing primary button bg through a theme-aware token — either `var(--indigo)` (brighter than darker) or a new `--button-primary-bg` that flips with theme.
 
 ### Task 1.1: Inventory current auth surfaces
 
 **Files:**
 - Read-only: `src/app/(public)/layout.tsx`, `(public)/login/`, `(public)/signup/`, `(public)/auth/`, `src/app/auth/`.
 
-- [ ] Read every file in these trees. Note the existing structure, imports, form handlers, and any bespoke CSS used.
-- [ ] Note in `OPEN-QUESTIONS.md` any server-action integrations that shouldn't change (these are structural; only the visuals move).
+- [x] Read every file in these trees. Note the existing structure, imports, form handlers, and any bespoke CSS used.
+- [x] Note in `OPEN-QUESTIONS.md` any server-action integrations that shouldn't change (these are structural; only the visuals move).
 
 ### Task 1.2: Restyle `(public)/layout.tsx` + login page
 
 **Files:**
 - Modify: `src/app/(public)/layout.tsx`, `src/app/(public)/login/page.tsx`.
 
-- [ ] Layout: ensure the page background applies cream surface. Add optional `<PaperGrain />` wrapper around the container.
-- [ ] Login: replace bespoke form CSS with Card, Input, Label, Button primitives. Put `<Wordmark />` centered above the card. Above the card title, add `<Eyebrow number="01">SIGN IN</Eyebrow>`. Primary CTA uses `<Button variant="default">`; secondary actions (forgot password, etc.) use `<Button variant="ghost">`. Error states show `<Badge variant="error">` and/or inline text in `var(--state-error)`.
-- [ ] Icons via `<Icon name="..." />`.
-- [ ] Commit: `style(auth): migrate login page to Tatara primitives`.
+- [x] Layout: ensure the page background applies cream surface. Add optional `<PaperGrain />` wrapper around the container.
+- [x] Login: replace bespoke form CSS with Card, Input, Label, Button primitives. Put `<Wordmark />` centered above the card. Above the card title, add `<Eyebrow number="01">SIGN IN</Eyebrow>`. Primary CTA uses `<Button variant="default">`; secondary actions (forgot password, etc.) use `<Button variant="ghost">`. Error states show `<Badge variant="error">` and/or inline text in `var(--state-error)`.
+- [x] Icons via `<Icon name="..." />`. (Login has no icons; none invented.)
+- [x] Commit: `style(auth): migrate login page to Tatara primitives` — `eb9ce6e`.
 
 ### Task 1.3: Restyle signup page
 
 **Files:**
 - Modify: `src/app/(public)/signup/page.tsx` (and any sibling components).
 
-- [ ] Mirror the login treatment. Eyebrow: `<Eyebrow number="01">CREATE ACCOUNT</Eyebrow>`.
-- [ ] Commit: `style(auth): migrate signup page to Tatara primitives`.
+- [x] Mirror the login treatment. Eyebrow: `<Eyebrow number="01">CREATE ACCOUNT</Eyebrow>`.
+- [x] Commit: `style(auth): migrate signup page to Tatara primitives` — `11a405b`.
 
 ### Task 1.4: Restyle auth callback pages
 
 **Files:**
 - Modify: `src/app/(public)/auth/**/*.tsx`, `src/app/auth/**/*.tsx` (whatever exists).
 
-- [ ] Apply the same palette + primitives. Error states use `state-error`. Success/loading states use `<GaugeNeedle />` where a spinner is warranted (auth callback waiting is observation, not conversation — gauge is appropriate).
-- [ ] Commit: `style(auth): migrate auth callback pages`.
+- [x] Apply the same palette + primitives. Error states use `state-error`. Success/loading states use `<GaugeNeedle />` where a spinner is warranted (auth callback waiting is observation, not conversation — gauge is appropriate). Added to verify page. `(public)/auth/callback/route.ts` is server-side only (NextResponse.redirect) — no visuals to restyle, untouched.
+- [x] Commit: `style(auth): migrate auth callback pages` — `407f79c`. Follow-up drift fix `cfd35d1` added `<PaperGrain>` on `/auth/mcp` (outside `(public)/` shell) for cross-page consistency and swapped inline `style` on error paragraphs to `text-[var(--state-error)]`.
 
 ### Task 1.5: Auth slice verification
 
-**Files:** none modified.
+**Files:** `src/components/ui/card.tsx`, `src/components/ui/input.tsx` (Stage 0 carryover fix).
 
-- [ ] `npm run build` + `npm run lint` — clean.
-- [ ] `npm run dev` in background.
-- [ ] Via Playwright MCP, walk light and dark:
-  - Navigate `/login`, `/signup`, and any callback routes you can reach without real tokens.
-  - `browser_take_screenshot` for each.
-  - `browser_console_messages` — verify no new errors.
-  - Keyboard tab walk: `browser_press_key` with "Tab" several times; verify focus rings visible (screenshot each focus state).
-- [ ] If anything looks off, fix and commit as `fix(auth): ...`.
-- [ ] Commit: `test(auth): Playwright visual verification passed`. (Optional commit — skip if no changes.)
+- [x] `npm run build` + `npm run lint` — clean (51 pre-existing lint issues in unrelated workflows/tests; zero in Stage 1 files).
+- [x] `npm run dev` in background.
+- [x] Via Playwright MCP, walked light and dark:
+  - Navigated `/login`, `/login?error=...`, `/signup`, `/auth/verify`, `/auth/mcp` (landed on ExpiredView — expected without a session query param). Screenshots captured for each in both themes.
+  - `browser_console_messages` — only pre-existing Next.js `useReportWebVitals` `Failed to fetch` noise (web-vitals reporter trying to POST to an absent local analytics endpoint). No Stage 1-related errors.
+  - Keyboard focus: `document.getElementById('login-email').focus()` + `getComputedStyle` confirmed ember focus ring: `rgb(232, 129, 58) 0px 0px 0px 4px` — matches `var(--ember-warm)`.
+- [x] Fix commit: `fix(ui): card + input use theme-aware surface tokens for dark mode` — `99d7825`. Dark mode had revealed that `Card` and `Input` used literal `var(--cream-soft)` which does not flip, resulting in cream-on-cream invisible text in dark theme. Swapped to `var(--surface-1)` / `var(--surface-2)` — no-op in light mode (same hex values), correct flip in dark mode.
 
 ---
 

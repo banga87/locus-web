@@ -22,10 +22,7 @@ import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
-import {
-  extractDocumentTypeFromContent,
-  maybeScheduleSkillManifestRebuild,
-} from '@/lib/brain/save';
+import { extractDocumentTypeFromContent } from '@/lib/brain/save';
 import {
   getAttachment,
   markCommitted,
@@ -254,7 +251,6 @@ export const POST = (req: Request) =>
       });
 
       await tryRegenerateManifest(brain.id);
-      maybeScheduleSkillManifestRebuild(companyId, documentType);
       try {
         revalidatePath('/', 'layout');
       } catch {

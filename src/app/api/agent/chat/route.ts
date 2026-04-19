@@ -29,7 +29,7 @@
 // `maxDuration = 120` covers a multi-step agent turn with tool use.
 
 import { waitUntil } from '@vercel/functions';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -39,7 +39,7 @@ import {
 } from 'ai';
 
 import { db } from '@/db';
-import { folders, sessions } from '@/db/schema';
+import { documents, folders, sessions } from '@/db/schema';
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
 import { runAgentTurn, DEFAULT_MODEL } from '@/lib/agent/run';
@@ -47,8 +47,12 @@ import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { buildToolSet } from '@/lib/agent/tool-bridge';
 import type { AgentActor, AgentContext } from '@/lib/agent/types';
 import { getBrainForCompany } from '@/lib/brain/queries';
+import { parseFrontmatterRaw } from '@/lib/brain/save';
 import { registerContextHandlers } from '@/lib/context/register';
-import { createDbAgentCapabilitiesRepo } from '@/lib/context/repos';
+import {
+  createDbAgentCapabilitiesRepo,
+  createDbAgentSkillsRepo,
+} from '@/lib/context/repos';
 import { deriveGrantedCapabilities } from './grantedCapabilities';
 import { registerLocusTools } from '@/lib/tools';
 import { recordUsage } from '@/lib/usage/record';
@@ -171,6 +175,76 @@ export async function POST(req: Request) {
     agentCapabilities = await capsRepo.getAgentCapabilities(agentDefinitionId);
   }
 
+  // Phase 1.5 Task 9 (skills) — resolve the agent-definition's
+  // `skills:` frontmatter array. Two payloads derive from it:
+  //   1. `agentSkillIds` is threaded onto the ToolContext so
+  //      `load_skill` / `read_skill_file` can gate reads on membership.
+  //   2. `availableSkills` carries the rendered name + description the
+  //      agent sees in the <available-skills> prompt block.
+  // No agent-definition → both stay empty → pre-PR1 behaviour (no
+  // skills injected, no skill tools usable).
+  let agentSkillIds: string[] = [];
+  if (agentDefinitionId) {
+    const skillsRepo = createDbAgentSkillsRepo();
+    agentSkillIds = (await skillsRepo.getAgentSkillIds(agentDefinitionId)) ?? [];
+  } else {
+    // Default Platform Agent (no agent-definition): expose ONLY the two
+    // seeded skills that every company ships with (skill-creator +
+    // ingestion-filing). Third-party installs or authored skills don't
+    // reach this fallback — they only become visible once a user wires
+    // them into an explicit agent-definition via the wizard. When a
+    // real default-agent-definition seed lands this branch goes away.
+    const rows = await db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.companyId, auth.companyId),
+          eq(documents.type, 'skill'),
+          isNull(documents.deletedAt),
+          inArray(documents.title, ['Skill Creator', 'Ingestion filing rules']),
+        ),
+      );
+    agentSkillIds = rows.map((r) => r.id);
+  }
+
+  let availableSkills: Array<{
+    id: string;
+    name: string;
+    description: string;
+  }> = [];
+  if (agentSkillIds.length > 0) {
+    // Pull the skill root docs the agent is allowlisted for. Filter
+    // to the caller's company (defence-in-depth against a rogue
+    // agent-definition carrying cross-tenant ids) and to
+    // `type='skill'` (the allowlist is UUIDs — reject anything
+    // that's since been retyped away from a skill).
+    const visibleSkills = await db
+      .select({
+        id: documents.id,
+        content: documents.content,
+      })
+      .from(documents)
+      .where(
+        and(
+          inArray(documents.id, agentSkillIds),
+          eq(documents.companyId, auth.companyId),
+          eq(documents.type, 'skill'),
+          isNull(documents.deletedAt),
+        ),
+      );
+
+    availableSkills = visibleSkills
+      .map((r) => {
+        const fm = parseFrontmatterRaw(r.content);
+        const name = typeof fm.name === 'string' ? fm.name : '';
+        const description =
+          typeof fm.description === 'string' ? fm.description : '';
+        return { id: r.id, name, description };
+      })
+      .filter((s) => s.name && s.description);
+  }
+
   const agentActor: AgentActor = {
     type: 'platform_agent',
     userId: auth.userId,
@@ -222,6 +296,7 @@ export async function POST(req: Request) {
       companyName: companyRow?.name ?? 'your company',
       folders: folderRows,
       externalConnections,
+      availableSkills,
     }),
     messages: [...priorMessages, ...incomingModelMessages],
     tools: buildToolSet(
@@ -240,6 +315,7 @@ export async function POST(req: Request) {
         sessionId: body.sessionId ?? undefined,
         abortSignal: req.signal,
         grantedCapabilities,
+        agentSkillIds,
         webCallsThisTurn: 0,
       },
       externalTools,

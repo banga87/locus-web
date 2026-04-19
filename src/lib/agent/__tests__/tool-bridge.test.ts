@@ -160,15 +160,17 @@ describe('agent/tool-bridge — bridgeLocusTool', () => {
 });
 
 describe('agent/tool-bridge — buildToolSet', () => {
-  // Every built tool set carries these two side-effect-free propose
-  // tools unconditionally. Task 7 wired them directly into
-  // `buildToolSet` so every agent (current + future) gets the user-
-  // gated write surface without per-agent configuration. See
-  // `src/lib/tools/propose-document.ts` for why they're safe to
-  // register globally.
+  // Every built tool set carries these three side-effect-free propose
+  // tools unconditionally. Task 7 wired the doc tools and Task 32 wired
+  // propose_skill_create directly into `buildToolSet` so every agent
+  // (current + future) gets the user-gated write surface without
+  // per-agent configuration. See `src/lib/tools/propose-document.ts`
+  // and `src/lib/tools/propose-skill-create.ts` for why they're safe
+  // to register globally.
   const ALWAYS_PRESENT = [
     'propose_document_create',
     'propose_document_update',
+    'propose_skill_create',
   ] as const;
 
   it('returns a tool for every registered LocusTool keyed by tool name', () => {
@@ -200,10 +202,19 @@ describe('agent/tool-bridge — buildToolSet', () => {
   it('always includes the user-gated propose tools even with an empty registry', () => {
     // Locked-in contract: the propose tools are side-effect-free and
     // live on every agent, so an empty LocusTool registry must still
-    // produce the two approval-card tools. Replaces the former
+    // produce the three approval-card tools. Replaces the former
     // "empty set" assertion.
     const set = buildToolSet(TEST_CTX);
     expect(Object.keys(set).sort()).toEqual([...ALWAYS_PRESENT].sort());
+  });
+
+  it('registers propose_skill_create with a callable execute fn', () => {
+    // Task 32: skill-authoring is a user-gated proposal, same contract
+    // as the doc propose tools. Registered unconditionally so every
+    // agent can draft new skills; user approves before anything writes.
+    const set = buildToolSet(TEST_CTX);
+    expect(set).toHaveProperty('propose_skill_create');
+    expect(typeof set['propose_skill_create'].execute).toBe('function');
   });
 });
 
@@ -282,9 +293,9 @@ describe('tool-bridge — mcp_invocation emission', () => {
         name: 'Marketing',
         scopes: ['read'],
       },
-      companyId: '11111111-1111-1111-1111-111111111111',
-      brainId: '22222222-2222-2222-2222-222222222222',
-      sessionId: '33333333-3333-3333-3333-333333333333',
+      companyId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      brainId: 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff',
+      sessionId: 'cccccccc-dddd-eeee-ffff-aaaaaaaaaaaa',
       grantedCapabilities: [],
       webCallsThisTurn: 0,
       ...overrides,
@@ -321,7 +332,7 @@ describe('tool-bridge — mcp_invocation emission', () => {
       tool_name: 'mcp__stripe__search_prices',
     });
     expect(invoke!.details!.invocation_id).toBe(complete!.details!.invocation_id);
-    expect(invoke!.brainId).toBe('22222222-2222-2222-2222-222222222222');
+    expect(invoke!.brainId).toBe('bbbbbbbb-cccc-dddd-eeee-ffffffffffff');
   });
 
   it('emits invoke + error when the MCP tool throws', async () => {

@@ -31,7 +31,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { documents, documentVersions } from '@/db/schema';
 import { folders } from '@/db/schema/folders';
-import { extractDocumentTypeFromContent, maybeScheduleSkillManifestRebuild } from '@/lib/brain/save';
+import { extractDocumentTypeFromContent } from '@/lib/brain/save';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import type { LocusTool, ToolContext, ToolResult } from '../types';
@@ -305,7 +305,6 @@ export const createDocumentTool: LocusTool<
 
     // ---- Side effects (best-effort, outside the transaction) ------------
     await tryRegenerateManifest(context.brainId);
-    maybeScheduleSkillManifestRebuild(context.companyId, documentType);
     // Invalidate the layout's server-side tree so the next nav/refresh sees
     // the new doc in the sidebar. Without this, a workflow-created document
     // is only visible after a hard reload even though it's queryable by id.

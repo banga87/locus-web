@@ -159,7 +159,6 @@ describe('Large attachment → pointer block (integration, Task 11 Step 4)', () 
         {
           companyId,
           sessionId,
-          agentSkillIds: [],
           userMessage: 'summarise what I uploaded',
         },
         repo,

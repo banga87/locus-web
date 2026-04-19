@@ -69,12 +69,10 @@ import {
   documents,
   sessionAttachments,
   sessions,
-  skillManifests,
   usageRecords,
   users,
 } from '@/db/schema';
 import { buildAgentDefinitionDoc } from '@/lib/agents/definitions';
-import { rebuildManifest } from '@/lib/skills/loader';
 import { __clearScaffoldingCacheForTests } from '@/lib/context/repos';
 import { __resetContextHandlersForTests } from '@/lib/context/register';
 import { clearHooks } from '@/lib/agent/hooks';
@@ -245,8 +243,6 @@ beforeAll(async () => {
     })
     .returning({ id: documents.id });
 
-  await rebuildManifest(companyId);
-
   const [session] = await db
     .insert(sessions)
     .values({
@@ -270,9 +266,6 @@ afterAll(async () => {
     .where(eq(sessionAttachments.companyId, companyId));
   await db.delete(sessions).where(eq(sessions.companyId, companyId));
   await db.delete(usageRecords).where(eq(usageRecords.companyId, companyId));
-  await db
-    .delete(skillManifests)
-    .where(eq(skillManifests.companyId, companyId));
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`ALTER TABLE audit_events DISABLE TRIGGER audit_events_immutable`,

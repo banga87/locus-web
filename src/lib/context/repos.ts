@@ -36,8 +36,6 @@ import yaml from 'js-yaml';
 import { db } from '@/db';
 import { documents } from '@/db/schema';
 import { getExtractedAttachmentsForSession } from '@/lib/ingestion/attachments';
-import { loadManifest } from '@/lib/skills/loader';
-import type { SkillManifest } from '@/lib/skills/manifest-compiler';
 
 import type { ScaffoldingRepo } from './scaffolding';
 import type { UserPromptRepo } from './user-prompt';
@@ -311,68 +309,24 @@ export function stripFrontmatter(raw: string): string {
 // Drizzle-backed `UserPromptRepo` factory. The shape lives in
 // `./user-prompt.ts` so the pure builder stays platform-agnostic.
 // Mirrors the scaffolding-repo pattern: a thin closure over `db`; no
-// state beyond shared Drizzle client and its own caching layers
-// (the skill manifest owns its own cache in `src/lib/skills/loader.ts`).
+// state beyond shared Drizzle client.
 
 /**
  * Build a Drizzle-backed UserPromptRepo. Safe to call per request —
- * the returned object is a thin closure. All four methods are wired:
+ * the returned object is a thin closure. The builder emits
+ * attachment blocks only; skill injection has moved to the
+ * progressive-disclosure system-prompt surface (see
+ * `src/lib/skills/README.md`).
  *
- *   - `getManifest` + `getSkillBodies` — Task 6 (skill manifest).
- *   - `getExtractedAttachments` — Task 8 (session_attachments reads).
- *   - `getIngestionFilingSkill` — Task 10 (seeded built-in skill doc
- *     looked up by stable slug `ingestion-filing`).
- *
- * All methods return `null` / `[]` on expected-miss paths (no manifest
- * yet, no attachments this session, seed not yet applied on a legacy
- * company) — the builder in `./user-prompt.ts` degrades gracefully on
- * every branch.
+ * `getExtractedAttachments` returns `[]` on expected-miss paths (no
+ * attachments this session) — the builder in `./user-prompt.ts`
+ * short-circuits to an empty payload, which `register.ts` turns into
+ * `{ decision: 'allow' }`.
  */
 export function createDbUserPromptRepo(): UserPromptRepo {
   return {
-    async getManifest(companyId) {
-      // Delegates to the skill-loader's `loadManifest`, which reads
-      // from `skill_manifests.manifest` (a JSONB blob populated by
-      // `rebuildManifest`). The loader returns `SkillManifest | null`;
-      // we return that through unchanged.
-      return loadManifest(companyId) as Promise<SkillManifest | null>;
-    },
-
-    async getSkillBodies(ids) {
-      // Short-circuit an empty IN () — Drizzle / Postgres tolerate it
-      // but the round trip is pointless. Guard here so callers can
-      // hand through raw id arrays (the matcher's output is unbounded
-      // in principle; in practice the manifest caps at whatever the
-      // user authored, but defence-in-depth is cheap).
-      if (ids.length === 0) return [];
-
-      // Filter by `type = 'skill'` + `deletedAt IS NULL` so soft-
-      // deleted or retyped docs never leak through. Company isolation
-      // is enforced transitively — the matcher only proposes ids that
-      // came from this company's manifest, so the ids themselves
-      // carry the company scope.
-      const rows = await db
-        .select({
-          id: documents.id,
-          content: documents.content,
-        })
-        .from(documents)
-        .where(
-          and(
-            inArray(documents.id, ids),
-            eq(documents.type, 'skill'),
-            isNull(documents.deletedAt),
-          ),
-        );
-
-      return rows.map((r) => ({
-        id: r.id,
-        body: stripFrontmatter(r.content),
-      }));
-    },
-
     async getExtractedAttachments(companyId, sessionId) {
-      // Task 8: wired to the live session_attachments table via the
+      // Wired to the live session_attachments table via the
       // ingestion library. Scoping is defence-in-depth:
       //   1. The API route upstream (/api/agent/chat) establishes the
       //      session ownership via the Supabase auth cookie — we only
@@ -383,46 +337,10 @@ export function createDbUserPromptRepo(): UserPromptRepo {
       //      check out at the DB layer for auth-scoped clients. This
       //      repo uses the service-role `db` connection (bypasses
       //      RLS), so we ALSO filter by `companyId = ? AND sessionId
-      //      = ?` explicitly below — transitive scoping via (1) is
-      //      too easy to break silently if a future refactor leaks a
-      //      sessionId across tenants.
+      //      = ?` explicitly — transitive scoping via (1) is too easy
+      //      to break silently if a future refactor leaks a sessionId
+      //      across tenants.
       return getExtractedAttachmentsForSession(companyId, sessionId);
-    },
-
-    async getIngestionFilingSkill(companyId) {
-      // Look up the built-in ingestion-filing skill by its stable slug
-      // (`ingestion-filing`), which `scripts/seed-builtins.ts` commits
-      // to as the idempotency key. Matching on (companyId, type, slug)
-      // is exact — a user's own skill doc whose title contains
-      // "ingestion" or "filing" cannot collide, because the slug is
-      // reserved. An earlier draft used `ilike(title, '%ingestion
-      // filing%')` and would have silently injected e.g. "Canada
-      // Ingestion Filing SOPs" on every attachment turn; the slug
-      // guard is what closes that door.
-      //
-      // Degrades to `null` when the seed hasn't landed yet (e.g. a
-      // company that predates the Task 10 backfill, or a test company
-      // that skipped `seedBuiltins`). The builder handles `null`
-      // gracefully — attachment blocks still land, just without the
-      // filing companion block.
-      const [row] = await db
-        .select({
-          id: documents.id,
-          content: documents.content,
-        })
-        .from(documents)
-        .where(
-          and(
-            eq(documents.companyId, companyId),
-            eq(documents.type, 'skill'),
-            eq(documents.slug, 'ingestion-filing'),
-            isNull(documents.deletedAt),
-          ),
-        )
-        .limit(1);
-
-      if (!row) return null;
-      return { id: row.id, body: stripFrontmatter(row.content) };
     },
   };
 }

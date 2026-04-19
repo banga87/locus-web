@@ -1162,7 +1162,6 @@
   color: var(--iron);
   padding: 1px 5px;
   border-radius: var(--r-xs);
-  font-family: var(--font-mono);
   font-size: 0.88em;
 }
 /* .surface-chat pre covers bg/color/padding/overflow/font/size/line-height;
@@ -1190,7 +1189,7 @@
 }
 .chat-markdown table {
   width: 100%;
-  font-size: 14px;
+  font-size: 0.9em;
   border-collapse: collapse;
 }
 .chat-markdown th, .chat-markdown td {

@@ -1049,10 +1049,10 @@
 }
 .rail-btn:hover { background: color-mix(in srgb, var(--ink-1) 4%, transparent); color: var(--ink-1); }
 .rail-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ember-warm);
   outline-offset: 2px;
 }
-.rail-btn[aria-current="true"] { color: var(--accent); }
+.rail-btn[aria-current="true"] { color: var(--brass); }
 .rail-btn[aria-current="true"]::before {
   content: "";
   position: absolute;
@@ -1060,7 +1060,7 @@
   top: 6px;
   bottom: 6px;
   width: 2px;
-  background: var(--accent);
+  background: var(--brass);
   border-radius: 2px;
 }
 

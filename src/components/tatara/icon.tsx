@@ -9,8 +9,11 @@ export interface IconProps extends Omit<LucideProps, "size" | "strokeWidth"> {
 }
 
 export function Icon({ name, size = 16, ...rest }: IconProps) {
+  // Lucide exports forwardRef objects (typeof === "object"), not functions,
+  // so we check for presence rather than callable. `React.createElement` /
+  // JSX handles both shapes correctly.
   const Cmp = LucideIcons[name] as LucideIcon | undefined;
-  if (!Cmp || typeof Cmp !== "function") {
+  if (!Cmp) {
     if (process.env.NODE_ENV !== "production") {
       console.warn(`<Icon name="${String(name)}" /> — not found in lucide-react`);
     }

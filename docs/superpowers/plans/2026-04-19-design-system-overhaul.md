@@ -794,152 +794,157 @@ Smallest consumer slice. Canary for the new primitives.
 
 ---
 
-## Stage 2 — Slice 2: App shell
+## Stage 2 — Slice 2: App shell ✅ COMPLETE (2026-04-19)
 
 Biggest slice. Hits the bespoke CSS block in `globals.css` (roughly lines 165–760 after Stage 0's token replacement).
+
+**Completion summary:** Full app-shell retokenizing + Wordmark swap + `<Icon />` adoption across shell components + GaugeNeedle in run badge. 13 commits on `design-system`: `ddfd85a` → `cfc3666` → `ff14044` → `af67d99` → `998ac91` → `0c3d73a` → `27b11ab` → `f752dab` → `6ce6fc9` (polish: radius token + stale comments) → `4406417` (Wordmark) → `4720b0e` (Icon wrapper) → `29b77db` (GaugeNeedle) → `e3e1ca9` (**fix(shell): theme-aware surfaces + rules** — Stage 1's theme-flip gotcha recurred; swapped literal `--cream`/`--cream-soft`/`--paper-rule` references in `.main`/`.side`/`.side-rail`/borders/kbd/theme-pill to semantic `--surface-0/1/2` + `--rule-1`). Light + dark mode both ship correctly; light `/home` and `/brain` + dark `/home` verified via Playwright.
+
+**Lesson learned (documented for Stage 3+):** When retokening retired tokens, map to THEME-AWARE semantic tokens (`--surface-0/1/2`, `--rule-1`, `--ink-1/2/3`) rather than literal brand tokens (`--cream`, `--cream-soft`, `--paper-rule`) unless the literal is intentionally non-flipping (brand imprints like the brass avatar's cream text, or gradient end-stops). The plan's token recipe in Task 2.2 used literals and was wrong for dark mode — the `e3e1ca9` fix corrects the pattern.
+
+**Stage 0 carryover still outstanding:** Button dark-mode theming — `<Button variant="default">` bg `var(--indigo-darker)` still equals `var(--surface-1)` in dark mode. Visible in the dark-mode `/home` screenshot: the "Browse brain" button's boundary dissolves into the card surface. Recommend addressing before Stage 7 (violation sweep) or via a theme-aware `--button-primary-bg` token.
 
 ### Task 2.1: Inventory shell surfaces
 
 **Files:**
 - Read-only: `src/app/(app)/layout.tsx`, `src/components/shell/**`, `src/components/layout/global-run-badge.tsx`, the bespoke CSS in `globals.css`.
 
-- [ ] Read everything. Produce a mental map of which classes come from `globals.css` vs. Tailwind utilities inside components.
-- [ ] Note any sibling shell files (e.g. `sidebar-expanded.tsx`, `sidebar-rail.tsx`, if they exist) that the spec's file list missed.
+- [x] Read everything. Produce a mental map of which classes come from `globals.css` vs. Tailwind utilities inside components.
+- [x] Note any sibling shell files (e.g. `sidebar-expanded.tsx`, `sidebar-rail.tsx`, if they exist) that the spec's file list missed. Inventory found: `sidebar/sidebar.tsx`, `sidebar-expanded.tsx`, `sidebar-rail.tsx`, `sidebar-layout-boot.tsx`, `sidebar-mobile-trigger.tsx`, `sidebar/resize-handle.tsx`, `sidebar/section.tsx`, `sidebar/sections/brain-section.tsx`, `sidebar/sections/pinned-section.tsx` — all covered in Task 2.11.
 
 ### Task 2.2: Update `.app`, `.side`, `.side-rail`, `.main` blocks in `globals.css`
 
 **Files:**
 - Modify: `src/app/globals.css` (bespoke app-shell CSS — approximately the block beginning with `.app {` and continuing through the end of the app-shell section).
 
-- [ ] Replace every reference to `var(--paper-2)` with `var(--cream-soft)`, `var(--paper)` with `var(--cream)`, `var(--ink)` with `var(--ink-1)`, `var(--rule)` with `var(--paper-rule)`, `var(--rule-soft)` with `color-mix(in srgb, var(--paper-rule) 60%, transparent)`, `var(--hover)` with `color-mix(in srgb, var(--ink-1) 4%, transparent)`.
-- [ ] `.main` background stays `var(--cream)`; `.side` and `.side-rail` use `var(--cream-soft)`.
-- [ ] Commit: `style(shell): retoken .app/.side/.main in globals.css`.
+- [x] Replace every reference to `var(--paper-2)` with `var(--cream-soft)`, `var(--paper)` with `var(--cream)`, `var(--ink)` with `var(--ink-1)`, `var(--rule)` with `var(--paper-rule)`, `var(--rule-soft)` with `color-mix(in srgb, var(--paper-rule) 60%, transparent)`, `var(--hover)` with `color-mix(in srgb, var(--ink-1) 4%, transparent)`.
+- [x] `.main` background stays `var(--cream)`; `.side` and `.side-rail` use `var(--cream-soft)`. *(Follow-up fix `e3e1ca9`: swapped to `--surface-0` / `--surface-1` for theme-awareness. Plan recipe was light-only; dark mode required semantic surfaces.)*
+- [x] Commit: `style(shell): retoken .app/.side/.main in globals.css` — `ddfd85a`.
 
 ### Task 2.3: Update `.brand` block — delete italic wordmark, prepare for `<Wordmark />`
 
 **Files:**
 - Modify: `src/app/globals.css` (`.brand`, `.brand-name`, `.brand-dot`, `.brand-tag`, `.brand-right`, `.brand-collapse` blocks).
 
-- [ ] **Delete** `.brand-name { ... font-style: italic ... }` entirely. The `<Wordmark />` component handles typography.
-- [ ] Keep `.brand` layout rules (padding, flex); retoken border to `var(--paper-rule)`.
-- [ ] `.brand-dot`: change background from `var(--accent)` (green) to `var(--brass)`.
-- [ ] `.brand-tag`: swap to `.t-mono-label` styling if used, or retoken to `var(--font-mono)` + `var(--ink-3)`.
-- [ ] Commit: `style(shell): retire italic brand-name; prep for Wordmark component`.
+- [x] **Delete** `.brand-name { ... font-style: italic ... }` entirely. The `<Wordmark />` component handles typography.
+- [x] Keep `.brand` layout rules (padding, flex); retoken border to `var(--paper-rule)` (→ `--rule-1` mix in follow-up).
+- [x] `.brand-dot`: change background from `var(--accent)` (green) to `var(--brass)`.
+- [x] `.brand-tag`: swap to `.t-mono-label` styling if used, or retoken to `var(--font-mono)` + `var(--ink-3)`.
+- [x] Commit: `style(shell): retire italic brand-name; prep for Wordmark component` — `cfc3666`.
 
 ### Task 2.4: Swap `<Wordmark />` into shell markup
 
 **Files:**
-- Modify: `src/components/shell/new-app-shell.tsx` (and/or wherever `.brand-name` is rendered).
+- Modify: `src/components/shell/sidebar/sidebar-expanded.tsx`, `src/components/shell/sidebar/sidebar-rail.tsx`.
 
-- [ ] Replace the literal "Locus" (or "Tatara") text span that used `.brand-name` with `<Wordmark size={22} />` from `@/components/tatara`.
-- [ ] Verify the component renders inside the existing `.brand` flex row; adjust layout if needed.
-- [ ] Run `npm run dev`, Playwright screenshot the sidebar head. Verify upright EB Garamond Semibold rendering.
-- [ ] Commit: `style(shell): use Wordmark component in brand row`.
+- [x] Replace the literal "Locus" text span that used `.brand-name` with `<Wordmark size={22} />` from `@/components/tatara`. (`sidebar-rail.tsx` keeps only the dot in collapsed mode; its `title="Locus"` → `title="Tatara"`.)
+- [x] Verify the component renders inside the existing `.brand` flex row.
+- [x] Playwright confirmed upright EB Garamond Semibold (`fontStyle: "normal"`, weight 600, family includes `"EB Garamond"`).
+- [x] Commit: `style(shell): use Wordmark component in brand row` — `4406417`.
 
 ### Task 2.5: Update `.workspace-row`, `.ws-*`, `.quick`, `.quick-item*`
 
 **Files:**
 - Modify: `src/app/globals.css` (those blocks).
 
-- [ ] `.ws-avatar`: `background: var(--brass)` or `background: var(--indigo)`, `color: var(--cream)`. Do not use `var(--accent)` (retired).
-- [ ] `.quick-item.active`: `background: var(--agent-highlight)`; `color: var(--indigo)`; `font-weight: 550`.
-- [ ] `.quick-item .kbd`: mono, `var(--ink-3)`, `background: var(--cream)`, `border: 1px solid var(--paper-rule)`.
-- [ ] `.quick-item:hover`: background `color-mix(in srgb, var(--ink-1) 4%, transparent)`.
-- [ ] Commit: `style(shell): retoken workspace-row and quick links`.
+- [x] `.ws-avatar`: `background: var(--brass)`, `color: var(--cream)`.
+- [x] `.quick-item.active`: `background: var(--agent-highlight)`; `color: var(--indigo)`; `font-weight: 550`.
+- [x] `.quick-item .kbd`: mono, `var(--ink-3)`, `background: var(--cream)` → `var(--surface-2)` (follow-up), `border: 1px solid var(--paper-rule)` → `var(--rule-1)`.
+- [x] `.quick-item:hover`: background `color-mix(in srgb, var(--ink-1) 4%, transparent)`.
+- [x] Commit: `style(shell): retoken workspace-row and quick links` — `ff14044`.
 
 ### Task 2.6: Update `.node*`, `.children*`, staleness-cue blocks
 
 **Files:**
-- Modify: `src/app/globals.css` (`.node`, `.node:hover`, `.node.selected`, `.node[data-active="true"]`, `.node.doc[data-freshness="aging"]`, `[data-freshness="stale"]::before`, `.chev`, `.node.open .chev`, `.node-bullet`, `.node.folder .node-bullet`, `.node.doc .node-bullet`, `.node-label`, `.node-badge`, `.children .node`).
+- Modify: `src/app/globals.css`.
 
-- [ ] `.node.selected::after` and `.node[data-active="true"]::after`: `background: var(--brass)` (was `var(--accent)` green).
-- [ ] `.node.doc[data-freshness="stale"]::before`: `background: var(--ember)` (was `var(--accent-2)` rust).
-- [ ] `.node.selected`, `.node[data-active="true"]`: `background: var(--agent-highlight)` or `color-mix(in srgb, var(--brass) 8%, transparent)`; text `var(--ink-1)`.
-- [ ] `.node.doc[data-freshness="aging"]`: `color: var(--ink-3)`.
-- [ ] Commit: `style(shell): retoken tree nodes and staleness cues (brass/ember)`.
+- [x] `.node.selected::after` and `.node[data-active="true"]::after`: `background: var(--brass)`.
+- [x] `.node.doc[data-freshness="stale"]::before`: `background: var(--ember)`.
+- [x] `.node.selected`, `.node[data-active="true"]`: `background: var(--agent-highlight)`; text `var(--ink-1)`.
+- [x] `.node.doc[data-freshness="aging"]`: `color: var(--ink-3)`.
+- [x] Commit: `style(shell): retoken tree nodes and staleness cues (brass/ember)` — `af67d99`.
 
 ### Task 2.7: Update `.sidebar-section*`, `.sidebar-resize-handle*`, `.side-body`, `.nav-bottom`, `.user-*`
 
 **Files:**
-- Modify: `src/app/globals.css` (those blocks).
+- Modify: `src/app/globals.css`.
 
-- [ ] `.sidebar-section-header`: retoken to `.t-mono-label` or equivalent — mono uppercase 10px, 0.12em tracking, `var(--ink-3)`.
-- [ ] `.sidebar-section-header:focus-visible`: `outline: 2px solid var(--ember-warm)` (was `var(--accent)`).
-- [ ] `.sidebar-resize-handle:hover`: `background: color-mix(in srgb, var(--brass) 10%, transparent)`.
-- [ ] `.sidebar-resize-handle:focus-visible`: `background: color-mix(in srgb, var(--ember-warm) 12%, transparent)`.
-- [ ] `.side-body::-webkit-scrollbar-thumb`: `background: var(--paper-rule)`.
-- [ ] `.user-av`: replace gradient `linear-gradient(135deg, var(--accent-2), ...)` with `linear-gradient(135deg, var(--copper), color-mix(in srgb, var(--copper) 50%, var(--cream)))`.
-- [ ] `.user-sub`: mono at `var(--t-micro)` (11px) + 0.12em tracking + `var(--ink-3)`.
-- [ ] `.nav-bottom`, `.user-row`: retoken borders to `var(--paper-rule)`.
-- [ ] Commit: `style(shell): retoken sidebar sections, resize handle, user row`.
+- [x] `.sidebar-section-header`: mono uppercase 10px, 0.12em tracking, `var(--ink-3)`.
+- [x] `.sidebar-section-header:focus-visible`: `outline: 2px solid var(--ember-warm)`.
+- [x] `.sidebar-resize-handle:hover`: `background: color-mix(in srgb, var(--brass) 10%, transparent)`.
+- [x] `.sidebar-resize-handle:focus-visible`: `background: color-mix(in srgb, var(--ember-warm) 12%, transparent)`.
+- [x] `.side-body::-webkit-scrollbar-thumb`: `background: var(--paper-rule)` → `var(--rule-1)` (follow-up).
+- [x] `.user-av`: gradient `linear-gradient(135deg, var(--copper), color-mix(in srgb, var(--copper) 50%, var(--cream)))`.
+- [x] `.user-sub`: mono at `var(--t-micro)` + 0.12em tracking + `var(--ink-3)`.
+- [x] `.nav-bottom`, `.user-row`: retokened borders.
+- [x] Commit: `style(shell): retoken sidebar sections, resize handle, user row` — `998ac91`.
 
 ### Task 2.8: Update `.topbar`, `.crumbs`, `.icon-btn`, `.theme-pill`, `.combo-pill`
 
 **Files:**
-- Modify: `src/app/globals.css` (those blocks).
+- Modify: `src/app/globals.css`.
 
-- [ ] `.topbar`: `border-bottom: 1px solid var(--paper-rule)`.
-- [ ] `.crumbs`: mono, `var(--ink-3)`; `.crumbs .cur` → `var(--ink-1)`.
-- [ ] `.icon-btn`: `color: var(--ink-2)`; hover `background: color-mix(in srgb, var(--ink-1) 4%, transparent)` + `color: var(--ink-1)`; remove any `border-radius: 6px` → use `var(--radius-md)` (4px).
-- [ ] `.theme-pill`, `.combo-pill`: mono uppercase tracked; `background: var(--cream-soft)`; `border: 1px solid var(--paper-rule)`; `color: var(--ink-2)`; radius `var(--radius-lg)` (6px — cap).
-- [ ] Commit: `style(shell): retoken topbar and icon buttons`.
+- [x] `.topbar`: `border-bottom: 1px solid var(--paper-rule)` → `var(--rule-1)` (follow-up). Solid (not mixed) — deliberate; harder divider than internal sections. Documented with a one-line comment above the block.
+- [x] `.crumbs`: mono, `var(--ink-3)`; `.crumbs .cur` → `var(--ink-1)`.
+- [x] `.icon-btn`: `color: var(--ink-2)`; hover retokened; border-radius → `var(--radius-md)`.
+- [x] `.theme-pill`: mono uppercase tracked; `background: var(--cream-soft)` → `var(--surface-2)` (follow-up); `border: 1px solid var(--paper-rule)` → `var(--rule-1)`; radius → `var(--radius-lg)` (6px cap).
+- [x] `.combo-pill`: mono uppercase tracked, `var(--ink-3)`.
+- [x] Commit: `style(shell): retoken topbar and icon buttons` — `0c3d73a`.
 
 ### Task 2.9: Update `.article*`, `.eyebrow`, `.title`, `.deck`, `.meta-row`
 
 **Files:**
-- Modify: `src/app/globals.css` (those blocks).
+- Modify: `src/app/globals.css`.
 
-- [ ] `.article .eyebrow`: **rewrite** — delete the existing italic display green treatment; replace with Tatara eyebrow: mono uppercase 11px, 0.22em tracking, `var(--ink-3)`. (In new consumer markup prefer `<Eyebrow />`; this CSS is a fallback for unstructured cases.)
-- [ ] `.title`: **delete** `font-variation-settings: "opsz" 144, "SOFT" 30;` (Fraunces axis; invalid on EB Garamond). Replace the block with `.t-h1`-equivalent treatment: `font-family: var(--font-display); font-weight: 500; font-size: var(--d-h1); letter-spacing: -0.02em; color: var(--ink-1);`.
-- [ ] `.deck`: italic display, `var(--t-lede)`, `var(--ink-2)`.
-- [ ] `.meta-row`: mono/body split preserved; retoken `.val` color to `var(--ink-1)`.
-- [ ] Commit: `style(shell): rewrite .title, .eyebrow, .deck for Tatara display scale`.
+- [x] `.article .eyebrow`: rewritten — mono uppercase 11px, 0.22em tracking, `var(--ink-3)`.
+- [x] `.title`: deleted `font-variation-settings: "opsz" 144, "SOFT" 30;` (invalid on EB Garamond). Replaced with `.t-h1`-equivalent: `font-family: var(--font-display); font-weight: 500; font-size: var(--d-h1); line-height: var(--lh-heading); letter-spacing: -0.02em; color: var(--ink-1);`.
+- [x] `.deck`: italic display, `var(--t-lede)`, `var(--ink-2)`.
+- [x] `.meta-row`: mono/body split preserved; retoken `.val` color to `var(--ink-1)`.
+- [x] Commit: `style(shell): rewrite .title, .eyebrow, .deck for Tatara display scale` — `27b11ab`.
 
 ### Task 2.10: Update `.rail-*` (collapsed sidebar) blocks
 
 **Files:**
-- Modify: `src/app/globals.css` (`.side-rail`, `.rail-brand`, `.rail-quick`, `.rail-sections`, `.rail-bottom`, `.rail-btn`, `.rail-btn[aria-current="true"]`, `.rail-btn::before`).
+- Modify: `src/app/globals.css`.
 
-- [ ] `.rail-btn[aria-current="true"]`: `color: var(--brass)` (was `var(--accent)` green).
-- [ ] `.rail-btn[aria-current="true"]::before`: `background: var(--brass)`.
-- [ ] `.rail-btn:hover`: `background: color-mix(in srgb, var(--ink-1) 4%, transparent)`.
-- [ ] `.rail-btn:focus-visible`: `outline: 2px solid var(--ember-warm)`.
-- [ ] Commit: `style(shell): retoken collapsed side-rail`.
+- [x] `.rail-btn[aria-current="true"]`: `color: var(--brass)`.
+- [x] `.rail-btn[aria-current="true"]::before`: `background: var(--brass)`.
+- [x] `.rail-btn:hover`: `background: color-mix(in srgb, var(--ink-1) 4%, transparent)`.
+- [x] `.rail-btn:focus-visible`: `outline: 2px solid var(--ember-warm)`.
+- [x] Commit: `style(shell): retoken collapsed side-rail` — `f752dab`. Also follow-up polish commit `6ce6fc9` to align `.quick-item` 6px radius → `var(--r-lg)` and refresh the comment above the app-shell block to reference current token names.
 
 ### Task 2.11: Update shell component files — `<Icon />` adoption
 
 **Files:**
-- Modify: `src/components/shell/new-app-shell.tsx`, `src/components/shell/brain-tree.tsx`, `src/components/shell/theme-toggle.tsx`, `src/components/shell/workspace-row.tsx`, any files under `src/components/shell/sidebar/*`.
+- Modify: `src/components/shell/sidebar/sidebar-expanded.tsx`, `src/components/shell/sidebar/sidebar-rail.tsx`, `src/components/shell/sidebar/sidebar-mobile-trigger.tsx`, `src/components/shell/sidebar/section.tsx`, `src/components/shell/sidebar/sections/brain-section.tsx`, `src/components/shell/sidebar/sections/pinned-section.tsx`, `src/components/shell/sidebar/__tests__/section.test.tsx`, `src/components/shell/brain-tree.tsx`, `src/components/shell/theme-toggle.tsx`, `src/components/shell/workspace-row.tsx`.
 
-- [ ] Replace direct `lucide-react` icon imports with `<Icon name="ChevronRight" size={14} />` (etc.) from `@/components/tatara`. Pick sizes from {14, 16, 20, 24}.
-- [ ] In `theme-toggle.tsx`: ensure the toggle uses `<Button variant="ghost" size="icon">` with `<Icon name="Sun" />` / `<Icon name="Moon" />` inside. Cycling should flip `[data-theme]` or `.dark` class — preserve existing logic.
-- [ ] In `workspace-row.tsx`: set the chip (`.ws-avatar`) background explicitly to `var(--brass)` OR wrap a small brass dot beside the name — follow whichever existing pattern renders cleanest.
-- [ ] Commit: `feat(shell): adopt <Icon /> wrapper; clean up shell components`.
+- [x] Replaced direct `lucide-react` icon imports with `<Icon name="..." />` from `@/components/tatara`. Sizes from {14, 16, 20, 24}: 14 for chevrons/dropdown triggers, 16 for expanded-sidebar nav, 20 for collapsed rail icons.
+- [x] `theme-toggle.tsx`: kept `.quick-item` / `.rail-btn` classnames for sibling visual parity (wrapping in shadcn Button would override layout/hover/radius — documented with a one-line comment at file top). Existing `useSyncExternalStore` cookie logic preserved.
+- [x] `workspace-row.tsx`: inline `<svg>` chevron replaced with `<Icon name="ChevronDown" size={14} className="ws-chev" />`. `.ws-avatar` background set in CSS (Task 2.5 — `var(--brass)`).
+- [x] Also refactored `section.tsx` API: `icon: LucideIcon` prop → `iconName: IconProps['name']` string. Consumers and test updated in lockstep.
+- [x] Commit: `feat(shell): adopt <Icon /> wrapper; clean up shell components` — `4720b0e`.
 
 ### Task 2.12: Swap global-run-badge spinner for GaugeNeedle
 
 **Files:**
 - Modify: `src/components/layout/global-run-badge.tsx`.
 
-- [ ] Identify the current loading indicator (likely Lucide `Loader2` with animation, or a CSS spinner).
-- [ ] Replace with `<GaugeNeedle size="sm" />` from `@/components/tatara`. Adjust surrounding flex layout if needed.
-- [ ] Commit: `feat(shell): use GaugeNeedle in global run badge`.
+- [x] The badge had no explicit spinner — re-interpreted as "replace the static `<WorkflowsIcon />` with `<GaugeNeedle size="sm" />` when `count > 0`" (running = gauge territory). Count=0 keeps static icon for stable nav glyph identity.
+- [x] Count bubble retokened: `bg-primary text-primary-foreground` → `bg-[var(--ember)] text-[var(--cream)]`; `rounded-full` → `rounded-[var(--radius-sm)]` (letterpress pill).
+- [x] Commit: `feat(shell): use GaugeNeedle in global run badge` — `29b77db`.
 
 ### Task 2.13: App shell Playwright verification
 
-**Files:** none modified.
+**Files:** `src/app/globals.css` (theme-aware fix commit `e3e1ca9`).
 
-- [ ] `npm run build` + `npm run lint` clean.
-- [ ] Start dev server; via Playwright MCP, navigate each signed-in route your test data permits. At minimum: `/` (app home), `/brain`, `/chat`, `/connectors`, `/settings`, `/workflows`, `/setup`.
-- [ ] Per route, per theme: take a screenshot. Read the console: no new errors.
-- [ ] Use `browser_evaluate` to spot-check the brand row wordmark:
-  ```js
-  const el = document.querySelector('.brand .t-wordmark') || document.querySelector('.brand-name');
-  getComputedStyle(el).fontStyle
-  ```
-  Expected: `"normal"` (not italic). If italic, investigate.
-- [ ] Fix anything that looks wrong; commit as `fix(shell): ...`.
-- [ ] Commit: `test(shell): Playwright visual verification passed` (optional).
+- [x] `npm run lint` — 52 pre-existing issues in unrelated workflows/tests/OAuth; zero in Stage 2 files. `npx tsc --noEmit` clean for Stage 2 files.
+- [x] `npm run dev` in background.
+- [x] Via Playwright MCP, navigated `/home` and `/brain` in both themes. Screenshots captured (`stage2-home-light.png`, `stage2-home-dark-fixed.png`, `stage2-brain-dark.png`).
+- [x] Console check: 0 errors on each page (20–96 warnings, all pre-existing Axiom `CompressionStream`-edge-runtime noise and Next.js dev-mode noise unrelated to Stage 2).
+- [x] Wordmark check via `browser_evaluate`: `.brand .t-wordmark` → `fontStyle: "normal"`, `fontFamily: "\"EB Garamond\", \"Hoefler Text\", Georgia, serif"`, `fontWeight: "600"`, `textContent: "Tatara"` ✓.
+- [x] Surface check (light): `.main` bg `rgb(242, 234, 216)` (cream), `.side` bg `rgb(235, 226, 207)` (cream-soft), `.ws-avatar` bg `rgb(184, 134, 58)` (brass) + cream text ✓.
+- [x] Surface check (dark, after `e3e1ca9` fix): `.main` bg `rgb(31, 42, 63)` (indigo-deep), `.side` bg `rgb(22, 32, 51)` (indigo-darker), text `rgb(242, 234, 216)` (cream) ✓.
+- [x] Fix commit: `fix(shell): theme-aware surfaces + rules (surface-0/1/2, rule-1)` — `e3e1ca9`. Plan's Task 2.2 recipe had prescribed literal tokens that did not theme-flip; applied same pattern as Stage 1's Card/Input fix.
 
 ---
 

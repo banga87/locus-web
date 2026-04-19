@@ -209,13 +209,15 @@ function toolAllowed(tool: LocusTool, ctx: ToolContext): boolean {
  * collides with a brain tool name, the external tool wins (spread order).
  * Caller is responsible for namespacing MCP tools to avoid collisions.
  *
- * The two propose tools — `propose_document_create` +
- * `propose_document_update` — are registered unconditionally for every
- * agent. They're side-effect-free: their `execute` functions only
- * validate input and return `{ proposal, isProposal: true }` for the
- * UI to render an Approve/Discard card. No DB writes, no Brain CRUD
- * calls — the user performs the actual write on approval. See
- * `src/lib/tools/propose-document.ts` for the full contract.
+ * The three propose tools — `propose_document_create`,
+ * `propose_document_update`, and `propose_skill_create` — are
+ * registered unconditionally for every agent. They're side-effect-free:
+ * their `execute` functions only validate input and return
+ * `{ proposal, isProposal: true }` for the UI to render an
+ * Approve/Discard card. No DB writes, no Brain CRUD calls — the user
+ * performs the actual write on approval. See
+ * `src/lib/tools/propose-document.ts` and
+ * `src/lib/tools/propose-skill-create.ts` for the full contract.
  */
 export function buildToolSet(
   ctx: ToolContext,

@@ -31,18 +31,20 @@ import { writeSkillTree } from '@/lib/skills/write-skill-tree';
 // Schema — mirrors the tool's input schema (no `kind` field).
 // ---------------------------------------------------------------------------
 
-const acceptSchema = z.object({
-  name: z.string().min(1).max(200),
-  description: z.string().min(1).max(1000),
-  body: z.string().min(1),
-  resources: z.array(
-    z.object({
-      relative_path: z.string().min(1).max(256),
-      content: z.string(),
-    }),
-  ).default([]),
-  rationale: z.string().min(1),
-});
+const acceptSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    description: z.string().min(1).max(1000),
+    body: z.string().min(1),
+    resources: z.array(
+      z.object({
+        relative_path: z.string().min(1).max(256),
+        content: z.string(),
+      }),
+    ).default([]),
+    rationale: z.string().min(1),
+  })
+  .strict();
 
 // ---------------------------------------------------------------------------
 // Route handler

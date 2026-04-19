@@ -1209,12 +1209,12 @@
   --void-deep:  #05060a;
   --chrome:     rgba(255, 255, 255, 0.04);
   --chrome-hi:  rgba(255, 255, 255, 0.08);
-  --rim:        rgba(164, 201, 169, 0.16);
-  --rim-hot:    rgba(164, 201, 169, 0.34);
-  --neurons-text:     #d4d0c2;
-  --neurons-text-dim: #76725f;
-  --node-core:  #8a8574;
-  --node-halo:  rgba(138, 133, 116, 0.35);
+  --rim:        rgba(184, 134, 58, 0.16);
+  --rim-hot:    rgba(198, 90, 31, 0.34);
+  --neurons-text:     rgba(242, 234, 216, 0.85);
+  --neurons-text-dim: rgba(242, 234, 216, 0.4);
+  --node-core:  var(--iron-scale);
+  --node-halo:  rgba(90, 80, 72, 0.35);
 
   position: relative;
   display: grid;
@@ -1289,8 +1289,8 @@
 }
 .neurons-hud__led {
   width: 6px; height: 6px; border-radius: 50%;
-  background: #5ef0c8;
-  box-shadow: 0 0 8px #5ef0c8;
+  background: var(--ember-warm);
+  box-shadow: 0 0 8px var(--ember-warm);
   animation: neurons-led-pulse 1.6s ease-in-out infinite;
 }
 @keyframes neurons-led-pulse {
@@ -1347,13 +1347,13 @@
 .neurons-sidebar__row:hover,
 .neurons-sidebar__row:focus-visible { background: var(--chrome); }
 .neurons-sidebar__row[data-selected='true'] {
-  background: color-mix(in srgb, var(--agent-color, #7aa7ff) 12%, transparent);
-  border-color: color-mix(in srgb, var(--agent-color, #7aa7ff) 40%, transparent);
+  background: color-mix(in srgb, var(--agent-color, var(--brass)) 12%, transparent);
+  border-color: color-mix(in srgb, var(--agent-color, var(--brass)) 40%, transparent);
   animation: neurons-breathe 2.2s ease-in-out infinite;
 }
 @keyframes neurons-breathe {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  50%      { box-shadow: 0 0 18px -4px color-mix(in srgb, var(--agent-color, #7aa7ff) 50%, transparent); }
+  50%      { box-shadow: 0 0 18px -4px color-mix(in srgb, var(--brass) 50%, transparent); }
 }
 .neurons-sidebar__dot {
   width: 10px; height: 10px;
@@ -1414,9 +1414,9 @@
   flex-shrink: 0;
   box-shadow: 0 0 8px currentColor;
 }
-.neurons-sidebar__health--active   { background: #8fd694; color: #8fd694; }
+.neurons-sidebar__health--active   { background: var(--state-ok); color: var(--state-ok); }
 .neurons-sidebar__health--disabled { background: #6b6759; color: #6b6759; box-shadow: none; }
-.neurons-sidebar__health--error    { background: #ff6b6b; color: #ff6b6b; }
+.neurons-sidebar__health--error    { background: var(--state-error); color: var(--state-error); }
 .neurons-sidebar__view-all {
   margin-top: 10px;
   align-self: flex-start;
@@ -1567,9 +1567,9 @@
   border-bottom: 1px solid rgba(164, 201, 169, 0.16);
 }
 .neurons-banner--warn {
-  background: rgba(229, 115, 115, 0.14);
-  color: #f0b0b0;
-  border-bottom-color: rgba(229, 115, 115, 0.32);
+  background: color-mix(in srgb, var(--state-error) 18%, transparent);
+  color: var(--ember-glow);
+  border-bottom-color: color-mix(in srgb, var(--state-error) 35%, transparent);
 }
 .neurons-chip {
   position: absolute;
@@ -1605,8 +1605,8 @@
   transition: transform 200ms ease;
 }
 .neurons-mcp-hex[data-status='error'] {
-  background: rgba(229, 115, 115, 0.14);
-  border-color: rgba(229, 115, 115, 0.48);
+  background: color-mix(in srgb, var(--state-error) 18%, transparent);
+  border-color: color-mix(in srgb, var(--state-error) 48%, transparent);
 }
 .neurons-mcp-hex[data-status='disabled'] {
   border-color: rgba(255, 255, 255, 0.1);
@@ -1616,8 +1616,8 @@
   animation: neurons-hex-call 900ms ease-out;
 }
 @keyframes neurons-hex-call {
-  0%   { box-shadow: 0 0 0 0 rgba(255,200,87,0.8) inset, 0 0 0 0 rgba(255,200,87,0.6); }
-  50%  { box-shadow: 0 0 14px 2px rgba(255,200,87,0.6) inset, 0 0 18px 4px rgba(255,200,87,0.45); }
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--honey-gold) 80%, transparent) inset, 0 0 0 0 color-mix(in srgb, var(--honey-gold) 60%, transparent); }
+  50%  { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--honey-gold) 60%, transparent) inset, 0 0 18px 4px color-mix(in srgb, var(--honey-gold) 45%, transparent); }
   100% { box-shadow: 0 0 0 0 transparent inset, 0 0 0 0 transparent; }
 }
 .neurons-mcp-hex__label {

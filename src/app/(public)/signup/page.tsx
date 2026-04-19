@@ -8,7 +8,17 @@ import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+import { Eyebrow } from '@/components/tatara';
 import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { createClient } from '@/lib/supabase/client';
 
 export default function SignupPage() {
@@ -59,61 +69,78 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="rounded-lg border border-border bg-background p-6 shadow-sm">
-      <h1 className="mb-1 text-lg font-semibold text-foreground">
-        Create your account
-      </h1>
-      <p className="mb-6 text-sm text-muted-foreground">
-        One minute to sign up. We&apos;ll send a verification email before you
-        get started.
-      </p>
+    <>
+      <Card>
+        <CardHeader>
+          <Eyebrow number="01">CREATE ACCOUNT</Eyebrow>
+          <CardTitle>Create your account</CardTitle>
+          <CardDescription>
+            One minute to sign up. We&apos;ll send a verification email before
+            you get started.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="signup-email">Email</Label>
+              <Input
+                id="signup-email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-foreground">Email</span>
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
-        </label>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="signup-password">Password</Label>
+              <Input
+                id="signup-password"
+                type="password"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-[var(--ink-muted)]">
+                8 characters minimum.
+              </p>
+            </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-foreground">Password</span>
-          <input
-            type="password"
-            required
-            minLength={8}
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
-          <span className="text-xs text-muted-foreground">
-            8 characters minimum.
-          </span>
-        </label>
+            {error ? (
+              <p
+                role="alert"
+                className="text-sm"
+                style={{ color: 'var(--state-error)' }}
+              >
+                {error}
+              </p>
+            ) : null}
 
-        {error ? (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
+            <Button
+              type="submit"
+              variant="default"
+              size="lg"
+              disabled={pending}
+              className="w-full"
+            >
+              {pending ? 'Creating account…' : 'Create account'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-        <Button type="submit" disabled={pending} size="lg">
-          {pending ? 'Creating account…' : 'Create account'}
-        </Button>
-      </form>
-
-      <p className="mt-6 text-sm text-muted-foreground">
+      <p className="mt-6 text-center text-sm text-[var(--ink-3)]">
         Already have an account?{' '}
-        <Link className="font-medium text-foreground underline" href="/login">
+        <Link
+          className="text-[var(--link)] underline underline-offset-[3px]"
+          href="/login"
+        >
           Sign in
         </Link>
       </p>
-    </div>
+    </>
   );
 }

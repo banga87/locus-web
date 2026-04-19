@@ -267,11 +267,21 @@ export function MonoLabel({ children, className, as: Tag = "span" }: { children:
 
 ```tsx
 import { cn } from "@/lib/utils";
-export function Wordmark({ tagline = false, size = 22, className }: { tagline?: boolean; size?: number; className?: string }) {
+export function Wordmark({
+  tagline,
+  size = 22,
+  className,
+}: {
+  /** Pass `true` for the default "The Operator's Console" tagline, or a string to override, or omit/false to hide. */
+  tagline?: boolean | string;
+  size?: number;
+  className?: string;
+}) {
+  const taglineText = tagline === true ? "The Operator's Console" : typeof tagline === "string" ? tagline : null;
   return (
     <span className={cn("inline-flex items-baseline gap-2", className)}>
       <span className="t-wordmark" style={{ fontSize: size }}>Tatara</span>
-      {tagline && <span className="t-wordmark-tagline">The Operator's Console</span>}
+      {taglineText && <span className="t-wordmark-tagline">{taglineText}</span>}
     </span>
   );
 }
@@ -989,7 +999,7 @@ Biggest slice. Hits the bespoke CSS block in `globals.css` (roughly lines 165–
 **Files:**
 - Modify: `src/components/ai-elements/**/*.tsx`.
 
-- [ ] Identify the components that render tool calls / reasoning / diffs today (likely something like `tool-call.tsx`, `reasoning.tsx`, or similar).
+- [ ] Identify the components that render tool calls / reasoning / diffs today. **Scope-awareness note:** `src/components/ai-elements/` may currently contain only `message.tsx` — if the tool/think/diff kinds aren't rendered anywhere yet, this task is *creating* the components, not refactoring existing ones. Size accordingly.
 - [ ] For each item kind, refactor to match spec Section 3 Slice 4's three-type typology:
   - **tool**: row with mono `▸ TOOLNAME` in `var(--brass-deep)`, subtitle mono `var(--ink-2)`, right-aligned elapsed in `var(--ink-3)`. Use `<MonoLabel>` if helpful. No card chrome.
   - **think**: italic display 14px `var(--ink-2)`.
@@ -1212,11 +1222,11 @@ check() {
   local output
   output=$("$@" 2>/dev/null)
   if [ -n "$output" ]; then
-    echo "❌ $name:"
+    echo "✗ $name:"
     echo "$output" | sed 's/^/   /'
     fail=1
   else
-    echo "✅ $name"
+    echo "✓ $name"
   fi
 }
 

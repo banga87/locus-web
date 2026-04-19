@@ -5,20 +5,20 @@
 // image (absolute variant) by default; pass `absolute={false}` for
 // pinned/dark-bar usage in later sections.
 //
-// Scoping contract: renders inside `.tatara-marketing`, so all `--mk-*`
-// tokens and font vars are in scope.
+// Scoping contract: renders inside `.tatara-marketing`, but styling is
+// driven entirely by Tatara design-system tokens (--ink-*, --surface-*,
+// --brass, --ember-warm) now that the --mk-* palette is being retired.
 //
 // Breakpoint: 1180px (not a Tailwind default). Expressed via
 // `min-[1180px]:` arbitrary-breakpoint utilities.
 
 import Link from 'next/link';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Wordmark } from '@/components/marketing/primitives';
+import { useEffect, useRef, useState } from 'react';
+import { Icon, Wordmark } from '@/components/tatara';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const MOBILE_MENU_ID = 'marketing-nav-menu';
-
-const SERIF: CSSProperties = { fontFamily: 'var(--font-display), serif' };
 
 interface NavLink {
   label: string;
@@ -65,9 +65,12 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
     return () => window.removeEventListener('keydown', onKey);
   }, [menuOpen]);
 
-  // Token-driven text color. Light-on-dark = --mk-paper; dark-on-light = --mk-ink.
-  // Kept as CSS-var references so palette tweaks flow through.
-  const textVar = dark ? 'var(--mk-paper)' : 'var(--mk-ink)';
+  // Inverted palette is used when the nav floats over the hero plate —
+  // HeroPlate provides a dark top-gradient overlay that establishes contrast.
+  const inverted = absolute && dark;
+  const rootColor = inverted ? 'var(--ink-inverse)' : 'var(--ink-1)';
+  const navItemDefault = inverted ? 'var(--ink-inverse-2)' : 'var(--ink-2)';
+  const navItemHover = inverted ? 'var(--ink-inverse)' : 'var(--ink-1)';
 
   const closeMenu = () => setMenuOpen(false);
 
@@ -78,32 +81,39 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
         'px-6 py-[18px] min-[1180px]:px-10 min-[1180px]:py-6',
         absolute ? 'absolute' : 'relative',
       )}
-      style={{ color: textVar }}
+      style={{ color: rootColor }}
     >
-      {/* Left: wordmark + (desktop only) est. 2026 tagline */}
-      <div className="flex min-w-0 items-center gap-6">
+      {/* Left: wordmark + 1x16 brass rule + (desktop only) est. 2026 lockup.
+          Wordmark inherits color from `var(--ink-1)`; wrapping in a span
+          that overrides `color` flips it to `--ink-inverse` over the hero. */}
+      <div className="flex min-w-0 items-center gap-4">
         <Link href="/" aria-label="Tatara home" className="inline-flex items-center">
-          {/* Wordmark auto-reads --mk-ink; override via style when on dark */}
-          <Wordmark
-            size={22}
-            className="min-[1180px]:text-[24px]"
-            style={{ color: textVar, fontSize: 'inherit' }}
-          />
+          <span style={{ color: rootColor }}>
+            <Wordmark size={22} className="min-[1180px]:text-[24px]" />
+          </span>
         </Link>
         <div
           aria-hidden
-          className="hidden h-[18px] w-px opacity-25 min-[1180px]:block"
-          style={{ background: textVar }}
+          className="hidden h-4 w-px min-[1180px]:block"
+          style={{ background: 'var(--brass)' }}
         />
         <span
-          className="hidden whitespace-nowrap text-[13px] italic opacity-70 min-[1180px]:inline"
-          style={{ ...SERIF, color: textVar, letterSpacing: '0.01em' }}
+          className="hidden whitespace-nowrap text-[13px] italic min-[1180px]:inline"
+          style={{
+            fontFamily: 'var(--font-display), serif',
+            color: navItemDefault,
+            letterSpacing: '0.01em',
+          }}
         >
           est. 2026
         </span>
       </div>
 
-      {/* Center: desktop nav links */}
+      {/* Center: desktop nav links.
+          Uses Tailwind arbitrary-value utilities for the ember-warm focus
+          ring so we inherit the design-system focus affordance. Color
+          swap on hover is done via group-less CSS vars rather than
+          :hover utilities so the inline `style` source of truth wins. */}
       <div
         className="hidden items-center gap-7 text-[14px] font-normal min-[1180px]:flex"
         style={{ fontFamily: 'var(--font-body), system-ui, sans-serif' }}
@@ -112,8 +122,14 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
           <a
             key={item.label}
             href={item.href}
-            className="whitespace-nowrap opacity-80 transition-opacity hover:opacity-100"
-            style={{ color: textVar }}
+            className="whitespace-nowrap rounded-[2px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)] focus-visible:ring-offset-2 hover:[color:var(--nav-item-hover)]"
+            style={
+              {
+                color: navItemDefault,
+                // Custom property consumed by the hover selector above.
+                ['--nav-item-hover' as string]: navItemHover,
+              } as React.CSSProperties
+            }
           >
             {item.label}
           </a>
@@ -123,47 +139,20 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
       {/* Right: CTAs + (compact only) hamburger */}
       <div className="flex items-center gap-2">
         {authed ? (
-          // Single CTA — "Open app" — styled like the cream-plate Request access.
-          <Link
-            href="/home"
-            className="inline-flex items-center gap-2 whitespace-nowrap border px-4 py-[10px] text-[14px] font-medium transition-colors"
-            style={{
-              fontFamily: 'var(--font-body), system-ui, sans-serif',
-              color: 'var(--mk-ink)',
-              background: 'var(--mk-paper)',
-              borderColor: 'var(--mk-paper)',
-            }}
-          >
-            Open app
-            <span style={{ ...SERIF, fontStyle: 'italic' }}>→</span>
-          </Link>
+          // Single CTA — "Open app" — brass accent button.
+          <Button asChild variant="accent">
+            <Link href="/home">Open app</Link>
+          </Button>
         ) : (
           <>
-            {/* Desktop-only Sign in link */}
-            <Link
-              href="/login"
-              className="hidden whitespace-nowrap px-[14px] py-[10px] text-[14px] opacity-80 transition-opacity hover:opacity-100 min-[1180px]:inline-block"
-              style={{
-                fontFamily: 'var(--font-body), system-ui, sans-serif',
-                color: textVar,
-              }}
-            >
-              Sign in
-            </Link>
+            {/* Desktop-only Sign in link (ghost button) */}
+            <Button asChild variant="ghost" className="hidden min-[1180px]:inline-flex">
+              <Link href="/login">Sign in</Link>
+            </Button>
             {/* Request access — anchor hash-scroll to invitation section */}
-            <a
-              href="#invitation"
-              className="inline-flex items-center gap-2 whitespace-nowrap border px-4 py-[10px] text-[14px] font-medium transition-colors"
-              style={{
-                fontFamily: 'var(--font-body), system-ui, sans-serif',
-                color: 'var(--mk-ink)',
-                background: 'var(--mk-paper)',
-                borderColor: 'var(--mk-paper)',
-              }}
-            >
-              Request access
-              <span style={{ ...SERIF, fontStyle: 'italic' }}>→</span>
-            </a>
+            <Button asChild variant="accent">
+              <a href="#invitation">Request access</a>
+            </Button>
           </>
         )}
 
@@ -175,17 +164,18 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
           aria-label="Menu"
           aria-expanded={menuOpen}
           aria-controls={MOBILE_MENU_ID}
-          className="inline-flex items-center justify-center border px-3 py-[9px] text-[12px] tracking-[0.12em] min-[1180px]:hidden"
+          className="inline-flex items-center justify-center rounded-[var(--radius-md)] border px-3 py-[9px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)] focus-visible:ring-offset-2 min-[1180px]:hidden"
           style={{
-            fontFamily: 'var(--font-mono), monospace',
-            // Border uses textVar at ~40% alpha. Kept inline rather than tokenized:
-            // the alpha blend differs by context (light nav on light = rare).
-            borderColor: dark ? 'rgba(245,239,227,0.4)' : 'rgba(27,20,16,0.4)',
-            color: textVar,
+            // Border uses the current ink at ~40% alpha — kept inline because
+            // the light-on-light case is rare and the blend changes context.
+            borderColor: inverted
+              ? 'color-mix(in srgb, var(--ink-inverse) 40%, transparent)'
+              : 'color-mix(in srgb, var(--ink-1) 40%, transparent)',
+            color: rootColor,
             background: 'transparent',
           }}
         >
-          {menuOpen ? '×' : '≡'}
+          <Icon name={menuOpen ? 'X' : 'Menu'} size={16} />
         </button>
       </div>
 
@@ -193,11 +183,11 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
       {menuOpen && (
         <div
           id={MOBILE_MENU_ID}
-          className="absolute left-4 right-4 top-full mt-2 border py-2 shadow-[0_12px_40px_rgba(0,0,0,0.4)] min-[1180px]:hidden"
+          className="absolute left-4 right-4 top-full mt-2 rounded-[var(--radius-md)] border py-2 shadow-[0_12px_40px_rgba(0,0,0,0.4)] min-[1180px]:hidden"
           style={{
-            background: 'var(--mk-ink)',
-            color: 'var(--mk-paper)',
-            borderColor: 'var(--mk-ink-2)',
+            background: 'var(--surface-0)',
+            color: 'var(--ink-1)',
+            borderColor: 'var(--paper-rule)',
           }}
         >
           {NAV_LINKS.map((item) => (
@@ -205,14 +195,11 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
               key={item.label}
               href={item.href}
               onClick={closeMenu}
-              className="block border-b px-5 py-3 text-[15px]"
+              className="block border-b px-5 py-3 text-[15px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)] focus-visible:ring-inset"
               style={{
                 fontFamily: 'var(--font-body), system-ui, sans-serif',
-                color: 'var(--mk-paper)',
-                // Subtle row separator — --mk-ink darkened; literal justified
-                // because there's no --mk-ink-darker token and one row-only
-                // separator doesn't warrant adding one.
-                borderBottomColor: '#2A211B',
+                color: 'var(--ink-1)',
+                borderBottomColor: 'var(--paper-rule)',
               }}
             >
               {item.label}
@@ -222,10 +209,10 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
             <Link
               href="/login"
               onClick={closeMenu}
-              className="block px-5 py-3 text-[15px]"
+              className="block px-5 py-3 text-[15px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)] focus-visible:ring-inset"
               style={{
                 fontFamily: 'var(--font-body), system-ui, sans-serif',
-                color: 'var(--mk-paper)',
+                color: 'var(--ink-1)',
               }}
             >
               Sign in

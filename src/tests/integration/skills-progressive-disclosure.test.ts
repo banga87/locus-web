@@ -140,12 +140,12 @@ const suffix = `pr1-sk-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let companyId: string;
 let brainId: string;
 let userId: string;
-let folderId: string;
+let folderId: string | undefined;
 let allowedSkillId: string;
 let unlistedSkillId: string;
 let resourceRelativePath = 'refs/a.md';
 let resourceContent = 'Reference A content';
-let agentDefinitionDocId: string;
+let agentDefinitionDocId: string | undefined;
 let sessionId: string;
 
 const ALLOWED_SKILL_NAME = 'Test Skill';
@@ -275,7 +275,7 @@ beforeAll(async () => {
     title: 'Skills Test Agent',
     slug: `skills-test-agent-${suffix}`,
     model: 'claude-sonnet-4-6',
-    toolAllowlist: null,
+    toolAllowlist: undefined,
     baselineDocIds: [],
     skillIds: [allowedSkillId],
     systemPromptSnippet: `You are the PR1 ${suffix} agent.`,

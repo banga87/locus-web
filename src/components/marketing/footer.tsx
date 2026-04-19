@@ -1,10 +1,9 @@
 // Footer — typographic, letterpress-era colophon. Server Component.
-// Ported from Tatara/components/Sections.jsx lines 607–677.
 //
-// Brand note: the original Tatara prototype prefixed "est. MMXXVI" with a
+// Brand note: the original Tatara prototype prefixed the colophon line with a
 // kanji glyph. The Tatara brand is English-only (per project memo
-// feedback_no_japanese_elements), so that character is deliberately removed
-// here — only "est. MMXXVI" remains.
+// feedback_no_japanese_elements), so no CJK characters appear here. The
+// Vol./Iss. metadata line carries the copyright + founding year instead.
 //
 // Responsive collapse: <900px drops from the 5-col desktop layout to a
 // 2-col grid. Chose 2 cols over 1 because the four link lists are short
@@ -12,8 +11,7 @@
 // compact (1-col would force a long vertical scroll at the end of the page).
 // The brand column still spans the full width at the top.
 
-import type { CSSProperties } from 'react';
-import { Rule, Wordmark } from '@/components/marketing/primitives';
+import { Eyebrow, LetterpressRule, Wordmark } from '@/components/tatara';
 
 interface LinkList {
   title: string;
@@ -27,38 +25,13 @@ const LISTS: readonly LinkList[] = [
   { title: 'Legal', items: ['Terms', 'Privacy', 'Security', 'DPA', 'Subprocessors'] },
 ];
 
-const TAGLINE_STYLE: CSSProperties = {
-  fontFamily: 'var(--font-display), serif',
-  fontStyle: 'italic',
-  fontWeight: 300,
-  fontSize: 16,
-  lineHeight: 1.5,
-  color: 'var(--mk-ink-2)',
-};
-
-const COLUMN_HEADER_STYLE: CSSProperties = {
-  fontFamily: 'var(--font-mono), monospace',
-  fontSize: 10,
-  letterSpacing: '0.18em',
-  textTransform: 'uppercase',
-  color: 'var(--mk-ink-3)',
-};
-
-const LINK_STYLE: CSSProperties = {
-  fontFamily: 'var(--font-body), system-ui, sans-serif',
-  fontSize: 14,
-  color: 'var(--mk-ink)',
-  textDecoration: 'none',
-  opacity: 0.8,
-};
-
 export function Footer() {
   return (
     <footer
       className="px-6 pb-10 pt-[72px] min-[900px]:px-12 min-[900px]:pb-10 min-[900px]:pt-20"
       style={{
-        background: 'var(--mk-paper)',
-        borderTop: '1px solid var(--mk-rule)',
+        background: 'var(--cream)',
+        borderTop: '1px solid var(--paper-rule)',
       }}
     >
       <div className="mx-auto max-w-[1320px]">
@@ -67,30 +40,33 @@ export function Footer() {
           {/* Brand column — full-width at mobile (spans 2), 1.4fr at desktop. */}
           <div className="col-span-2 min-[900px]:col-span-1">
             <Wordmark size={26} />
-            <p className="mt-4 max-w-[280px]" style={TAGLINE_STYLE}>
+            <p
+              className="mt-4 max-w-[280px]"
+              style={{
+                fontFamily: 'var(--font-display), serif',
+                fontStyle: 'italic',
+                fontWeight: 300,
+                fontSize: 16,
+                lineHeight: 1.5,
+                color: 'var(--ink-2)',
+              }}
+            >
               The operator&rsquo;s console for AI labor. Built in small batches, hand-tended,
               kept warm.
             </p>
-            <div
-              className="mt-6 text-[10px] uppercase tracking-[0.16em]"
-              style={{
-                fontFamily: 'var(--font-mono), monospace',
-                color: 'var(--mk-ink-3)',
-              }}
-            >
-              est. MMXXVI
-            </div>
           </div>
 
           {LISTS.map((list) => (
             <div key={list.title}>
-              <div className="mb-4" style={COLUMN_HEADER_STYLE}>
-                {list.title}
-              </div>
+              <Eyebrow className="mb-4">{list.title.toUpperCase()}</Eyebrow>
               <ul className="m-0 list-none p-0">
                 {list.items.map((item) => (
                   <li key={item} className="mb-2">
-                    <a href="#" style={LINK_STYLE}>
+                    <a
+                      href="#"
+                      className="text-[14px] text-[var(--ink-3)] transition-colors hover:text-[var(--ink-1)]"
+                      style={{ fontFamily: 'var(--font-body), system-ui, sans-serif' }}
+                    >
                       {item}
                     </a>
                   </li>
@@ -100,21 +76,40 @@ export function Footer() {
           ))}
         </div>
 
-        <Rule className="mt-16" />
+        <LetterpressRule className="mt-16" />
 
-        <div
-          className="mt-5 flex flex-col items-start justify-between gap-3 text-[12px] min-[640px]:flex-row min-[640px]:items-center"
-          style={{
-            fontFamily: 'var(--font-body), system-ui, sans-serif',
-            color: 'var(--mk-ink-3)',
-          }}
-        >
-          <div>&copy; 2026 Tatara Works, Ltd. Set in Fraunces &amp; Inter.</div>
-          <div className="flex gap-6">
-            <a href="#" style={{ color: 'var(--mk-ink-3)' }}>GitHub</a>
-            <a href="#" style={{ color: 'var(--mk-ink-3)' }}>X</a>
-            <a href="#" style={{ color: 'var(--mk-ink-3)' }}>BlueSky</a>
-            <a href="#" style={{ color: 'var(--mk-ink-3)' }}>RSS</a>
+        <div className="mt-5 flex flex-col items-start justify-between gap-3 min-[640px]:flex-row min-[640px]:items-center">
+          <span
+            className="t-mono-label"
+            style={{ letterSpacing: '0.18em', opacity: 0.5 }}
+          >
+            © 2026 · Vol. I · Iss. 01 · est. 2026
+          </span>
+          <div className="flex gap-6 text-[12px]">
+            <a
+              href="#"
+              className="text-[var(--ink-3)] transition-colors hover:text-[var(--ink-1)]"
+            >
+              GitHub
+            </a>
+            <a
+              href="#"
+              className="text-[var(--ink-3)] transition-colors hover:text-[var(--ink-1)]"
+            >
+              X
+            </a>
+            <a
+              href="#"
+              className="text-[var(--ink-3)] transition-colors hover:text-[var(--ink-1)]"
+            >
+              BlueSky
+            </a>
+            <a
+              href="#"
+              className="text-[var(--ink-3)] transition-colors hover:text-[var(--ink-1)]"
+            >
+              RSS
+            </a>
           </div>
         </div>
       </div>

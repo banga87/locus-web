@@ -35,6 +35,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   type ModelMessage,
+  type Tool,
   type UIMessage,
 } from 'ai';
 
@@ -46,6 +47,9 @@ import { runAgentTurn, DEFAULT_MODEL } from '@/lib/agent/run';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { buildToolSet } from '@/lib/agent/tool-bridge';
 import type { AgentActor, AgentContext } from '@/lib/agent/types';
+import { buildAgentTool } from '@/lib/subagent/AgentTool';
+import { buildAgentToolDescription } from '@/lib/subagent/prompt';
+import { getBuiltInAgents } from '@/lib/subagent/registry';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { parseFrontmatterRaw } from '@/lib/brain/save';
 import { registerContextHandlers } from '@/lib/context/register';
@@ -289,6 +293,39 @@ export async function POST(req: Request) {
     close: closeMcp,
   } = await loadMcpOutTools(auth.companyId);
 
+  // Task 16 — subagent harness pilot. Gated behind
+  // `TATARA_SUBAGENTS_ENABLED` so the default Platform Agent behaviour
+  // is unchanged until we flip it on per environment.
+  const subagentsEnabled = process.env.TATARA_SUBAGENTS_ENABLED === 'true';
+
+  // Closure-captured parent usage-record id. Starts null; the parent's
+  // onFinish flips it once the usage_records row is inserted. Any
+  // subagent calls made AFTER that point in the same turn attribute
+  // correctly to the parent. The first subagent call in a turn accepts
+  // `null` — documented pilot limitation (see Task 15).
+  const parentUsageRecordRef: { id: string | null } = { id: null };
+  const parentTurnCap = {
+    limit: Number(process.env.TATARA_MAX_SUBAGENTS_PER_TURN ?? '10'),
+    count: 0,
+  };
+
+  // Extend externalTools with the Agent dispatch tool when flagged on.
+  // Merging with MCP OUT externalTools keeps the existing passthrough
+  // path in `buildToolSet` unchanged — external tools with no MCP meta
+  // are forwarded verbatim.
+  let routedExternalTools: Record<string, Tool> = externalTools;
+  if (subagentsEnabled) {
+    routedExternalTools = {
+      ...externalTools,
+      Agent: buildAgentTool({
+        parentCtx: ctx,
+        getParentUsageRecordId: () => parentUsageRecordRef.id,
+        description: buildAgentToolDescription(getBuiltInAgents()),
+        cap: parentTurnCap,
+      }),
+    };
+  }
+
   const { result, denied } = await runAgentTurn({
     ctx,
     system: buildSystemPrompt({
@@ -318,7 +355,7 @@ export async function POST(req: Request) {
         agentSkillIds,
         webCallsThisTurn: 0,
       },
-      externalTools,
+      routedExternalTools,
       externalToolMeta,
     ),
     maxSteps: 6,
@@ -353,7 +390,7 @@ export async function POST(req: Request) {
               usage: finish.usage,
             });
           }
-          await recordUsage({
+          const row = await recordUsage({
             companyId: auth.companyId!,
             sessionId: body.sessionId,
             userId: auth.userId,
@@ -365,6 +402,10 @@ export async function POST(req: Request) {
               finish.usage.inputTokenDetails?.cacheReadTokens ??
               finish.usage.cachedInputTokens,
           });
+          // Attribute subsequent subagent calls in this turn to the
+          // parent row. First-in-turn subagent calls still see `null`
+          // (documented Phase 2 pilot limitation — see Task 15 notes).
+          if (row) parentUsageRecordRef.id = row.id;
           await flushEvents();
         })(),
       );

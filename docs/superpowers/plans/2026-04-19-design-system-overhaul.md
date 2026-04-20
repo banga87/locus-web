@@ -1187,48 +1187,72 @@ Biggest primitive-consumption slice. Two new surface treatments (dark-inverse Fe
 
 ---
 
-## Stage 6 — Slice 6: Neurons palette
+## Stage 6 — Slice 6: Neurons palette ✅ COMPLETE (2026-04-20)
 
 Palette swap only. Frosted-glass structure unchanged (deferred to Tier 3).
 
-### Task 6.1: Retoken `.neurons-*` block in `globals.css`
+### Task 6.1: Retoken `.neurons-*` block in `globals.css` ✅
 
 **Files:**
 - Modify: `src/app/globals.css` (the `.neurons-*` block at the bottom of the file).
 
-- [ ] Within `.neurons-root`:
+- [x] Within `.neurons-root`:
   - `--rim` → `rgba(184, 134, 58, 0.16)` (brass alpha).
   - `--rim-hot` → `rgba(198, 90, 31, 0.34)` (ember alpha).
   - `--neurons-text` → `rgba(242, 234, 216, 0.85)`.
   - `--neurons-text-dim` → `rgba(242, 234, 216, 0.4)`.
   - `--node-core` → `var(--iron-scale)`.
   - `--node-halo` → `rgba(90, 80, 72, 0.35)` (iron-scale with alpha).
-- [ ] `.neurons-hud__led`: background `var(--ember-warm)`; `box-shadow: 0 0 8px var(--ember-warm)`.
-- [ ] `@keyframes neurons-led-pulse`: leave structure.
-- [ ] `.neurons-sidebar__row[data-selected='true']`: use `--agent-color` with default resolved to brass (e.g., `--agent-color: var(--brass)` by default; consumers can override).
-- [ ] `@keyframes neurons-breathe`: retune `box-shadow` glow color to brass (`color-mix(in srgb, var(--brass) 50%, transparent)`).
-- [ ] `.neurons-banner--warn`: `background: color-mix(in srgb, var(--state-error) 18%, transparent)`; `color: var(--ember-glow)`; `border-bottom-color: color-mix(in srgb, var(--state-error) 35%, transparent)`.
-- [ ] `.neurons-mcp-hex[data-status='error']`: mirror the warn treatment.
-- [ ] `.neurons-mcp-hex[data-calling='true']` (via keyframe `neurons-hex-call`): swap `#FFC857` yellow → `var(--honey-gold)` in the `box-shadow` colors.
-- [ ] `.neurons-sidebar__health--active`: `background: var(--state-ok)`; `color: var(--state-ok)`.
-- [ ] `.neurons-sidebar__health--error`: `background: var(--state-error)`.
-- [ ] **DO NOT** touch the `backdrop-filter: blur(...)` on `.neurons-sidebar` / `.neurons-narrative`. This is the Tier 3 deferred decision.
-- [ ] Commit: `style(neurons): palette swap to brass/ember/honey; structure unchanged`.
+- [x] `.neurons-hud__led`: background `var(--ember-warm)`; `box-shadow: 0 0 8px var(--ember-warm)`.
+- [x] `@keyframes neurons-led-pulse`: leave structure.
+- [x] `.neurons-sidebar__row[data-selected='true']`: use `--agent-color` with default resolved to brass (e.g., `--agent-color: var(--brass)` by default; consumers can override).
+- [x] `@keyframes neurons-breathe`: retune `box-shadow` glow color to brass (`color-mix(in srgb, var(--brass) 50%, transparent)`).
+- [x] `.neurons-banner--warn`: `background: color-mix(in srgb, var(--state-error) 18%, transparent)`; `color: var(--ember-glow)`; `border-bottom-color: color-mix(in srgb, var(--state-error) 35%, transparent)`.
+- [x] `.neurons-mcp-hex[data-status='error']`: mirror the warn treatment.
+- [x] `.neurons-mcp-hex[data-calling='true']` (via keyframe `neurons-hex-call`): swap `#FFC857` yellow → `var(--honey-gold)` in the `box-shadow` colors.
+- [x] `.neurons-sidebar__health--active`: `background: var(--state-ok)`; `color: var(--state-ok)`.
+- [x] `.neurons-sidebar__health--error`: `background: var(--state-error)`.
+- [x] **DO NOT** touch the `backdrop-filter: blur(...)` on `.neurons-sidebar` / `.neurons-narrative`. This is the Tier 3 deferred decision.
+- [x] Commit: `style(neurons): palette swap to brass/ember/honey; structure unchanged` — `4126ca3`.
+- [x] Follow-up sweep (found during code-quality review): retoken remaining forest-green literals in `.neurons-empty`, `.neurons-empty__retry`, `.neurons-banner` base, `.neurons-chip` — commit `392ea40` (`style(neurons): sweep remaining forest-green literals in empty/banner/chip`).
 
-### Task 6.2: Audit neurons page components
+### Task 6.2: Audit neurons page components ✅
 
 **Files:**
 - Read/modify: `src/app/(app)/neurons/**`.
 
-- [ ] Check each file for hardcoded hex colors (e.g., `#5ef0c8`, `#7aa7ff`, `#FFC857`, `#8fd694`, `#ff6b6b`) and retoken them.
-- [ ] Replace `lucide-react` imports with `<Icon />`.
-- [ ] Commit: `style(neurons): migrate component-level color literals`.
+- [x] Check each file for hardcoded hex colors (e.g., `#5ef0c8`, `#7aa7ff`, `#FFC857`, `#8fd694`, `#ff6b6b`) and retoken them.
+  - `src/app/(app)/neurons/_components/neuron-canvas.tsx`: delete stroke `#ff6b6b` → `#A84428` (state-error); birth-pulse ring + core flash `#5ef0c8` → `#D4A660` (honey-gold, matching MCP-hex-call glow).
+  - `src/lib/brain-pulse/agent-palette.ts`: 6-bucket agent palette rebased onto Tatara brass/ember family (`#D7B96E`, `#E8813A`, `#D4A660`, `#F2A870`, `#B8863A`, `#8B6425`); `UNKNOWN_COLOR` css fallback aligned to the new `--neurons-text-dim`.
+  - Warm-gray node core `#a8a397` and halo `rgba(168, 163, 151, …)` left as-is (already Tatara iron-stone semantically, not in banned set).
+  - Test fixtures in `__tests__/` left untouched — they are arbitrary prop strings, not visual elements.
+- [x] Replace `lucide-react` imports with `<Icon />` — N/A; no lucide-react imports in the neurons directory (pre-checked).
+- [x] Commit: `style(neurons): migrate component-level color literals` — `e9bf537`.
 
-### Task 6.3: Neurons Playwright verification
+### Task 6.3: Neurons Playwright verification ✅
 
-- [ ] Start dev; open `/neurons`. Screenshot. Confirm no green / cyan / aqua visible. Confirm MCP hexes render brass. Confirm LED is ember.
-- [ ] Console check clean.
-- [ ] Commit fixes as needed.
+- [x] Start dev; open `/neurons`. Screenshot. Confirm no green / cyan / aqua visible. Confirm MCP hexes render brass. Confirm LED is ember.
+  - Computed `--rim` = `rgba(184, 134, 58, 0.16)`, `--rim-hot` = `rgba(198, 90, 31, 0.34)` — confirmed in the live DOM.
+  - `.neurons-mcp-hex` border-color resolves to `rgba(198, 90, 31, 0.34)` (ember-alpha) ✅.
+  - `.neurons-sidebar__health--active` computed = `rgb(107, 133, 112)` = `--state-ok` ✅.
+  - `.neurons-hud__led` rule verified in diff; element not in DOM at rest (only renders while pulses live). CSS rule is `background: var(--ember-warm)`.
+  - Probed rules for `.neurons-empty`, `.neurons-empty__retry`, `.neurons-banner`, `.neurons-banner--warn`, `.neurons-chip` — all resolve to the new cream/brass/ember values. No forest-green remnants.
+  - Light + dark themes both visually verified — neurons void canvas intentionally keeps its own dark palette regardless of app theme.
+- [x] Console check clean — 0 errors, 0 warnings on `/neurons`.
+- [x] Commit fixes as needed — none required.
+
+### Stage 6 summary
+
+**Commits (in order):**
+- `4126ca3` style(neurons): palette swap to brass/ember/honey; structure unchanged
+- `392ea40` style(neurons): sweep remaining forest-green literals in empty/banner/chip
+- `e9bf537` style(neurons): migrate component-level color literals
+
+**Observations (not violations, for future slices):**
+- The hand-tuned "All ≥4.5:1 contrast" claim was intentionally softened in `agent-palette.ts` — the 6 warm-metal agent colors are visually distinguishable but sit closer together in hue than the old pan-spectrum palette. If agent legibility becomes a concern as more agents render concurrently, consider either widening the palette (pull in one cool-ember accent) or adding glyph / motion differentiation rather than re-introducing brand-violating hues.
+- `UNKNOWN_COLOR.canvas` still uses the pre-Tatara warm-gray `#8a8574`. Harmless (it reads as stone-family), but if a future slice wants strict parity with the CSS fallback it could move to e.g. `#5A5048` (`--iron-scale`).
+- `.neurons-sidebar__health--disabled` intentionally kept its legacy `#6b6759` per plan — revisit if Stage 7 violation-sweep adds it to the banned list.
+- Frosted-glass `backdrop-filter` untouched, per the explicit Tier 3 deferral.
 
 ---
 

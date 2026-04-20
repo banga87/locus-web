@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Pin } from 'lucide-react';
+import { Icon } from '@/components/tatara';
 
 import { Section } from '@/components/shell/sidebar/section';
 import { useSidebarLayout } from '@/lib/sidebar/use-sidebar-layout';
@@ -16,7 +16,7 @@ export function PinnedSection({ pinned }: PinnedSectionProps) {
   return (
     <Section
       id="pinned"
-      icon={Pin}
+      iconName="Pin"
       label="Pinned"
       count={pinned.length}
       expanded={sections.pinned ?? true}
@@ -25,7 +25,7 @@ export function PinnedSection({ pinned }: PinnedSectionProps) {
       {pinned.map((p) => (
         <Link key={p.id} href={`/brain/${p.id}`} className="node doc leaf">
           <span className="chev">›</span>
-          <span className="node-bullet" style={{ color: 'var(--accent-2)' }}>◆</span>
+          <span className="node-bullet" style={{ color: 'var(--brass)' }}>◆</span>
           <span className="node-label">{p.title}</span>
         </Link>
       ))}

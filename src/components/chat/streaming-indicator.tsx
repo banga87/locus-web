@@ -14,7 +14,7 @@ export function StreamingIndicator() {
       role="status"
       aria-live="polite"
       aria-label="Assistant is responding"
-      className="inline-flex items-center gap-1 rounded-2xl border border-border bg-card px-4 py-3"
+      className="inline-flex items-center gap-1 rounded-2xl border border-[var(--rule-1)] bg-[var(--surface-1)] px-4 py-3"
     >
       <Dot delay="0s" />
       <Dot delay="0.15s" />
@@ -27,8 +27,9 @@ function Dot({ delay }: { delay: string }) {
   return (
     <span
       aria-hidden="true"
-      className="inline-block size-2 rounded-full bg-muted-foreground/60"
+      className="inline-block size-2 rounded-full"
       style={{
+        backgroundColor: 'var(--ember-warm)',
         animation: 'locus-chat-bounce 1s infinite ease-in-out',
         animationDelay: delay,
       }}

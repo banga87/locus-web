@@ -230,15 +230,16 @@ export function NeuronCanvas({ graph, pulses, mcpCallLines, mcpConnections, solo
             if (age > p.durationMs) continue;
             const isDelete = p.category === 'document_mutation' && p.eventType === 'delete';
             const isBirth = p.category === 'document_mutation' && p.eventType === 'create';
-            const stroke = isDelete ? '#ff6b6b' : resolveAgentColor(p.agentId).canvas;
+            const stroke = isDelete ? '#A84428' : resolveAgentColor(p.agentId).canvas; // state-error: destructive pulse
 
             if (isBirth) {
+              // Birth pulse: honey-gold expanding waves
               // 3-ring expanding wave + brief core flash
               for (let k = 0; k < 3; k++) {
                 const tk = (age - k * 300) / Math.max(1, p.durationMs - 600);
                 if (tk < 0 || tk > 1) continue;
                 ctx.globalAlpha = (1 - tk) * 0.85;
-                ctx.strokeStyle = '#5ef0c8';
+                ctx.strokeStyle = '#D4A660';
                 ctx.lineWidth = 2.2 * (1 - tk);
                 ctx.beginPath();
                 ctx.arc(x, y, 4 + 28 * tk, 0, 2 * Math.PI);
@@ -247,7 +248,7 @@ export function NeuronCanvas({ graph, pulses, mcpCallLines, mcpConnections, solo
               const flashT = age / p.durationMs;
               if (flashT < 0.12) {
                 ctx.globalAlpha = (1 - flashT / 0.12) * 0.9;
-                ctx.fillStyle = '#5ef0c8';
+                ctx.fillStyle = '#D4A660';
                 ctx.beginPath();
                 ctx.arc(x, y, 4, 0, 2 * Math.PI);
                 ctx.fill();

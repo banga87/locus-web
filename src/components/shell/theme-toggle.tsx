@@ -1,7 +1,8 @@
 'use client';
 
+// Theme toggle uses .quick-item / .rail-btn classnames to match sibling nav rows; avoids wrapping in <Button> which would override layout.
 import { useSyncExternalStore } from 'react';
-import { Moon, Sun } from 'lucide-react';
+import { Icon } from '@/components/tatara';
 import { setThemeCookie } from '@/lib/theme/cookie';
 
 type Theme = 'light' | 'dark';
@@ -45,7 +46,7 @@ export function ThemeToggleNav() {
       className="quick-item"
       aria-label={`Switch to ${nextLabel}`}
     >
-      {theme === 'light' ? <Moon size={15} strokeWidth={1.6} /> : <Sun size={15} strokeWidth={1.6} />}
+      {theme === 'light' ? <Icon name="Moon" size={16} /> : <Icon name="Sun" size={16} />}
       {nextLabel}
     </button>
   );
@@ -63,7 +64,7 @@ export function ThemeToggleRail() {
       title={nextLabel}
       aria-label={`Switch to ${nextLabel}`}
     >
-      {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+      {theme === 'light' ? <Icon name="Moon" size={20} /> : <Icon name="Sun" size={20} />}
     </button>
   );
 }

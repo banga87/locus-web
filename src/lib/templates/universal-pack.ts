@@ -237,7 +237,7 @@ export const UNIVERSAL_PACK = {
         {
           heading: 'Value Drivers',
           helperText:
-            'What does each tier actually unlock — in business terms, not feature flags? "Pro tier pays for itself once you\'re sending more than X emails a month" is the shape. Customers buy tiers for outcomes, not checkboxes.',
+            'What does each tier actually give the customer — in business terms, not feature flags? "Pro tier pays for itself once you\'re sending more than X emails a month" is the shape. Customers buy tiers for outcomes, not checkboxes.',
         },
       ],
       isCore: true,
@@ -336,7 +336,7 @@ export const UNIVERSAL_PACK = {
         {
           heading: 'Internal Stack',
           helperText:
-            'How the team runs itself: task tracking, docs, chat, calendar, code hosting, CI, analytics. Keep it tidy — this list tends to grow without anyone noticing.',
+            'What the team uses to operate internally: task tracking, docs, chat, calendar, code hosting, CI, analytics. Keep it tidy — this list tends to grow without anyone noticing.',
         },
         {
           heading: 'Data Flow',

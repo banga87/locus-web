@@ -15,6 +15,7 @@
 import Link from 'next/link';
 import { and, desc, eq } from 'drizzle-orm';
 
+import { GaugeNeedle } from '@/components/tatara';
 import { db } from '@/db';
 import { documents } from '@/db/schema/documents';
 import { workflowRuns } from '@/db/schema/workflow-runs';
@@ -75,10 +76,10 @@ export async function GlobalRunBadge({ auth }: GlobalRunBadgeProps) {
       className="quick-item"
       aria-label={`Workflows — ${count} run${count === 1 ? '' : 's'} active`}
     >
-      <WorkflowsIcon />
+      <GaugeNeedle size="sm" />
       Workflows
       <span
-        className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium leading-none text-primary-foreground"
+        className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--ember)] px-1 text-[10px] font-medium leading-none text-[var(--cream)]"
         aria-hidden="true"
       >
         {count}

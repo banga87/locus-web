@@ -1,17 +1,17 @@
-// Deterministic per-agent colors — hand-tuned glow palette against the
-// neurons `--void` canvas (#0a0b10). All ≥4.5:1 contrast, chosen to sit
-// well under additive blending for pulse overlays.
+// Deterministic per-agent colors — brass/ember family glow palette, tuned for
+// warm-on-void contrast against the neurons `--void` canvas (#0a0b10). Chosen
+// to sit well under additive blending for pulse overlays.
 
 export const AGENT_PALETTE: ReadonlyArray<{ css: string; canvas: string }> = [
-  { css: 'var(--agent-1, #7aa7ff)', canvas: '#7aa7ff' }, // azure
-  { css: 'var(--agent-2, #ff6ba1)', canvas: '#ff6ba1' }, // magenta
-  { css: 'var(--agent-3, #ffc857)', canvas: '#ffc857' }, // amber
-  { css: 'var(--agent-4, #5ef0c8)', canvas: '#5ef0c8' }, // mint
-  { css: 'var(--agent-5, #c490ff)', canvas: '#c490ff' }, // lavender
-  { css: 'var(--agent-6, #ff8a5a)', canvas: '#ff8a5a' }, // ember
+  { css: 'var(--agent-1, #D7B96E)', canvas: '#D7B96E' }, // brass-soft
+  { css: 'var(--agent-2, #E8813A)', canvas: '#E8813A' }, // ember-warm
+  { css: 'var(--agent-3, #D4A660)', canvas: '#D4A660' }, // honey-gold
+  { css: 'var(--agent-4, #F2A870)', canvas: '#F2A870' }, // ember-glow
+  { css: 'var(--agent-5, #B8863A)', canvas: '#B8863A' }, // brass
+  { css: 'var(--agent-6, #8B6425)', canvas: '#8B6425' }, // brass-deep
 ];
 
-const UNKNOWN_COLOR = { css: 'var(--neurons-text-dim, #76725f)', canvas: '#8a8574' };
+const UNKNOWN_COLOR = { css: 'var(--neurons-text-dim, rgba(242, 234, 216, 0.4))', canvas: '#8a8574' };
 
 // FNV-1a 32-bit: stable bucket index, no crypto dep, good distribution.
 function hash32(s: string): number {

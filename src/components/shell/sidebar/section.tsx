@@ -2,12 +2,11 @@
 
 import type { ReactNode } from 'react';
 import { useId } from 'react';
-import { ChevronRight } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Icon, type IconProps } from '@/components/tatara';
 
 interface SectionProps {
   id: string;
-  icon: LucideIcon;
+  iconName: IconProps['name'];
   label: string;
   count?: number;
   headerAction?: ReactNode;
@@ -18,7 +17,7 @@ interface SectionProps {
 
 export function Section({
   id,
-  icon: Icon,
+  iconName,
   label,
   count,
   headerAction,
@@ -38,8 +37,9 @@ export function Section({
           aria-expanded={expanded}
           aria-controls={bodyId}
         >
-          <ChevronRight
-            size={12}
+          <Icon
+            name="ChevronRight"
+            size={14}
             className="sidebar-section-chevron"
             style={{
               transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
@@ -47,7 +47,7 @@ export function Section({
             }}
             aria-hidden="true"
           />
-          <Icon size={14} aria-hidden="true" />
+          <Icon name={iconName} size={14} aria-hidden="true" />
           <span className="sidebar-section-header__label">{label}</span>
           {typeof count === 'number' && <span className="sidebar-section-header__count">{count}</span>}
         </button>

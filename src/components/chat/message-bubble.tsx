@@ -180,10 +180,10 @@ function ToolPart({
 
 function MarkdownPart({ text }: { text: string }) {
   // MessageResponse (Streamdown under the hood) is streaming-aware and
-  // escapes HTML. The `chat-markdown` class lets our CSS in globals.css
-  // style headings / lists / links / code blocks inside the bubble.
+  // escapes HTML. `surface-chat` provides the Tatara base type scale;
+  // `chat-markdown` adds markdown-only structure (lists, tables, links).
   return (
-    <div className="chat-markdown">
+    <div className="chat-markdown surface-chat">
       <MessageResponse>{text}</MessageResponse>
     </div>
   );

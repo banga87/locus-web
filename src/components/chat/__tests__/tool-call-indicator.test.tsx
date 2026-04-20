@@ -25,7 +25,7 @@ describe('ToolCallIndicator', () => {
     expect(screen.getByText(/Reading Brand Voice/)).toBeInTheDocument();
   });
 
-  it('renders a "Used:" pill on complete', () => {
+  it('renders a "Used:" row on complete', () => {
     render(
       <ToolCallIndicator
         toolName="search_documents"
@@ -33,8 +33,10 @@ describe('ToolCallIndicator', () => {
         state="complete"
       />,
     );
+    // "Used:" appears in the ActivityTool subtitle (e.g. "Used: Searching brain")
     expect(screen.getByText(/Used:/)).toBeInTheDocument();
-    expect(screen.getByText('Search')).toBeInTheDocument();
+    // Tool name is rendered as mono-uppercase glyph label "▸ SEARCH"
+    expect(screen.getByText(/SEARCH/)).toBeInTheDocument();
   });
 
   it('renders a muted "Couldn\'t access" pill on error', () => {

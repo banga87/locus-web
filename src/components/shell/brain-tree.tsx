@@ -28,7 +28,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { Icon } from '@/components/tatara';
 
 import { getFreshness } from '@/lib/brain/freshness';
 import type { ManifestDocument, ManifestFolder } from '@/lib/brain/manifest';
@@ -207,7 +207,7 @@ function FolderNode({
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
-              <MoreHorizontal size={14} aria-hidden="true" />
+              <Icon name="MoreHorizontal" size={14} aria-hidden="true" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -318,7 +318,7 @@ function DocNode({
             aria-label={`More actions for ${doc.title}`}
             className="node-more absolute right-2 opacity-0 group-hover/doc:opacity-100 focus:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
           >
-            <MoreHorizontal size={14} aria-hidden="true" />
+            <Icon name="MoreHorizontal" size={14} aria-hidden="true" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">

@@ -352,6 +352,85 @@ describe('POST /api/agent/chat — happy path', () => {
   });
 });
 
+describe('POST /api/agent/chat — Agent dispatch tool (Task 16)', () => {
+  // Reuse the same happy-path DB mock sequence as the top-level happy-path
+  // describe block: folders (thenable) → companies (.limit()) → sessions
+  // (.limit()) → skills fallback (thenable). We assert on the `tools`
+  // object `runAgentTurn` receives, which is `buildToolSet(...)`'s return
+  // value. The test's `vi.mock('@/lib/agent/tool-bridge')` above pins
+  // `buildToolSet` to a vi.fn that returns `{}`, so the assertion relies
+  // on inspecting what the route PASSED IN — intercept via runAgentTurn
+  // and interrogate the externalTools we routed to buildToolSet.
+  beforeEach(() => {
+    requireAuthMock.mockResolvedValue(TEST_AUTH);
+    getBrainForCompanyMock.mockResolvedValue(TEST_BRAIN);
+    dbSelectMock.mockResolvedValueOnce([]); // folders
+    dbSelectMock.mockResolvedValueOnce([{ name: 'Acme Co' }]); // companies
+    dbSelectMock.mockResolvedValueOnce([{ agentDefinitionId: null }]); // sessions
+    dbSelectMock.mockResolvedValue([]); // skills fallback + any remaining
+  });
+
+  it('adds Agent dispatch tool to externalTools when TATARA_SUBAGENTS_ENABLED=true', async () => {
+    process.env.TATARA_SUBAGENTS_ENABLED = 'true';
+    try {
+      const { buildToolSet } = await import('@/lib/agent/tool-bridge');
+      const fakeResponse = new Response('ok', { status: 200 });
+      const result = {
+        toUIMessageStreamResponse: vi.fn(() => fakeResponse),
+      };
+      runAgentTurnMock.mockResolvedValueOnce({ result });
+
+      const req = buildRequest(
+        buildBody([
+          {
+            id: 'msg-1',
+            role: 'user',
+            parts: [{ type: 'text', text: 'hello' }],
+          },
+        ]),
+      );
+      await POST(req);
+
+      // buildToolSet was called with (ctx, externalTools, externalToolMeta)
+      // — externalTools is the merged object we want to assert on.
+      expect(buildToolSet).toHaveBeenCalled();
+      const calls = (buildToolSet as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+      const externalToolsArg = calls[0]?.[1] as Record<string, unknown>;
+      expect(externalToolsArg.Agent).toBeDefined();
+    } finally {
+      delete process.env.TATARA_SUBAGENTS_ENABLED;
+    }
+  });
+
+  it('does not add Agent dispatch tool when TATARA_SUBAGENTS_ENABLED is unset', async () => {
+    // Make sure the env var is not set even if a prior test leaked it.
+    delete process.env.TATARA_SUBAGENTS_ENABLED;
+
+    const { buildToolSet } = await import('@/lib/agent/tool-bridge');
+    const fakeResponse = new Response('ok', { status: 200 });
+    const result = {
+      toUIMessageStreamResponse: vi.fn(() => fakeResponse),
+    };
+    runAgentTurnMock.mockResolvedValueOnce({ result });
+
+    const req = buildRequest(
+      buildBody([
+        {
+          id: 'msg-1',
+          role: 'user',
+          parts: [{ type: 'text', text: 'hello' }],
+        },
+      ]),
+    );
+    await POST(req);
+
+    expect(buildToolSet).toHaveBeenCalled();
+    const calls = (buildToolSet as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const externalToolsArg = calls[0]?.[1] as Record<string, unknown>;
+    expect(externalToolsArg.Agent).toBeUndefined();
+  });
+});
+
 describe('POST /api/agent/chat — agentDefinitionId threading (Task 9)', () => {
   // Query order for requests with sessionId:
   //   1. folders (thenable, no .limit()) — always first

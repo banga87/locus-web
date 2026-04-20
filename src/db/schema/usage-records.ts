@@ -49,6 +49,12 @@ export const usageRecords = pgTable(
 
     metadata: jsonb('metadata').default({}),
 
+    // FK to the parent LLM call's usage_records row. NULL for Platform Agent
+    // / top-level calls; populated for subagent invocations. Enables
+    // attribution queries summing parent + child token spend for a single
+    // conversational turn. See 2026-04-19 subagent harness spec §7.
+    parentUsageRecordId: uuid('parent_usage_record_id'),
+
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -59,6 +65,9 @@ export const usageRecords = pgTable(
     index('usage_records_created_at_idx').on(
       table.companyId,
       table.createdAt
+    ),
+    index('usage_records_parent_usage_record_id_idx').on(
+      table.parentUsageRecordId
     ),
   ]
 );

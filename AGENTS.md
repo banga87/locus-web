@@ -15,6 +15,11 @@ The agent harness (`runAgentTurn` + hook bus + tool bridge) is designed to be ca
 - `next/headers` — `headers()`, `cookies()`
 - `@vercel/functions` — `waitUntil`, `geolocation`, etc.
 - `Request` / `Response` parameters on harness functions (pass a plain context object + `AbortSignal` instead)
+- `@/lib/subagent/*` — the subagent dispatch layer depends on the
+  harness, never the reverse. A harness that reaches into the subagent
+  layer creates a cycle and breaks the ability to call the harness from
+  contexts that don't have subagents wired up (e.g. the autonomous loop
+  in Phase 2).
 
 **Where these belong:** route handlers in `src/app/api/**`. The route's job is to translate HTTP ↔ context, then delegate to the harness. The harness's job is to run the agent turn.
 

@@ -42,7 +42,8 @@ export type AuditEventCategory =
   | 'maintenance'
   | 'administration'
   | 'token_usage'
-  | 'mcp_invocation';
+  | 'mcp_invocation'
+  | 'agent'; // NEW — subagent invocations
 
 /**
  * Shape of an event passed to `logEvent()`. Field names match the Drizzle

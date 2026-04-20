@@ -221,7 +221,7 @@ function StringArrayEditor({
             className="px-2 text-xs text-muted-foreground hover:text-ink"
             aria-label="Remove"
           >
-            <Icon name="X" size={12} />
+            <Icon name="X" size={14} />
           </button>
         </div>
       ))}

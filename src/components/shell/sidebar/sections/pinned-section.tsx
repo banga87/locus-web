@@ -25,7 +25,7 @@ export function PinnedSection({ pinned }: PinnedSectionProps) {
       {pinned.map((p) => (
         <Link key={p.id} href={`/brain/${p.id}`} className="node doc leaf">
           <span className="chev">›</span>
-          <span className="node-bullet" style={{ color: 'var(--accent-2)' }}>◆</span>
+          <span className="node-bullet" style={{ color: 'var(--brass)' }}>◆</span>
           <span className="node-label">{p.title}</span>
         </Link>
       ))}

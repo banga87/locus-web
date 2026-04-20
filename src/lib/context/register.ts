@@ -115,15 +115,17 @@ export function registerContextHandlers(): void {
         const userMessage = extractUserMessageText(event.message);
         if (!userMessage) return { decision: 'allow' };
 
+        // A null sessionId (subagent turns, one-off invocations) has
+        // nothing for this handler to correlate on — the attachments
+        // query is session-scoped and Postgres would reject `''` as a
+        // uuid. Short-circuit before hitting the repo.
+        if (!event.ctx.sessionId) return { decision: 'allow' };
+
         const repo = createDbUserPromptRepo();
         const payload = await buildUserPromptPayload(
           {
             companyId: event.ctx.companyId,
-            // A null `sessionId` is possible for one-off invocations
-            // (see `AgentContext.sessionId` — "rare"). The attachments
-            // lookup has nothing to correlate on, so coerce to an
-            // empty string and let the query return `[]`.
-            sessionId: event.ctx.sessionId ?? '',
+            sessionId: event.ctx.sessionId,
             userMessage,
           },
           repo,

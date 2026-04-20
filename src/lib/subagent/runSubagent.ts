@@ -224,8 +224,16 @@ export async function runSubagent(
         }
       }
     }
-  } catch {
+  } catch (err) {
     status = 'provider_error';
+    console.error('[runSubagent] provider error', {
+      subagentType: def.agentType,
+      modelId,
+      error:
+        err instanceof Error
+          ? { name: err.name, message: err.message, stack: err.stack }
+          : err,
+    });
   }
 
   // --- 8. Usage attribution (subagent source + parent FK) -----------------

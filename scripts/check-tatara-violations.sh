@@ -21,8 +21,8 @@ check "Banned phrases"               rg -il 'ai-powered|seamlessly|empower|lever
 check "Retired token names"          rg -- '--accent-2|--draft-bg|--draft-fg|--active-bg|--active-fg|--hover\b|--paper\b|--paper-2\b|--rule-soft' src/
 check "Forest-green hex"             rg -i '#2e5135|#2f5135|#a4c9a9' src/
 check "Fraunces font-variation-axis" rg 'font-variation-settings.*(opsz|SOFT)' src/
-check "Italic wordmark"              rg -n 'brand-name' src/ | rg 'italic'
-check "Filled lucide icons"          rg 'lucide-react' src/ | rg -i '(fill=|Filled|Solid)'
+check "Italic wordmark"              bash -c "rg -n 'brand-name' src/ | rg 'italic'"
+check "Filled lucide icons"          bash -c "rg 'lucide-react' src/ | rg -i '(fill=|Filled|Solid)'"
 
 if [ $fail -ne 0 ]; then
   echo ""

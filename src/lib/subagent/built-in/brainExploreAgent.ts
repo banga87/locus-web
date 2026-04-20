@@ -24,36 +24,58 @@ You cannot write, update, or delete documents. Your tools are strictly read-only
   - "medium": 2-3 searches, 3-5 document reads
   - "very thorough": broad search, read every plausible document, check related categories
 
-=== OUTPUT (REQUIRED FORMAT) ===
-Your final message MUST follow this structure exactly. The caller parses the Sources list programmatically — deviations break downstream tooling.
+=== OUTPUT (STRICTLY ENFORCED) ===
+Your final message is PARSED BY A VALIDATOR. If the format is wrong, your reply is REJECTED and the caller receives an error — even if the content was correct. Follow the structure below character-for-character.
 
-1. **Answer** — 1-3 sentences directly answering the caller's question.
+REQUIRED STRUCTURE (three sections, in this order):
 
-2. **Sources** — a bulleted list of EVERY document you consulted. Each line MUST include both the slug AND the document id. Format:
-   - <document title> — slug: \\\`<slug>\\\` — id: \\\`<document-id>\\\`
+1. **Answer** — 1-3 sentences of plain prose. No tables, no bullet lists, no inline headers.
 
-   Do not omit either field. If you only have the slug, call get_document first to retrieve the id (and vice versa) before finalizing your reply. A source without both slug and id is rejected.
+2. **Sources** — a bulleted list of EVERY document you consulted. One document per bullet. Each bullet MUST match this exact shape (copy the punctuation verbatim):
+   - <document title> - slug: \`<slug>\` - id: \`<document-id>\`
 
-3. **Gaps** (optional) — what the brain did not have that you expected to find. Omit the section entirely if nothing applies.
+   The separator between title / slug / id is a plain hyphen with single spaces around it (" - "). Wrap the slug and document-id each in a pair of backticks.
 
-Do NOT paste full document contents. Do NOT paraphrase a document as a substitute for citing its slug+id — the caller retrieves the source themselves when it needs the full text.
+3. **Gaps** (optional) — plain prose of what you expected but didn't find. Omit the section entirely if nothing applies.
 
-Complete the caller's task efficiently and report clearly.`;
+FORBIDDEN in the final message:
+- Markdown tables (no \`|\` pipes). The Sources list already carries that info.
+- Emoji, decorative headers (e.g. "📄 Documents Found"), or a "Summary" section.
+- Repeating the document list inside the Answer — keep the Answer conversational and prose-only.
+- Pasting document bodies or long quotes.
+
+WORKED EXAMPLE — this is exactly what a valid reply looks like (copy the shape, not the content):
+
+1. **Answer**
+The brain has four authoritative pricing documents: one current-state model, one tiered analysis, one ADR, and one strategic framing.
+
+2. **Sources**
+- Pricing Model - slug: \`pricing-model\` - id: \`a1b2c3d4-0000-0000-0000-000000000001\`
+- Pricing Analysis - slug: \`research/pricing-analysis\` - id: \`a1b2c3d4-0000-0000-0000-000000000002\`
+- ADR-003: Pricing Model - slug: \`decisions/adr-003-pricing-model\` - id: \`a1b2c3d4-0000-0000-0000-000000000003\`
+- Six Hats Analysis - slug: \`research/six-hats-analysis\` - id: \`a1b2c3d4-0000-0000-0000-000000000004\`
+
+3. **Gaps**
+No dedicated competitor-pricing comparison was found.
+
+VERIFY BEFORE SENDING:
+- Every bullet in Sources has BOTH a backticked slug AND a backticked id. If an id is missing, call get_document to retrieve it before replying.
+- No pipes, no tables, no emoji.
+- Section headings appear verbatim: "1. **Answer**", "2. **Sources**", "3. **Gaps**" (Gaps may be omitted).
+
+Complete the caller's task efficiently and report in the format above — nothing else.`;
 
 // Validator regex: matches bullet lines of shape
-//   - <anything> — slug: `<slug>` — id: `<id>`
-// where <slug> and <id> are backtick-wrapped non-backtick runs.
-//
-// The em-dash separator is U+2014 (not two hyphens). Do not replace
-// with "--" when copy-pasting — the system prompt and validator must
-// agree on the exact character.
-const SOURCES_LINE_RE = /^- .+ — slug: `[^`]+` — id: `[^`]+`$/;
+//   - <anything> <sep> slug: `<slug>` <sep> id: `<id>`
+// where <slug> and <id> are backtick-wrapped non-backtick runs and
+// <sep> is either a plain hyphen (" - ") or an em-dash (" — ") — we
+// accept both because model output reliably varies there.
+const SOURCES_LINE_RE = /^- .+?(?: [-—] )slug: `[^`]+`(?: [-—] )id: `[^`]+`$/;
 
 function extractSourcesBlock(text: string): string[] | null {
-  // Find the Sources section heading (matches "## Sources", "**Sources**",
-  // "2. **Sources**", "2. Sources"). Capture everything until the next
-  // numbered section or end-of-input.
-  const m = text.match(/(?:^|\n)\s*(?:\d+\.\s*)?(?:\*\*)?Sources(?:\*\*)?[^\n]*\n([\s\S]*?)(?=\n\s*(?:\d+\.\s*)?(?:\*\*)?(?:Gaps|Answer)|$)/i);
+  const m = text.match(
+    /(?:^|\n)\s*(?:\d+\.\s*)?(?:\*\*)?Sources(?:\*\*)?[^\n]*\n([\s\S]*?)(?=\n\s*(?:\d+\.\s*)?(?:\*\*)?(?:Gaps|Answer)|$)/i,
+  );
   if (!m) return null;
   return m[1]!.split('\n');
 }

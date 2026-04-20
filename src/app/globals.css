@@ -215,6 +215,24 @@
   --link-hover:      var(--ember-glow);
 }
 
+/* Scope for cream-bg surfaces (pricing card, positioning ledger, footer)
+   that are meant to render as "paper" regardless of app theme. In dark
+   mode, remap the semantic ink tokens back to their light-theme indigo
+   values so children inherit correct contrast on cream. The `color`
+   reassignment is important: body sets `color: var(--ink-1)` which
+   resolves to cream in dark and that resolved value would otherwise
+   inherit past the paper scope. */
+[data-theme="dark"] .paper-scope,
+.dark .paper-scope {
+  --ink-1:     var(--indigo);
+  --ink-2:     var(--indigo-ink-2);
+  --ink-3:     var(--indigo-ink-3);
+  --ink-muted: #8894AB;
+  --rule-1:    var(--paper-rule);
+  --rule-2:    var(--paper-rule);
+  color:       var(--ink-1);
+}
+
 /* =============================================================
    Semantic type roles — bind the tokens above to real elements
    ============================================================= */

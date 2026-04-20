@@ -28,7 +28,7 @@ const LISTS: readonly LinkList[] = [
 export function Footer() {
   return (
     <footer
-      className="px-6 pb-10 pt-[72px] min-[900px]:px-12 min-[900px]:pb-10 min-[900px]:pt-20"
+      className="paper-scope px-6 pb-10 pt-[72px] min-[900px]:px-12 min-[900px]:pb-10 min-[900px]:pt-20"
       style={{
         background: 'var(--cream)',
         borderTop: '1px solid var(--paper-rule)',

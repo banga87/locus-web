@@ -48,7 +48,7 @@ export function Positioning() {
 
         {/* Ledger plate — cream-soft card with paper-rule hairline border.
             Nested grids for header row + data rows. */}
-        <div className="bg-[var(--cream-soft)] border border-[var(--paper-rule)]">
+        <div className="paper-scope bg-[var(--cream-soft)] border border-[var(--paper-rule)]">
           {/* Header row */}
           <div className="grid grid-cols-2 border-b border-[var(--paper-rule)]">
             <div className="px-6 py-4 border-r border-[var(--paper-rule)]">

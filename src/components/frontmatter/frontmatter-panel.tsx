@@ -10,6 +10,7 @@
 // Stateless. Caller (useFrontmatterEditor) owns mode + value + rawYaml
 // and wires onFieldsChange/onRawChange/onModeChange to scheduled saves.
 
+import { Icon } from '@/components/tatara';
 import type { FrontmatterSchema, FrontmatterField } from '@/lib/frontmatter/schemas/types';
 
 interface Props {
@@ -220,7 +221,7 @@ function StringArrayEditor({
             className="px-2 text-xs text-muted-foreground hover:text-ink"
             aria-label="Remove"
           >
-            ✕
+            <Icon name="X" size={12} />
           </button>
         </div>
       ))}

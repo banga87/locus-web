@@ -42,14 +42,46 @@ check() {
   fi
 }
 
+# Run a check, then strip any line containing the allowlist marker.
+# Used for rules with legitimate exceptions (e.g. anti-marketing
+# negation that deliberately quotes a banned word).
+check_filtered() {
+  local name="$1"; shift
+  local marker="$1"; shift
+  local output
+  output=$("$@" 2>&1)
+  local rc=$?
+  if [ $rc -gt 1 ]; then
+    echo "✗ $name (error rc=$rc):"
+    echo "$output" | sed 's/^/   /'
+    fail=1
+    return
+  fi
+  # Drop lines bearing the marker. grep -v returns 1 when it filters
+  # out every line — that's a pass, not an error, so || true.
+  output=$(echo "$output" | grep -vF "$marker" || true)
+  if [ -n "$output" ]; then
+    echo "✗ $name:"
+    echo "$output" | sed 's/^/   /'
+    echo "   (to allow intentional usage, add trailing comment: $marker)"
+    fail=1
+  else
+    echo "✓ $name"
+  fi
+}
+
 check "Japanese characters" \
   git grep -IlP '[\p{Han}\p{Hiragana}\p{Katakana}]' -- 'src/' 'public/'
 
 check "Emoji in code/UI" \
   git grep -IlP '[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]' -- 'src/' 'public/' ':(exclude)*.lock'
 
-check "Banned phrases" \
-  git grep -IilE 'ai-powered|seamlessly|empower|leverage|game-changing|unlock|10x|autopilot|hands-free|set it and forget|runs itself|democratize|revolutionize|magical|the future of' -- 'src/'
+# Banned phrases — line-level so we can allowlist deliberate
+# anti-marketing negation (e.g. "no autopilot", "nothing magical").
+# Mark intentional hits with the trailing comment `tatara:allow-banned`
+# on the same line, or an in-JSX `{/* tatara:allow-banned */}`.
+check_filtered "Banned phrases" 'tatara:allow-banned' \
+  git grep -nIiE 'ai-powered|seamlessly|empower|leverage|game-changing|unlock|10x|autopilot|hands-free|set it and forget|runs itself|democratize|revolutionize|magical|the future of' -- 'src/'
 
 # (?!-) stops --paper from matching prefixes of --paper-rule etc.
 check "Retired token names" \

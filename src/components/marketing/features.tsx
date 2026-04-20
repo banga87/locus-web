@@ -57,7 +57,7 @@ export function Features() {
           </span>
         </h2>
         <p className="t-body" style={{ color: 'var(--ink-inverse-2)' }}>
-          A short catalogue of the controls. Nothing magical, nothing mystic — just the affordances
+          A short catalogue of the controls. Nothing magical, nothing mystic — just the affordances{/* tatara:allow-banned */}
           you expect when you&rsquo;re the one running the machine.
         </p>
       </div>

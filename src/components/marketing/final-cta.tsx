@@ -159,7 +159,7 @@ function WaitlistForm({ isPending, formAction, errorMessage }: WaitlistFormProps
         }}
       >
         <GaugeNeedle size="sm" color="var(--brass-soft)" />
-        <span>No credit card &middot; no autopilot &middot; no surprises</span>
+        <span>No credit card &middot; no autopilot &middot; no surprises{/* tatara:allow-banned */}</span>
       </div>
     </>
   );
@@ -193,7 +193,7 @@ function ConfirmationCard({ email }: { email: string }) {
         }}
       >
         <GaugeNeedle size="sm" color="var(--brass-soft)" />
-        <span>No credit card &middot; no autopilot &middot; no surprises</span>
+        <span>No credit card &middot; no autopilot &middot; no surprises{/* tatara:allow-banned */}</span>
       </div>
     </div>
   );

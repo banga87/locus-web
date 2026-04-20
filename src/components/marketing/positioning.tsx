@@ -11,7 +11,7 @@ import { Eyebrow } from '@/components/tatara';
 
 const ROWS: readonly [string, string][] = [
   ['“Let AI run your business.”', 'Stay on the controls of your own work.'],
-  ['Hands-free. Set it and forget it.', 'Hands-on. Feel every turn of the crank.'],
+  ['Hands-free. Set it and forget it.', 'Hands-on. Feel every turn of the crank.'], // tatara:allow-banned
   ['Black box agents.', 'Visible gauges, legible state.'],
   ['Data locked in the vendor.', 'Plain markdown, on your disk.'],
   ['Unexpected charges.', 'Token meter always in view.'],
@@ -22,7 +22,7 @@ export function Positioning() {
   return (
     <SectionFrame id="position" number="04" kicker="A Position">
       <div className="grid grid-cols-1 items-start gap-10">
-        {/* Preamble — anti-autopilot stance, kept brief above the ledger. */}
+        {/* Preamble — anti-autopilot stance, kept brief above the ledger. tatara:allow-banned */}
         <div className="max-w-[760px]">
           <h2 className="t-h2">
             We are not building{' '}
@@ -33,7 +33,7 @@ export function Positioning() {
                 fontWeight: 300,
               }}
             >
-              an autopilot.
+              an autopilot.{/* tatara:allow-banned */}
             </span>
           </h2>
           <p

@@ -40,6 +40,59 @@
 - Auth is observation/waiting, not conversation — GaugeNeedle permitted for pending/loading states (per gauge rule in plan).
 - The `auth/mcp` page lives OUTSIDE `(public)/` shell — it renders its own `<main>` and has bespoke centering. Keep that structure; just apply Tatara palette + primitives.
 
+## Stage 7: Violation sweep + final pass
+
+### Paper-scope pattern (adopted 2026-04-20)
+
+The Tatara spec calls for a "cream paper" aesthetic on some surfaces
+(pricing featured card, positioning ledger, marketing footer, Badge
+default variant, dialog body, sheet, textarea, etc.). These surfaces
+should read as light *regardless* of app theme — a printed flyer laid
+on top of the indigo desk.
+
+Two mechanisms implement this:
+
+1. **`.paper-scope` utility class** (`globals.css`) — for surfaces that
+   pin their background to a literal cream token (`--cream`,
+   `--cream-soft`) via inline style or Tailwind arbitrary class. Inside
+   the scope, `--ink-1/2/3/muted` remap to their light-theme indigo
+   values so descendants stay legible on cream. Apply to: `<FrameCard>`
+   default variant, the positioning-section ledger, the marketing
+   footer. The class also explicitly re-asserts `color: var(--ink-1)`
+   to override the cream-resolved inherited color from `body`.
+2. **`--surface-0/1/2` semantic tokens** — for primitives that should
+   theme-switch naturally (badge default, button secondary, dialog,
+   command, select trigger, sheet, textarea, toast). These tokens
+   already map cream-family in light and indigo-family in dark. All UI
+   primitives that were previously hardcoded to `--cream/--cream-soft/
+   --cream-deep` have been migrated.
+
+**Rule going forward**: prefer `--surface-*` for any surface that
+should swap with theme; only reach for `.paper-scope` when the design
+intent is explicitly "light paper against dark desk."
+
+### SKILL.md vs README.md ink guidance
+
+`Tatara Design System/SKILL.md` quick-reference lists dark brown
+`#1B1410` as "primary text on cream". `Tatara Design System/README.md`
+§ "Visual foundations" describes indigo `#2E3E5C` as primary ink.
+Implementation follows README.md — `--ink-1 = var(--indigo) #2E3E5C`
+in the light theme. The brown `#1B1410` is used only for
+`<FrameCard variant="inverse">` background (feature tiles on marketing
+home). SKILL.md could be reconciled upstream for consistency.
+
+### Remaining non-blockers
+
+- `--disabled` health chip in `.neurons-*` still uses legacy `#6b6759`
+  (documented in Stage 6 summary; deliberately not chased).
+- Workspace sidebar shows "Locus" as workspace name — this is
+  user-supplied workspace data, not brand copy, so no change.
+- `/setup` redirects to `/home` for already-authed accounts; not
+  visually audited (no accessible state).
+- Transient Supabase pooler `MaxClientsInSessionMode` exhaustion
+  during the walkthrough was pre-existing infrastructure (resolved by
+  restarting the dev server). Not a brand issue.
+
 ## Stage 4: Chat
 
 ### Run-header pattern has no current home (Task 4.4 skipped)

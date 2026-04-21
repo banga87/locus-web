@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { EB_Garamond, Inter, JetBrains_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
@@ -42,6 +42,20 @@ export const metadata: Metadata = {
   metadataBase,
   title: "Tatara",
   description: "Your company's brain.",
+};
+
+// Viewport + theme-color hints for mobile browser chrome. `userScalable: true`
+// is intentional — pinch-zoom is an accessibility requirement. Theme colors
+// resolve the `--surface-0` token for each scheme (cream in light, indigo-deep
+// in dark) so the browser chrome matches the app surface.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  userScalable: true,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F2EAD8" },
+    { media: "(prefers-color-scheme: dark)", color: "#1F2A3F" },
+  ],
 };
 
 export default async function RootLayout({

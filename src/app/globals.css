@@ -1140,7 +1140,7 @@
   display: none;
   position: fixed;
   top: 12px; left: 12px;
-  width: 36px; height: 36px;
+  width: 44px; height: 44px;
   background: var(--surface-0);
   border: 1px solid var(--rule-1);
   border-radius: 6px;
@@ -1149,6 +1149,14 @@
 }
 @media (max-width: 767px) {
   .sidebar-mobile-trigger { display: grid; place-items: center; }
+}
+
+/* Mobile input floor — iOS Safari auto-zooms when focusing inputs with
+   font-size <16px. Set a 16px floor on form controls so focus doesn't
+   trigger viewport zoom. No !important: components that explicitly set
+   a type class still win. */
+@media (max-width: 767px) {
+  input, textarea, select { font-size: 16px; }
 }
 
 /* === End app shell === */

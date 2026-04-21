@@ -1151,10 +1151,10 @@
   .sidebar-mobile-trigger { display: grid; place-items: center; }
 }
 
-/* Mobile input floor — iOS Safari auto-zooms when focusing inputs with
-   font-size <16px. Set a 16px floor on form controls so focus doesn't
-   trigger viewport zoom. No !important: components that explicitly set
-   a type class still win. */
+/* Prevent iOS Safari auto-zoom on focus (triggers when font-size < 16px).
+   Safety net for raw form elements. Components using Tailwind text-sm
+   utilities (e.g. shadcn Input, Textarea) must also override themselves
+   on mobile — see src/components/ui/input.tsx. */
 @media (max-width: 767px) {
   input, textarea, select { font-size: 16px; }
 }

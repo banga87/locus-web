@@ -35,7 +35,7 @@ export function TiptapEditor({ initialContent, placeholder, onUpdate }: Props) {
   return (
     <EditorContent
       editor={editor}
-      className="tiptap prose max-w-none min-h-[400px]"
+      className="tiptap prose max-w-none min-h-[50vh] md:min-h-[400px]"
     />
   );
 }

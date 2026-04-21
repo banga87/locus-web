@@ -99,9 +99,9 @@ export function DocumentEditor({ document, owners }: Props) {
         </Link>
       </div>
 
-      <div className="mx-auto w-full max-w-6xl px-6 py-6">
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="min-w-0 rounded-lg border border-border bg-background p-6">
+          <div className="min-w-0 rounded-lg border border-border bg-background p-4 md:p-6">
             <input
               type="text"
               value={frontmatter.title}

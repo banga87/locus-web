@@ -218,7 +218,7 @@ export function ChatInput({
           className={cn(
             // Strip the primitive's border/ring — the wrapper owns them
             // so the whole composer gets the focus ring.
-            'min-h-0 max-h-52 resize-none border-0 bg-transparent px-0 py-1 shadow-none',
+            'min-h-0 max-h-[min(208px,40vh)] resize-none border-0 bg-transparent px-0 py-1 shadow-none',
             'focus-visible:border-0 focus-visible:ring-0',
             // Cream text on indigo-deep ground
             'text-[var(--cream)] placeholder:text-[rgba(242,234,216,0.5)]',
@@ -242,8 +242,9 @@ export function ChatInput({
             variant="secondary"
             aria-label="Stop generating"
             onClick={onStop}
+            className="h-11 w-11 md:h-8 md:w-8"
           >
-            <Icon name="Square" size={14} aria-hidden="true" />
+            <Icon name="Square" size={16} aria-hidden="true" />
           </Button>
         ) : (
           // variant="accent" (brass) gives visible contrast against indigo-deep ground
@@ -257,8 +258,9 @@ export function ChatInput({
               value.trim().length === 0 ||
               attachments.some((a) => a.status === 'uploading')
             }
+            className="h-11 w-11 md:h-8 md:w-8"
           >
-            <Icon name="ArrowUp" size={14} aria-hidden="true" />
+            <Icon name="ArrowUp" size={16} aria-hidden="true" />
           </Button>
         )}
       </div>

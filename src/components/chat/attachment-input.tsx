@@ -108,6 +108,7 @@ export function AttachmentInput({
         onClick={handlePick}
         disabled={disabled}
         data-testid="attachment-input-button"
+        className="h-11 w-11 md:h-8 md:w-8"
       >
         <PaperclipIcon className="size-4" aria-hidden="true" />
       </Button>

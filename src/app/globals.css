@@ -1208,6 +1208,7 @@
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .chat-markdown blockquote {
   border-left: 2px solid var(--brass);

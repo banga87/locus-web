@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
+import { EB_Garamond, Inter, JetBrains_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
 import { WebVitals } from "@/lib/axiom/client";
 
-const fraunces = Fraunces({
+const ebGaramond = EB_Garamond({
   variable: "--font-display",
   subsets: ["latin"],
   style: ["normal", "italic"],
+  weight: ["400", "500", "600", "700"],
   display: "swap",
-  axes: ["SOFT", "WONK", "opsz"],
 });
 
 const inter = Inter({
@@ -53,7 +53,7 @@ export default async function RootLayout({
     <html
       lang="en"
       data-theme={theme}
-      className={`${fraunces.variable} ${inter.variable} ${jetbrains.variable} h-full antialiased ${theme === "dark" ? "dark" : ""}`}
+      className={`${ebGaramond.variable} ${inter.variable} ${jetbrains.variable} h-full antialiased ${theme === "dark" ? "dark" : ""}`}
     >
       <WebVitals />
       <head>

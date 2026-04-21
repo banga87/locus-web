@@ -93,55 +93,94 @@ export function RunHistoryTable({ runs, workflowSlug }: Props) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border bg-secondary text-left">
-            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Status</th>
-            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Started</th>
-            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Duration</th>
-            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Cost</th>
-            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Summary</th>
-            <th scope="col" className="px-4 py-3 font-medium text-muted-foreground" />
-          </tr>
-        </thead>
-        <tbody>
-          {runs.map((run) => (
-            <tr
-              key={run.id}
-              className="border-b border-border last:border-0 hover:bg-muted/40"
-            >
-              <td className="px-4 py-3">
-                <Badge variant={statusVariant(run.status)}>
-                  {statusLabel(run.status)}
-                </Badge>
-              </td>
-              <td className="px-4 py-3 text-muted-foreground">
-                {formatDate(run.startedAt)}
-              </td>
-              <td className="px-4 py-3 text-muted-foreground">
-                {formatDuration(run.startedAt, run.completedAt)}
-              </td>
-              <td className="px-4 py-3 text-muted-foreground">
-                {formatCost(run.totalCostUsd)}
-              </td>
-              <td className="max-w-xs px-4 py-3 text-muted-foreground">
-                <span className="line-clamp-1">
-                  {run.summary ?? '—'}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-right">
-                <Link
-                  href={`/workflows/${workflowSlug}/runs/${run.id}`}
-                  className="text-xs text-muted-foreground underline-offset-4 hover:text-ink hover:underline"
-                >
-                  View
-                </Link>
-              </td>
+    <>
+      {/* Mobile: stacked cards. Each row becomes a self-contained block so
+          columns don't fight for space. */}
+      <ul className="flex flex-col gap-3 md:hidden" role="list">
+        {runs.map((run) => (
+          <li
+            key={run.id}
+            className="rounded-lg border border-border bg-background p-4"
+          >
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <Badge variant={statusVariant(run.status)}>
+                {statusLabel(run.status)}
+              </Badge>
+              <Link
+                href={`/workflows/${workflowSlug}/runs/${run.id}`}
+                className="text-sm text-muted-foreground underline-offset-4 hover:text-ink hover:underline"
+              >
+                View
+              </Link>
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+              <dt className="text-muted-foreground">Started</dt>
+              <dd className="text-right">{formatDate(run.startedAt)}</dd>
+              <dt className="text-muted-foreground">Duration</dt>
+              <dd className="text-right">{formatDuration(run.startedAt, run.completedAt)}</dd>
+              <dt className="text-muted-foreground">Cost</dt>
+              <dd className="text-right">{formatCost(run.totalCostUsd)}</dd>
+            </dl>
+            {run.summary && (
+              <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+                {run.summary}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop: full table */}
+      <div className="hidden overflow-x-auto rounded-lg border border-border md:block">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-secondary text-left">
+              <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Status</th>
+              <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Started</th>
+              <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Duration</th>
+              <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Cost</th>
+              <th scope="col" className="px-4 py-3 font-medium text-muted-foreground">Summary</th>
+              <th scope="col" className="px-4 py-3 font-medium text-muted-foreground" />
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {runs.map((run) => (
+              <tr
+                key={run.id}
+                className="border-b border-border last:border-0 hover:bg-muted/40"
+              >
+                <td className="px-4 py-3">
+                  <Badge variant={statusVariant(run.status)}>
+                    {statusLabel(run.status)}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {formatDate(run.startedAt)}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {formatDuration(run.startedAt, run.completedAt)}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {formatCost(run.totalCostUsd)}
+                </td>
+                <td className="max-w-xs px-4 py-3 text-muted-foreground">
+                  <span className="line-clamp-1">
+                    {run.summary ?? '—'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <Link
+                    href={`/workflows/${workflowSlug}/runs/${run.id}`}
+                    className="text-xs text-muted-foreground underline-offset-4 hover:text-ink hover:underline"
+                  >
+                    View
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

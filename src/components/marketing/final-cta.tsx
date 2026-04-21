@@ -54,7 +54,7 @@ export function FinalCTA() {
             swallow small-screen viewports; desktop matches the prototype's
             160/48. */}
         <div
-          className="relative mx-auto max-w-[1100px] px-6 py-[96px] text-center min-[900px]:px-12 min-[900px]:py-[160px]"
+          className="relative mx-auto max-w-[1100px] px-6 py-[96px] text-center lg:px-12 lg:py-[160px]"
           style={{ color: 'var(--ink-inverse)' }}
         >
           <Eyebrow number="07" color="var(--brass-soft)">
@@ -115,10 +115,12 @@ function WaitlistForm({ isPending, formAction, errorMessage }: WaitlistFormProps
           type="email"
           name="email"
           required
+          inputMode="email"
           autoComplete="email"
+          enterKeyHint="send"
           disabled={isPending}
           placeholder="you@workshop.com"
-          className="flex-1 border px-[18px] py-[16px] text-[15px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)] disabled:opacity-60"
+          className="flex-1 border px-[18px] py-[16px] text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)] disabled:opacity-60"
           style={{
             background: 'rgba(242,234,216,0.06)',
             borderColor: 'rgba(242,234,216,0.25)',

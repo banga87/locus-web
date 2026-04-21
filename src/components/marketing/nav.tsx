@@ -5,8 +5,9 @@
 // image (absolute variant) by default; pass `absolute={false}` for
 // pinned/dark-bar usage in later sections.
 //
-// Breakpoint: 1180px (not a Tailwind default). Expressed via
-// `min-[1180px]:` arbitrary-breakpoint utilities.
+// Breakpoint: `lg:` (1024px). The desktop nav collapses to a hamburger
+// below `lg:` — Tailwind default — instead of the prior arbitrary
+// `lg:` cutoff.
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
@@ -74,7 +75,7 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
     <nav
       className={cn(
         'left-0 right-0 top-0 z-10 flex items-center justify-between gap-4',
-        'px-6 py-[18px] min-[1180px]:px-10 min-[1180px]:py-6',
+        'px-6 py-[18px] lg:px-10 lg:py-6',
         absolute ? 'absolute' : 'relative',
       )}
       style={{ color: rootColor }}
@@ -87,16 +88,16 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
           <Wordmark
             size={22}
             color={rootColor}
-            className="min-[1180px]:text-[24px]"
+            className="lg:text-[24px]"
           />
         </Link>
         <div
           aria-hidden
-          className="hidden h-4 w-px min-[1180px]:block"
+          className="hidden h-4 w-px lg:block"
           style={{ background: 'var(--brass)' }}
         />
         <span
-          className="hidden whitespace-nowrap text-[13px] italic min-[1180px]:inline"
+          className="hidden whitespace-nowrap text-[13px] italic lg:inline"
           style={{
             fontFamily: 'var(--font-display), serif',
             color: navItemDefault,
@@ -113,7 +114,7 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
           swap on hover is done via group-less CSS vars rather than
           :hover utilities so the inline `style` source of truth wins. */}
       <div
-        className="hidden items-center gap-7 text-[14px] font-normal min-[1180px]:flex"
+        className="hidden items-center gap-7 text-[14px] font-normal lg:flex"
         style={{ fontFamily: 'var(--font-body), system-ui, sans-serif' }}
       >
         {NAV_LINKS.map((item) => (
@@ -144,7 +145,7 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
         ) : (
           <>
             {/* Desktop-only Sign in link (ghost button) */}
-            <Button asChild variant="ghost" className="hidden min-[1180px]:inline-flex">
+            <Button asChild variant="ghost" className="hidden lg:inline-flex">
               <Link href="/login">Sign in</Link>
             </Button>
             {/* Request access — anchor hash-scroll to invitation section */}
@@ -162,7 +163,7 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
           aria-label="Menu"
           aria-expanded={menuOpen}
           aria-controls={MOBILE_MENU_ID}
-          className="inline-flex items-center justify-center rounded-[var(--radius-md)] border px-3 py-[9px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)] focus-visible:ring-offset-2 min-[1180px]:hidden"
+          className="inline-flex items-center justify-center rounded-[var(--radius-md)] border px-3 py-[9px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)] focus-visible:ring-offset-2 lg:hidden"
           style={{
             // Border uses the current ink at ~40% alpha — kept inline because
             // the light-on-light case is rare and the blend changes context.
@@ -181,7 +182,7 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
       {menuOpen && (
         <div
           id={MOBILE_MENU_ID}
-          className="absolute left-4 right-4 top-full mt-2 rounded-[var(--radius-md)] border py-2 shadow-[0_12px_40px_rgba(0,0,0,0.4)] min-[1180px]:hidden"
+          className="absolute left-4 right-4 top-full mt-2 rounded-[var(--radius-md)] border py-2 shadow-[0_12px_40px_rgba(0,0,0,0.4)] lg:hidden"
           style={{
             background: 'var(--surface-0)',
             color: 'var(--ink-1)',

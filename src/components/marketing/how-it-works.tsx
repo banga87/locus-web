@@ -45,7 +45,7 @@ export function HowItWorks() {
       kicker="HOW IT WORKS"
       title="Three stages, one fire kept lit."
     >
-      <div className="grid grid-cols-1 gap-10 min-[900px]:grid-cols-3 min-[900px]:gap-12">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-3 lg:gap-12">
         {STAGES.map((s) => (
           <div key={s.n} className="flex flex-col gap-4">
             <Eyebrow number={s.n}>{s.stage}</Eyebrow>

@@ -52,8 +52,8 @@ export function SectionFrame({
       id={id}
       className={cn(
         'relative',
-        // Padding: 72px/24px on mobile → 112px/48px from 900px up.
-        'px-6 py-[72px] min-[900px]:px-12 min-[900px]:py-[112px]',
+        // Padding: 72px/24px on mobile → 112px/48px from `lg:` (1024px) up.
+        'px-6 py-[72px] lg:px-12 lg:py-[112px]',
         className,
       )}
       style={{

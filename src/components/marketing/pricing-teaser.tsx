@@ -2,10 +2,11 @@
 // Journeyman, Foundry. Server Component.
 //
 // Layout notes:
-// - Desktop (≥900px): 3 equal columns. Featured (Journeyman) tier is wrapped
-//   in <FrameCard/> which provides a brass top-rule signaling "featured".
-//   Non-featured tiers render as plain cells with a 1px paper rule border.
-// - Mobile (<900px): stacks to 1 column.
+// - Desktop (≥1024px, `lg:`): 3 equal columns. Featured (Journeyman) tier is
+//   wrapped in <FrameCard/> which provides a brass top-rule signaling
+//   "featured". Non-featured tiers render as plain cells with a 1px paper
+//   rule border.
+// - Mobile (<1024px): stacks to 1 column.
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -109,11 +110,11 @@ function TierBody({ tier, index }: { tier: Tier; index: number }) {
         style={{ borderTop: '1px solid var(--paper-rule)' }}
       >
         <span
+          className="text-[clamp(32px,8vw,44px)]"
           style={{
             fontFamily: 'var(--font-display)',
             fontStyle: 'italic',
             fontWeight: 500,
-            fontSize: '44px',
             lineHeight: 1,
             color: 'var(--ink-1)',
           }}
@@ -163,8 +164,8 @@ function TierBody({ tier, index }: { tier: Tier; index: number }) {
 export function PricingTeaser() {
   return (
     <SectionFrame id="pricing" number="06" kicker="Grades & Rates">
-      {/* Heading + lede — 1 col mobile, 1fr / 1.6fr from 900px up */}
-      <div className="mb-14 grid grid-cols-1 items-start gap-10 min-[900px]:grid-cols-[1fr_1.6fr] min-[900px]:gap-[72px]">
+      {/* Heading + lede — 1 col mobile, 1fr / 1.6fr from `lg:` up */}
+      <div className="mb-14 grid grid-cols-1 items-start gap-10 lg:grid-cols-[1fr_1.6fr] lg:gap-[72px]">
         <h2 className="t-h2">
           Three grades
           <br />
@@ -176,10 +177,10 @@ export function PricingTeaser() {
         </p>
       </div>
 
-      {/* Tier grid — stacks on mobile, 3 cols from 900px. Featured tier wraps
+      {/* Tier grid — stacks on mobile, 3 cols from `lg:`. Featured tier wraps
           in <FrameCard/> for the brass top-rule; non-featured tiers are plain
           cells on cream. */}
-      <div className="grid grid-cols-1 gap-6 min-[900px]:grid-cols-3 min-[900px]:items-start">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
         {TIERS.map((t, i) => {
           if (t.featured) {
             return (

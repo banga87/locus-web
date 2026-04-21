@@ -32,16 +32,16 @@ export function Hero({ authed = false }: HeroProps) {
       <HeroPlate
         image="/images/hero-2400.jpg"
         alt="The engine hall, at working temperature"
-        className="min-h-[48vh] min-[900px]:min-h-[55vh] min-[1280px]:min-h-[62vh]"
+        className="min-h-[48vh] lg:min-h-[55vh] xl:min-h-[62vh]"
       >
         <Nav authed={authed} />
         {/* Spacer — holds the image band open to HeroPlate's min-height so
             the photo reads as a full-bleed plate before the copy deck. */}
-        <div className="min-h-[48vh] min-[900px]:min-h-[55vh] min-[1280px]:min-h-[62vh]" />
+        <div className="min-h-[48vh] lg:min-h-[55vh] xl:min-h-[62vh]" />
       </HeroPlate>
 
       {/* Copy deck on cream. */}
-      <div className="flex flex-col items-center px-6 pb-[88px] pt-10 text-center min-[900px]:px-12 min-[900px]:pb-[112px] min-[900px]:pt-12">
+      <div className="flex flex-col items-center px-6 pb-[88px] pt-10 text-center lg:px-12 lg:pb-[112px] lg:pt-12">
         <h1 className="t-h1">The operator&rsquo;s console for AI labor.</h1>
 
         <p className="t-lede mx-auto mt-6 max-w-[640px]">

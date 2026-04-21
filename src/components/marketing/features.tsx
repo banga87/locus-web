@@ -48,7 +48,7 @@ export function Features() {
   return (
     <SectionFrame id="product" number="03" kicker="The Console" dark>
       {/* Heading + lede */}
-      <div className="mb-14 grid grid-cols-1 items-end gap-10 min-[900px]:grid-cols-2 min-[900px]:gap-[72px]">
+      <div className="mb-14 grid grid-cols-1 items-end gap-10 lg:grid-cols-2 lg:gap-[72px]">
         <h2 className="t-h2" style={{ color: 'var(--ink-inverse)' }}>
           What the operator
           <br />
@@ -63,7 +63,7 @@ export function Features() {
       </div>
 
       {/* Tile grid — FrameCard provides its own border + brass top rule. */}
-      <div className="grid grid-cols-1 gap-4 min-[640px]:grid-cols-2 min-[900px]:grid-cols-3 min-[900px]:gap-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">
         {ITEMS.map((it) => (
           <FrameCard key={it.n} variant="inverse">
             <div className="t-mono-label" style={{ color: 'var(--brass-soft)' }}>

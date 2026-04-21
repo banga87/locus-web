@@ -5,11 +5,11 @@
 // feedback_no_japanese_elements), so no CJK characters appear here. The
 // Vol./Iss. metadata line carries the copyright + founding year instead.
 //
-// Responsive collapse: <900px drops from the 5-col desktop layout to a
-// 2-col grid. Chose 2 cols over 1 because the four link lists are short
-// enough to pair nicely side-by-side on phone, which keeps the footer
-// compact (1-col would force a long vertical scroll at the end of the page).
-// The brand column still spans the full width at the top.
+// Responsive collapse: below `lg:` (1024px) drops from the 5-col desktop
+// layout to a 2-col grid. Chose 2 cols over 1 because the four link lists
+// are short enough to pair nicely side-by-side on phone, which keeps the
+// footer compact (1-col would force a long vertical scroll at the end of
+// the page). The brand column still spans the full width at the top.
 
 import { Eyebrow, LetterpressRule, Wordmark } from '@/components/tatara';
 
@@ -28,7 +28,7 @@ const LISTS: readonly LinkList[] = [
 export function Footer() {
   return (
     <footer
-      className="paper-scope px-6 pb-10 pt-[72px] min-[900px]:px-12 min-[900px]:pb-10 min-[900px]:pt-20"
+      className="paper-scope px-6 pb-10 pt-[72px] lg:px-12 lg:pb-10 lg:pt-20"
       style={{
         background: 'var(--cream)',
         borderTop: '1px solid var(--paper-rule)',
@@ -36,9 +36,9 @@ export function Footer() {
     >
       <div className="mx-auto max-w-[1320px]">
         {/* 5-col grid desktop, 2-col grid mobile with brand spanning both. */}
-        <div className="grid grid-cols-2 gap-x-8 gap-y-10 min-[900px]:grid-cols-[1.4fr_1fr_1fr_1fr_1fr] min-[900px]:gap-10">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr] lg:gap-10">
           {/* Brand column — full-width at mobile (spans 2), 1.4fr at desktop. */}
-          <div className="col-span-2 min-[900px]:col-span-1">
+          <div className="col-span-2 lg:col-span-1">
             <Wordmark size={26} />
             <p
               className="mt-4 max-w-[280px]"
@@ -78,7 +78,7 @@ export function Footer() {
 
         <LetterpressRule className="mt-16" />
 
-        <div className="mt-5 flex flex-col items-start justify-between gap-3 min-[640px]:flex-row min-[640px]:items-center">
+        <div className="mt-5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <span
             className="t-mono-label"
             style={{ letterSpacing: '0.18em', opacity: 0.5 }}

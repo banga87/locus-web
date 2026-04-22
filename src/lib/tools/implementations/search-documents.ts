@@ -1,14 +1,12 @@
-// search_documents — PostgreSQL full-text search over a brain's documents.
+// search_documents — delegates to src/lib/memory/core.retrieve().
 //
-// Uses the `search_vector` tsvector column (populated by the Postgres
-// trigger defined in migration 0002) with `ts_rank` + `ts_headline` for
-// relevance + snippet. Filters: brain scope, user-authored docs only
-// (type IS NULL — excludes scaffolding, skills, agent-definitions),
-// non-deleted, non-archived, optional folder slug.
+// Contract: keep the existing output shape compatible for agents that
+// were wired to the pre-refactor tool. We add `provenance` as an
+// additional field per result; existing fields (path, title, snippet,
+// relevance_score, folder) remain.
 
-import { sql } from 'drizzle-orm';
-
-import { db } from '@/db';
+import { retrieve } from '@/lib/memory/core';
+import type { Provenance } from '@/lib/memory/types';
 import type { LocusTool, ToolContext, ToolResult } from '../types';
 
 interface SearchDocumentsInput {
@@ -23,6 +21,7 @@ interface SearchResult {
   snippet: string;
   relevance_score: number;
   folder: string | null;
+  provenance: Provenance;
 }
 
 interface SearchDocumentsOutput {
@@ -30,13 +29,9 @@ interface SearchDocumentsOutput {
   results: SearchResult[];
 }
 
-interface SearchRow {
-  path: string;
-  title: string;
-  snippet: string;
-  rank: string | number;
-  folder_slug: string | null;
-  id: string;
+function extractFolderFromPath(path: string): string | null {
+  const i = path.indexOf('/');
+  return i >= 0 ? path.slice(0, i) : null;
 }
 
 export const searchDocumentsTool: LocusTool<
@@ -45,8 +40,8 @@ export const searchDocumentsTool: LocusTool<
 > = {
   name: 'search_documents',
   description:
-    'Full-text search over the brain. Returns ranked paths + snippets. ' +
-    'Filter by folder slug, cap with max_results.',
+    'Full-text search over the brain. Returns ranked paths + snippets ' +
+    'with provenance. Filter by folder slug, cap with max_results.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -69,64 +64,37 @@ export const searchDocumentsTool: LocusTool<
     input: SearchDocumentsInput,
     context: ToolContext,
   ): Promise<ToolResult<SearchDocumentsOutput>> {
-    const query = input.query;
-    const maxResults = input.max_results ?? 10;
-    const folderFilter = input.folder ?? null;
+    const results = await retrieve({
+      brainId: context.brainId,
+      companyId: context.companyId,
+      query: input.query,
+      mode: 'hybrid',
+      tierCeiling: 'extracted',
+      limit: input.max_results ?? 10,
+      filters: input.folder ? { folderPath: input.folder } : undefined,
+    });
 
-    // `plainto_tsquery` is more lenient than `to_tsquery` — it escapes
-    // operators for us so the caller can pass natural-language queries.
-    // Join through folders by slug when a filter is supplied; left-join
-    // always so results surface the folder slug for the response.
-    //
-    // `d.type IS NULL` restricts the search to user-authored documents
-    // (scaffolding/skills/agent-definitions all have a non-null type).
-    const rows = (await db.execute(sql`
-      SELECT
-        d.id,
-        d.path,
-        d.title,
-        ts_headline(
-          'english',
-          d.content,
-          plainto_tsquery('english', ${query}),
-          'MaxWords=35, MinWords=15'
-        ) AS snippet,
-        ts_rank(d.search_vector, plainto_tsquery('english', ${query})) AS rank,
-        f.slug AS folder_slug
-      FROM documents d
-      LEFT JOIN folders f ON f.id = d.folder_id
-      WHERE d.brain_id = ${context.brainId}
-        AND d.search_vector @@ plainto_tsquery('english', ${query})
-        AND d.deleted_at IS NULL
-        AND d.status != 'archived'
-        AND d.type IS NULL
-        ${folderFilter ? sql`AND f.slug = ${folderFilter}` : sql``}
-      ORDER BY rank DESC
-      LIMIT ${maxResults}
-    `)) as unknown as SearchRow[];
-
-    const results: SearchResult[] = rows.map((row) => ({
-      path: row.path,
-      title: row.title,
-      snippet: row.snippet ?? '',
-      relevance_score:
-        typeof row.rank === 'number' ? row.rank : Number(row.rank),
-      folder: row.folder_slug,
+    const shaped: SearchResult[] = results.map((r) => ({
+      path: r.provenance.path,
+      title: r.title,
+      snippet: r.snippet.text,
+      relevance_score: r.score,
+      folder: extractFolderFromPath(r.provenance.path),
+      provenance: r.provenance,
     }));
 
     return {
       success: true,
-      data: { query, results },
+      data: { query: input.query, results: shaped },
       metadata: {
-        // The executor overwrites these; we set them so the shape matches.
         responseTokens: 0,
         executionMs: 0,
-        documentsAccessed: rows.map((r) => r.id),
+        documentsAccessed: results.map((r) => r.documentId),
         details: {
           eventType: 'document.search',
-          folder: folderFilter,
-          resultCount: results.length,
-          query,
+          folder: input.folder ?? null,
+          resultCount: shaped.length,
+          query: input.query,
         },
       },
     };

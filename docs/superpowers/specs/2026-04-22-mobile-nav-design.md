@@ -62,7 +62,6 @@ A single Sheet root wraps both the trigger (hamburger) and the content (`Sidebar
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sheet, SheetTrigger, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { VisuallyHidden } from 'radix-ui'; // or an equivalent utility
 import { Icon } from '@/components/tatara';
 import { SidebarExpanded } from './sidebar/sidebar-expanded';
 
@@ -97,10 +96,10 @@ export function MobileNavSheet(props: SidebarExpandedProps) {
         showCloseButton={false}
         className="w-[85vw] max-w-[320px] p-0 gap-0 rounded-none border-0 shadow-xl overflow-y-auto"
       >
-        <VisuallyHidden.Root>
+        <div className="sr-only">
           <SheetTitle>Navigation</SheetTitle>
           <SheetDescription>Primary navigation menu</SheetDescription>
-        </VisuallyHidden.Root>
+        </div>
         <SidebarExpanded {...props} />
       </SheetContent>
     </Sheet>
@@ -192,7 +191,7 @@ NewAppShell (server component)
 │   └── MobileNavSheet (client)
 │       ├── <SheetTrigger asChild><button>hamburger</button></SheetTrigger>  (rendered in top bar)
 │       └── <SheetContent side="left">  (portaled to <body> while open)
-│           ├── <VisuallyHidden><SheetTitle/><SheetDescription/></VisuallyHidden>
+│           ├── <div className="sr-only"><SheetTitle/><SheetDescription/></div>
 │           └── SidebarExpanded (client) — unchanged
 │               ├── Wordmark, WorkspaceRow
 │               ├── nav links, workflowsBadge

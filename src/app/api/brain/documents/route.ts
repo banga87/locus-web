@@ -27,6 +27,7 @@ import {
   getAttachment,
   markCommitted,
 } from '@/lib/ingestion/attachments';
+import { populateCompactIndexForWrite } from '@/lib/write-pipeline/ingest';
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 
@@ -232,6 +233,12 @@ export const POST = (req: Request) =>
             ...workflowMetadata,
           },
           version: 1,
+          compactIndex: populateCompactIndexForWrite({
+            content: input.content,
+            // Phase 1: parseFrontmatterRaw doesn't support arrays, and
+            // entities-as-frontmatter is a Phase 3 feature. Pass empty.
+            frontmatterEntities: [],
+          }),
         })
         .returning();
 

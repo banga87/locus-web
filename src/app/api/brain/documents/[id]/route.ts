@@ -29,6 +29,7 @@ import {
   getAttachment,
   markCommitted,
 } from '@/lib/ingestion/attachments';
+import { populateCompactIndexForWrite } from '@/lib/write-pipeline/ingest';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -279,6 +280,14 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
         ...(newPath !== undefined ? { path: newPath } : {}),
         ...typeUpdate,
         ...metadataUpdate,
+        ...(patch.content !== undefined
+          ? {
+              compactIndex: populateCompactIndexForWrite({
+                content: patch.content,
+                frontmatterEntities: [],
+              }),
+            }
+          : {}),
         version: nextVersion,
         updatedAt: new Date(),
       })

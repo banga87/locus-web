@@ -30,7 +30,15 @@ export const ALLOWED_MODELS = [
 // gates tool availability based on this array.
 export const agentWizardInputSchema = z.object({
   title: z.string().min(1).max(200),
-  slug: z.string().regex(/^[a-z0-9-]+$/).min(1).max(128),
+  slug: z
+    .string()
+    .regex(/^[a-z0-9-]+$/)
+    .min(1)
+    .max(128)
+    // Prevent user agents from shadowing the synthetic 'platform-agent' default.
+    .refine((s) => s !== 'platform-agent', {
+      message: "'platform-agent' is reserved — choose a different slug",
+    }),
   model: z.enum(ALLOWED_MODELS),
   toolAllowlist: z.array(z.string()).optional(),
   baselineDocIds: z.array(z.string().uuid()),

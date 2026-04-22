@@ -46,6 +46,18 @@ describe('agent wizard input validation', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("rejects reserved slug 'platform-agent'", () => {
+    const result = agentWizardInputSchema.safeParse({
+      title: 'Platform Agent',
+      slug: 'platform-agent',
+      model: 'claude-sonnet-4-6',
+      baselineDocIds: [],
+      skillIds: [],
+      systemPromptSnippet: '',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('buildAgentDefinitionDoc', () => {

@@ -1,15 +1,15 @@
-// Minimal two-column shell: sidebar (left) + main (right). The grid
-// template and surface colours come from `.app` / `.side` / `.main` in
-// globals.css. Below 768px the sidebar becomes a fixed overlay drawer
-// triggered by SidebarMobileTrigger; a dedicated mobile pass is deferred.
+// Minimal two-column shell: sidebar (left) + main (right) on md+.
+// Below md, the desktop grid column is hidden via globals.css and
+// navigation moves into MobileTopBar + MobileNavSheet.
 
 import type { ReactNode } from 'react';
 
 import type { ManifestFolder } from '@/lib/brain/manifest';
 
+import { MobileNavSheet } from './mobile-nav-sheet';
+import { MobileTopBar } from './mobile-top-bar';
 import { Sidebar } from './sidebar/sidebar';
 import { ResizeHandle } from './sidebar/resize-handle';
-import { SidebarMobileTrigger } from './sidebar/sidebar-mobile-trigger';
 
 interface NewAppShellProps {
   children: ReactNode;
@@ -24,10 +24,12 @@ interface NewAppShellProps {
 export function NewAppShell({ children, workflowsBadge, ...props }: NewAppShellProps) {
   return (
     <div className="app">
+      <MobileTopBar>
+        <MobileNavSheet {...props} workflowsBadge={workflowsBadge} />
+      </MobileTopBar>
       <Sidebar {...props} workflowsBadge={workflowsBadge} />
       <ResizeHandle />
       <section className="main">
-        <SidebarMobileTrigger />
         {children}
       </section>
     </div>

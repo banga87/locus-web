@@ -1116,40 +1116,14 @@
 }
 
 @media (max-width: 767px) {
-  .app {
-    grid-template-columns: 1fr;
-  }
-  .side, .side-rail {
-    position: fixed;
-    inset: 0 auto 0 0;
-    width: 280px;
-    z-index: 50;
-    transform: translateX(-100%);
-    transition: transform 200ms ease-out;
-    box-shadow: 0 0 0 9999px rgba(0,0,0,0);
-  }
-  .app[data-sidebar-mobile-open="true"] .side,
-  .app[data-sidebar-mobile-open="true"] .side-rail {
-    transform: translateX(0);
-    box-shadow: 2px 0 8px rgba(0,0,0,0.08);
-  }
-  .sidebar-resize-handle { display: none; }
+  .app { grid-template-columns: 1fr; }
+  .side, .side-rail, .sidebar-resize-handle { display: none; }
+  .main { padding-top: 56px; } /* reserve space for the fixed MobileTopBar (h-14) */
 }
 
-.sidebar-mobile-trigger {
-  display: none;
-  position: fixed;
-  top: 12px; left: 12px;
-  width: 44px; height: 44px;
-  background: var(--surface-0);
-  border: 1px solid var(--rule-1);
-  border-radius: 6px;
-  cursor: pointer;
-  z-index: 40;
-}
-@media (max-width: 767px) {
-  .sidebar-mobile-trigger { display: grid; place-items: center; }
-}
+/* Hide the desktop "collapse sidebar" button when SidebarExpanded is
+   rendered inside the mobile Sheet — the button is meaningless there. */
+[data-slot="sheet-content"] .brand-collapse { display: none; }
 
 /* Prevent iOS Safari auto-zoom on focus (triggers when font-size < 16px).
    Safety net for raw form elements. Components using Tailwind text-sm

@@ -700,7 +700,217 @@ Five phases, each independently valuable and reversible. Between phases: benchma
 - **Agent diary implementation details** — trigger cadence, schema, consumer pattern. Deferred.
 - **Maintenance Agent per-brain model choice** — Haiku vs. Sonnet; tenant-configurable vs. Tatara-chosen.
 
-## 14. References
+## 14. Phase handoff contracts & task skeletons
+
+This section exists so that Phase 2–5 plans can be authored from this spec without re-brainstorming. Each subsection covers one phase and contains:
+
+- **Spec section pointers** — the parts of this spec that govern that phase
+- **Inputs from prior phase** — concrete artefacts and metrics that must exist before this phase's plan can be written
+- **Probable task skeleton** — bullet list of likely tasks (15–25 items, no TDD detail). The `writing-plans` skill will turn this into a fully decomposed plan.
+- **Phase-specific notes** — anything decided in the brainstorming session that isn't already captured verbatim elsewhere in this spec
+
+**How to use this section when starting a new phase:**
+
+1. Read the prior phase's completion artefacts (commit, test output, baseline metrics).
+2. Read the `Inputs from prior phase` checklist below; verify every item before proceeding.
+3. Skip `superpowers:brainstorming` — invoke `superpowers:writing-plans` directly with this section as the brief.
+4. The plan reviewer should still run; spec drift between phases is the most common failure mode.
+
+### 14.1 Phase 2 — pgvector + hybrid fusion
+
+**Spec section pointers:**
+- §6.1 (embedding column DDL), §7 (retrieval API — embedding integrates into existing core), §11 (benchmark harness), §12 Phase 2 (scope, exit criteria), §13 (deferred decisions)
+
+**Inputs from prior phase (Phase 1):**
+- ✅ `compact_index` populated for 100% of live docs (verified via Phase 1 Task 28)
+- ✅ `search_documents` returns provenance per result
+- ✅ `MemoryProvider` interface extracted; `tatara-hybrid` provider in place
+- ✅ Cross-tenancy isolation suite green
+- ✅ Benchmark runner scaffold present at `tests/benchmarks/runner.ts`
+- 🆕 **Phase 1 baseline metrics captured:** R@5, R@10, MRR on the smoke fixture (and on a representative tenant fixture if available). Phase 2 starts by re-running the benchmark to confirm baseline, then proves its lift against this number. *If Phase 1's plan didn't produce these metrics, Phase 2 Task 0 is "wire the seed helper into the benchmark runner and capture the baseline."*
+
+**Probable task skeleton:**
+
+1. Capture / re-confirm Phase 1 baseline retrieval metrics on the smoke fixture
+2. Wire the benchmark runner's seed helper (currently a `throw` in Phase 1 scaffold) so benchmarks can run end-to-end
+3. Enable pgvector extension on Supabase (DB config; verify via `\dx`)
+4. Migration: `ALTER documents ADD embedding vector(N)` + HNSW index (N decided in Task 9)
+5. Embedding worker module (harness-pure, in `src/lib/memory/embedding/`) with provider-agnostic interface
+6. Embedding worker tests (mock embedder)
+7. Async write-pipeline integration: write-pipeline enqueues embedding jobs (table or queue — Phase 1 does sync rule-based; embedding stays async to avoid blocking saves)
+8. Admin backfill endpoint for embeddings on existing docs (paginated)
+9. Embedding-model decision: benchmark Voyage `voyage-3-large`, OpenAI `text-embedding-3-small`, and one open-source baseline on the smoke fixture; pick + document
+10. Hybrid scoring composer: extends Phase 1's `composeBoostedScore` with `cosine_similarity` term (`final = w_ts*ts_rank + w_vec*cosine + w_idx*compact_match + w_bonus*boosts`)
+11. Default weights tuned hand-by-benchmark (no per-brain overrides yet — those land in Phase 3 with `brain_configs`)
+12. `retrieve()` updated: add embedding similarity to the SQL, null-safe fallback when `embedding IS NULL`
+13. Cross-tenancy isolation re-test with embeddings (vector ANN must respect company/brain scoping)
+14. LongMemEval integration: download dataset, document the run command, capture R@5 vs Phase 1 baseline
+15. RAGAS integration: faithfulness + answer-relevance + context-precision metrics
+16. `tatara-hybrid` provider: `describe().supports.embeddings = true`
+17. Verify Phase 2 exit criteria per §12 Phase 2 (all docs have embeddings, hybrid beats tsvector-only on at least one benchmark, embedding worker sustains ≥1000 docs/min)
+
+**Phase-specific notes:**
+
+- **Embedding dimension** is a Phase 2 decision; column size in §6.1 (`vector(1024)`) is illustrative — confirm against the chosen model. Voyage `voyage-3-large` is 1024 native; OpenAI `text-embedding-3-small` is 1536. If the chosen model is 1536, update the migration accordingly.
+- **Per-brain weight overrides** are deferred to Phase 3 (when `brain_configs` ships). Phase 2 uses Tatara-set defaults only.
+- **Semantic chunking** is explicitly Phase 2.5 — only invoke if Phase 2's whole-doc embedding shows a recall gap on long-form docs (>10k tokens).
+- **Cost transparency for embedding generation** must be wired through `usage_records` (dual-cost). Embedding API calls are a tenant-billable line item.
+
+### 14.2 Phase 3 — KG layer (entities + triples)
+
+**Spec section pointers:**
+- §6.2 (entities as `type:entity` documents), §6.3 (`kg_triples` schema), §6.4 (`brain_configs`), §7.4 (kg_query / kg_timeline tools), §8.3 Path 1 (generating-agent frontmatter), §10.5 (dangling-entity detector), §10.6 (predicate vocab), §12 Phase 3
+
+**Inputs from prior phase (Phase 2):**
+- ✅ pgvector + embeddings stable in production
+- ✅ Hybrid scoring beats Phase 1 baseline on chosen benchmark
+- ✅ Embedding worker has not breached cost budgets in pilot tenants
+- ✅ Phase 2 retrieval metrics recorded as the new baseline for Phase 3 to inherit
+
+**Probable task skeleton:**
+
+1. Migration: `CREATE TABLE kg_triples` + RLS + scoped indexes (per §6.3)
+2. Migration: `CREATE TABLE brain_configs` + RLS (per §6.4)
+3. `brain_configs` CRUD endpoints + admin/tenant settings UI section
+4. Entity convention: extend existing frontmatter parser to recognize `type: entity`, `entity_type`, `aliases`
+5. Entity creation UI: tweak document create wizard to surface entity-specific frontmatter fields when `type=entity` is selected
+6. Entity page render: list inbound triples timeline alongside the entity doc's prose
+7. `kg_query` tool: subject + predicate + object filters, `as_of` timestamp, returns `authored + extracted` only
+8. `kg_timeline` tool: ordered triples for one entity
+9. Write-pipeline extension (`src/lib/write-pipeline/ingest.ts`): parse `facts:` frontmatter array → write triples at `authored` tier with `source_agent` from caller context
+10. Triple uniqueness key enforcement at write (per §8.5 — same fact from two docs = two rows, one per source)
+11. Generating-agent system prompts updated: emit `entities`, `topics`, `flags`, `facts` frontmatter contract (Path 1 of write pipeline)
+12. Rule-based extractor extension: detect `type:entity` + auto-write `has_alias` triples for each declared alias
+13. Predicate vocab governance UI: per-brain controlled list, `allow_extensions`, `flag_drift` settings
+14. Dangling-entity detector implementation (read pass over triples vs. entity-typed docs)
+15. Quality report writer: `/_quality/dangling-entities.md` as `type: quality_report` doc
+16. Cross-tenancy isolation suite extended: triples + KG queries never leak across companies
+17. `tatara-hybrid` provider: implement `factLookup`, `timelineFor`; update `describe()` to set `factLookup: true`, `timeline: true`
+18. End-to-end pilot test on at least one brain: organic generating-agent output produces queryable triples; `kg_query` returns sub-100-token answer
+19. Verify Phase 3 exit criteria per §12 Phase 3
+
+**Phase-specific notes:**
+
+- **`brain_configs` ships in Phase 3, not Phase 2.** Per-brain retrieval config + Maintenance settings live here; Phase 2 deferred per-brain weights to keep scope tight.
+- **Predicate vocabulary is brain-scoped, free text, governed at write.** Drift surfaces in quality report; never schema-enforced.
+- **Entity docs live in `/entities/` by convention** but the authoritative marker is `type=entity` frontmatter. Don't enforce the folder location in code.
+- **`kg_entities` table is explicitly out of scope** per markdown-first principle (entities = documents).
+- **No write-path LLM extraction in Phase 3.** Triples land via (a) generating-agent frontmatter, (b) human declaration. The Maintenance Agent (Phase 4) is the only LLM-extraction path.
+
+### 14.3 Phase 4 — Maintenance Agent + per-brain schedules
+
+**Spec section pointers:**
+- §8.4 (Maintenance Agent loop mechanics), §10 (full Maintenance Agent design), §6.4 (`brain_configs` schedule + budget fields), §12 Phase 4
+
+**Inputs from prior phase (Phase 3):**
+- ✅ `kg_triples` populated with `authored`-tier triples from at least one pilot brain
+- ✅ `brain_configs` table live (created in Phase 3)
+- ✅ Predicate vocabulary functional (controlled list per brain)
+- ✅ Generating agents emitting frontmatter contract correctly (verified on sample of recent generating-agent output)
+- ✅ Phase 3 retrieval metrics recorded as new baseline
+
+**Probable task skeleton:**
+
+1. Confirm `brain_configs.maintenance_schedule` + `maintenance_budget_usd` + `last_maintenance_run_at` + `last_maintenance_cost_usd` columns are present (added in Phase 3); add if missing
+2. `/api/cron/maintenance-agent-tick/route.ts` Vercel Cron handler scaffold; register hourly schedule in `vercel.json`
+3. `next_run` TS helper: computes next tick from `(schedule, last_run)` cadence string
+4. Tick-handler logic: query `brain_configs` WHERE `next_run(...) <= now()`
+5. PG advisory lock claim per brain (skip ticks where another run is in progress)
+6. Diff-tail query: docs changed since `last_maintenance_run_at`
+7. Batch chunker: 50 docs per LLM call (configurable)
+8. Structured-output LLM call (AI SDK + Haiku) with JSON-schema-constrained output per §10.1
+9. `evidence_quote` verbatim validator: each emitted quote must be a substring of the source doc; reject row if not
+10. Discard rule: `confidence_score < 0.8` → drop unless `infer_on_maintenance: true`, in which case write at `inferred` tier
+11. Write-pipeline integration: Maintenance Agent calls `ingestDocument` (Phase 3 form) at `extracted` tier with `source_agent='maintenance_agent'`
+12. Cost tracking via existing `usage_records` (dual-cost: estimated + customer)
+13. Budget enforcement: stop run gracefully + checkpoint when `maintenance_budget_usd` exceeded
+14. Circuit breaker: open after N consecutive model errors; sets `last_maintenance_status = 'circuit_open'`
+15. Dead-letter queue: `maintenance_dead_letter` table for repeatedly-failing docs (or jsonb append on `brain_configs` if low-volume)
+16. Maintenance dashboard UI: cadence picker (`manual | daily | weekly | custom_cron`), budget cap input, last-run summary, status badge, cost-this-month chart
+17. Dangling-entity detector (from Phase 3) runs at end of each Maintenance tick, writes/updates `/_quality/dangling-entities.md`
+18. Chaos test: budget cap fires correctly, circuit breaker opens, DLQ accumulates problem docs without losing them
+19. Per-tenant cost transparency surface: where in the UI does the customer see "this run cost $X"? Wire it.
+20. `tatara-hybrid` provider: no surface change; the Maintenance Agent calls `ingestDocument` directly (write-pipeline already routes there)
+21. Verify Phase 4 exit criteria per §12 Phase 4
+
+**Phase-specific notes:**
+
+- **Cadence values land in `brain_configs.maintenance_schedule` as opaque strings** (`manual`, `daily`, `weekly`, or `custom_cron:<cron-expr>`). The `next_run` helper interprets them.
+- **Cost transparency is non-negotiable.** Per ADR-003 (opaque Locus rates), customer sees `customer_cost_usd` only — but they must see it. Don't ship Maintenance Agent without the cost surface.
+- **Inferred-tier writeback (`infer_on_maintenance: true`)** is opt-in per brain, off by default. When enabled, derivable-but-not-stated triples land at `inferred` tier — visible only to research subagent (Phase 5). Phase 4 wires the path; Phase 5 consumes.
+- **Maintenance Agent is read-only on document content.** It writes triples, compact_index updates, and quality reports. It never edits prose.
+- **Sonnet escalation** via `retrieval_config.maintenance_quality: 'high'` is supported but Haiku is the default. Brand the Sonnet path as a premium opt-in; cost telemetry should flag the bump.
+
+### 14.4 Phase 5 — Research subagent v2 + inferred tier + graph traversal
+
+**Spec section pointers:**
+- §7.5 (research-subagent tools), §7.6 (output contract), §9 (full subagent design), §10.2 (inferred-tier writeback opt-in), §12 Phase 5
+
+**Inputs from prior phase (Phase 4):**
+- ✅ Maintenance Agent producing `extracted`-tier triples on cadence in pilot brains
+- ✅ KG sufficiently populated for graph traversal benchmarks (target: ≥1000 triples in at least one pilot brain)
+- ✅ Cost telemetry working (Phase 5 will add another LLM-cost line item via the research subagent)
+- ✅ At least one brain with `infer_on_maintenance: true` to populate the `inferred` tier and exercise the gate
+
+**Probable task skeleton:**
+
+1. BrainExplore v2 system prompt: citation-required rule, inferred-vs-authored language enforcement, confidence classification rubric
+2. `graph_traverse` tool: recursive CTE over `kg_triples`, tenant-gated at every hop (the `(company_id, brain_id)` index prefix is load-bearing here)
+3. `kg_query_inferred` tool: same as `kg_query` with `tierCeiling='inferred'`
+4. `community_map` tool: reads precomputed `documents.community_id` + cluster rollups
+5. Leiden batch job (Cron-triggered nightly or weekly): writes `documents.community_id` + a `community_rollups` table or jsonb
+6. Citation validator: post-process subagent output; every `[path#anchor]` must resolve to an actual doc/section in the brain; unresolved → append `⚠ stale citation` rather than silent pass
+7. `invoke_research_subagent` tool exposed to parent agents (customer-facing roles); wraps the subagent dispatch
+8. Output contract enforcement: subagent must return `{answer, citedPaths, confidence, caveat?}` — schema-validate before returning
+9. `tierCeiling` plumbing: research-subagent role can request `'inferred'`; customer-facing roles cannot (the assertion from Phase 1 Task 20 already enforces this — re-verify under load)
+10. Tool-list gating: `graph_traverse`, `kg_query_inferred`, `community_map` only registered when `ToolContext.role === 'research_subagent'`
+11. `tatara-hybrid` provider: implement `graphTraverse`; update `describe()` (`graphTraverse: true`)
+12. Cost attribution via existing `usage_records.parent_usage_record_id` pattern
+13. HotpotQA integration (multi-hop reasoning benchmark)
+14. FanOutQA integration (aggregation benchmark)
+15. A/B benchmark: research-subagent path vs. strict-tier-only parent agent on multi-hop questions; report quality lift + cost delta
+16. Inferred-tier writeback path activation (only consumes; Phase 4 produces)
+17. Depth cap enforcement test: research subagent cannot invoke itself; parent cannot recurse within a single turn
+18. Verify Phase 5 exit criteria per §12 Phase 5
+
+**Phase-specific notes:**
+
+- **Community detection is precomputed, not live.** Leiden runs as a batch job; results are read at query time. Frequency (nightly vs. weekly vs. on-write-threshold) is one of the §13 deferred decisions — pick during Phase 5 plan-writing based on actual KG churn.
+- **Graph traversal must filter `(company_id, brain_id)` at every hop.** The recursive CTE template:
+  ```sql
+  WITH RECURSIVE walk AS (
+    SELECT subject_slug, object_slug, predicate, 0 AS hop
+    FROM kg_triples
+    WHERE company_id = $1 AND brain_id = $2 AND subject_slug = $3
+    UNION ALL
+    SELECT t.subject_slug, t.object_slug, t.predicate, w.hop + 1
+    FROM kg_triples t
+    JOIN walk w ON t.subject_slug = w.object_slug
+    WHERE t.company_id = $1 AND t.brain_id = $2 AND w.hop < $4
+  )
+  SELECT * FROM walk;
+  ```
+  The repeated `company_id = $1 AND brain_id = $2` is intentional — without it, an edge whose object happens to match a slug in a different tenant could be traversed.
+- **Research subagent's output is a string.** Parent agent never receives raw triples or subgraphs. This is the load-bearing tier-isolation move; do not soften it for "convenience."
+- **Citation validator runs on every subagent return.** Don't ship without it; an inferred-tier hallucination escaping into a customer-facing agent's output is exactly the failure mode this whole architecture is designed to prevent.
+- **Phase 5 is the most novel piece.** Reversibility plan: a feature flag disables `invoke_research_subagent`; parent agents fall back to strict-tier tools and recall degrades gracefully.
+
+### 14.5 Cross-cutting deferred items (no dedicated phase)
+
+Land when justified by data, not on a calendar:
+
+- **Agent diary for Maintenance Agent continuity** — implementation is trivial (`type: diary_entry` docs in `/_agents/{agent_name}/`). Trigger: when Maintenance Agent runs start materially benefiting from prior-run memory (e.g. >10% of extractions touch entities the prior run already reasoned about).
+- **Provider A/B framework formalization** — formalize once a candidate provider (Letta, LightRAG, Cognee, etc.) exists in `providers/<name>/`. Until then, A/B is internal-only via `brain_configs.retrieval_config.provider`.
+- **Tenant-facing retrieval tuning controls** — Phase 4.5 if tenants ask. Likely surface: a "retrieval profile" picker (e.g. "balanced" / "lexical-heavy" / "semantic-heavy") rather than raw weights.
+
+### 14.6 What this section deliberately does NOT contain
+
+- **TDD task steps.** That's `writing-plans`'s job.
+- **Specific dollar costs or latency SLAs.** Those calibrate to Phase 1's actuals.
+- **UI specifications.** Mostly shadcn/Geist + standard patterns; not architecturally load-bearing.
+- **Specific external benchmark adoption.** §13 lists candidates; selection is a separate session.
+
+## 15. References
 
 - `docs/superpowers/research/2026-04-21-mempalace-memory-research.md`
 - `docs/agent-context-exploration.md`

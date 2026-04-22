@@ -33,6 +33,12 @@ export const workflowSchema: FrontmatterSchema = {
     },
     {
       kind: 'nullable-string',
+      name: 'agent',
+      label: 'Run as',
+      placeholder: 'platform-agent',
+    },
+    {
+      kind: 'nullable-string',
       name: 'schedule',
       label: 'Schedule (cron)',
       placeholder: 'Reserved — manual only',
@@ -42,6 +48,7 @@ export const workflowSchema: FrontmatterSchema = {
     output: 'document',
     output_category: null,
     requires_mcps: [],
+    agent: null,
     schedule: null,
   }),
   validate: (input) => {
@@ -56,6 +63,7 @@ export const workflowSchema: FrontmatterSchema = {
         output: r.value.output,
         output_category: r.value.output_category,
         requires_mcps: r.value.requires_mcps,
+        agent: r.value.agent,
         schedule: r.value.schedule,
       },
     };

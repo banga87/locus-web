@@ -12,14 +12,15 @@ const SENTENCE_INITIAL_STOPWORDS = new Set([
 
 const MAX_ENTRIES = 20;
 
-// Match individual capitalized words (at least one lowercase/digit char)
-const CAPITALIZED_WORD_RE = /\b[A-Z][a-z0-9]*\b/g;
+// Matches one or more consecutive Capitalized words (exactly one
+// uppercase letter followed by lowercase letters). This excludes
+// ALLCAPS acronyms like API / HTTP / GET.
+const PROPER_NOUN_RE = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
 
 export function extractProperNouns(content: string): string[] {
   if (!content) return [];
 
-  // Split on sentence boundaries
-  const sentences = content.split(/[.!?]+/).filter(s => s.trim());
+  const sentences = content.split(/(?<=[.!?])\s+/);
   const seen = new Set<string>();
   const out: string[] = [];
 
@@ -27,40 +28,18 @@ export function extractProperNouns(content: string): string[] {
     const trimmed = sentence.trim();
     if (!trimmed) continue;
 
-    // Find all capitalized words with their positions
-    const words: Array<{ word: string; index: number }> = [];
+    // Collect candidates with their position in the sentence so we can
+    // drop sentence-initial stopwords (position 0).
     let match: RegExpExecArray | null;
-    CAPITALIZED_WORD_RE.lastIndex = 0;
-    while ((match = CAPITALIZED_WORD_RE.exec(trimmed)) !== null) {
-      words.push({ word: match[0], index: match.index });
-    }
+    PROPER_NOUN_RE.lastIndex = 0;
+    while ((match = PROPER_NOUN_RE.exec(trimmed)) !== null) {
+      const phrase = match[1];
+      const startsAtZero = match.index === 0;
+      const firstWord = phrase.split(/\s+/)[0];
 
-    // Process words, trying to form two-word compounds
-    for (let i = 0; i < words.length; i++) {
-      const w = words[i];
-      const isFirstWord = i === 0;
-
-      // Skip sentence-initial stopwords
-      if (isFirstWord && SENTENCE_INITIAL_STOPWORDS.has(w.word)) {
+      if (startsAtZero && SENTENCE_INITIAL_STOPWORDS.has(firstWord)) {
         continue;
       }
-
-      let phrase = w.word;
-
-      // Try to form a two-word phrase if the next word is immediately adjacent,
-      // different from current word, and neither contains digits (to avoid pairing auto-generated names)
-      if (i + 1 < words.length) {
-        const nextW = words[i + 1];
-        // Adjacent means next word starts where current ends (plus space)
-        const isAdjacent = nextW.index === w.index + w.word.length + 1;
-        const hasDigits = /\d/.test(w.word) || /\d/.test(nextW.word);
-        if (isAdjacent && nextW.word !== w.word && !hasDigits) {
-          phrase = `${w.word} ${nextW.word}`;
-          i++; // Skip the next word
-        }
-      }
-
-      // Skip duplicates
       if (seen.has(phrase)) continue;
 
       seen.add(phrase);

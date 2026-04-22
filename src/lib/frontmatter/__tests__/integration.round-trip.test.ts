@@ -14,7 +14,7 @@ const turndown = new TurndownService({
 
 describe('Tiptap round-trip regression', () => {
   const pristine =
-    '---\ntype: workflow\noutput: document\noutput_category: null\nrequires_mcps: []\nschedule: null\n---\n\nDescribe the workflow here.\n';
+    '---\ntype: workflow\noutput: document\noutput_category: null\nrequires_mcps: []\nagent: null\nschedule: null\n---\n\nDescribe the workflow here.\n';
 
   it('OLD (broken) path: marked+turndown destroys frontmatter', () => {
     // Prove the bug exists when we DON'T split first.

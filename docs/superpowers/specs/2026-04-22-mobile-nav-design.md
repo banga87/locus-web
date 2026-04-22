@@ -95,7 +95,7 @@ export function MobileNavSheet(props: SidebarExpandedProps) {
       <SheetContent
         side="left"
         showCloseButton={false}
-        className="w-[85vw] max-w-[320px] p-0 gap-0 rounded-none border-0 shadow-xl"
+        className="w-[85vw] max-w-[320px] p-0 gap-0 rounded-none border-0 shadow-xl overflow-y-auto"
       >
         <VisuallyHidden.Root>
           <SheetTitle>Navigation</SheetTitle>
@@ -216,7 +216,7 @@ Mobile path renders `SidebarExpanded` **directly**, never via `<Sidebar>`. This 
 - **Viewport crosses into desktop while Sheet is open** → `useEffect` with `matchMedia('(min-width: 768px)')` listener closes the Sheet (code above).
 - **Programmatic navigation** (agent redirects, middleware-driven) → pathname-change `useEffect` closes the Sheet.
 - **Anchor link to a hash on the same page** → pathname doesn't change, Sheet stays open. Acceptable (a `#section` jump on mobile inside the drawer is weird but not broken; the overlay stays up and the user can dismiss via Esc or backdrop).
-- **Sheet content overflow** → `SidebarExpanded` already handles its own overflow; `SheetContent` flex-column with `p-0` lets the child scroll naturally. Add `overflow-y-auto` explicitly on `SheetContent` if the child doesn't.
+- **Sheet content overflow** → `SheetContent` gets `overflow-y-auto` explicitly (added to the className) so long Brain trees or pinned lists scroll inside the drawer without the whole drawer growing past viewport height.
 - **Dark theme** → `bg-[var(--surface-0)]` resolves correctly; tokens already theme-switch via `data-theme="dark"`.
 - **Animation reduce-motion** → Radix respects `prefers-reduced-motion` by default for the slide transform.
 
@@ -239,6 +239,7 @@ Mobile path renders `SidebarExpanded` **directly**, never via `<Sidebar>`. This 
 ## Implementation notes for the plan step
 
 - shadcn Sheet already installed at `src/components/ui/sheet.tsx`. No new dependency.
+- Safari ≥14 target: `matchMedia.addEventListener('change', ...)` is supported. No legacy `addListener` fallback needed for this project's audience.
 - `VisuallyHidden` from `radix-ui` — confirm import path (`radix-ui`'s `VisuallyHidden` submodule) before writing it; a `<span className="sr-only">` with the same content is an acceptable fallback.
 - Keep all existing `Wordmark`, `Icon`, `Sidebar`, `SidebarExpanded`, `SidebarRail`, `ResizeHandle`, `useSidebarLayout` internals unchanged.
 - Rail's `.side-rail` element also has class `.side` (rail line 18: `"side side-rail"`) — the CSS `display: none` rule on `.side, .side-rail` is redundant-but-explicit; safe.

@@ -5,7 +5,7 @@
 // additional field per result; existing fields (path, title, snippet,
 // relevance_score, folder) remain.
 
-import { retrieve } from '@/lib/memory/core';
+import { tataraHybridProvider } from '@/lib/memory/providers/tatara-hybrid';
 import type { Provenance } from '@/lib/memory/types';
 import type { LocusTool, ToolContext, ToolResult } from '../types';
 
@@ -64,7 +64,7 @@ export const searchDocumentsTool: LocusTool<
     input: SearchDocumentsInput,
     context: ToolContext,
   ): Promise<ToolResult<SearchDocumentsOutput>> {
-    const results = await retrieve({
+    const results = await tataraHybridProvider.retrieve({
       brainId: context.brainId,
       companyId: context.companyId,
       query: input.query,

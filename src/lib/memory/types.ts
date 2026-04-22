@@ -88,3 +88,108 @@ export type CallerRole = 'customer_facing' | 'research_subagent' | 'maintenance_
 export interface CallerContext {
   role: CallerRole;
 }
+
+// MemoryProvider — the seam between the agent harness and the specific
+// retrieval implementation. Our Phase 1–5 build is the first concrete
+// provider (providers/tatara-hybrid). Future alternatives (Letta,
+// LightRAG, etc.) ship as sibling provider adapters.
+//
+// Contract (non-negotiable):
+//   - every returned result includes provenance
+//   - tierCeiling is enforced by the provider, not the caller
+//   - companyId + brainId scoping is enforced by the provider
+//   - a provider that cannot respect tenancy does not ship
+
+export interface TraverseQuery {
+  brainId: string;
+  companyId: string;
+  fromSlug: string;
+  hops: number;
+  predicateFilter?: string[];
+  confidenceMin?: number;
+}
+
+export interface Subgraph {
+  nodes: Array<{ slug: string; title: string }>;
+  edges: Array<{ from: string; to: string; predicate: string; tier: ConfidenceTier }>;
+}
+
+export interface FactQuery {
+  brainId: string;
+  companyId: string;
+  subject?: string;
+  predicate?: string;
+  object?: string;
+  asOf?: Date;
+  tierCeiling: ConfidenceTier;
+}
+
+export interface Fact {
+  subject: string;
+  predicate: string;
+  object: string | null;
+  objectLiteral: string | null;
+  validFrom: string | null;
+  validTo: string | null;
+  confidenceTier: ConfidenceTier;
+  confidenceScore: number | null;
+  sourceDocumentId: string | null;
+}
+
+export interface Doc {
+  id: string;
+  slug: string;
+  title: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  provenance: Provenance;
+}
+
+export interface DocumentWrite {
+  companyId: string;
+  brainId: string;
+  slug: string;
+  title: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+  authoredBy: AuthoredBy;
+}
+
+export interface IngestResult {
+  documentId: string;
+  overviewsInvalidated: string[];
+}
+
+export interface ProviderCapabilities {
+  name: string;
+  supports: {
+    factLookup: boolean;
+    graphTraverse: boolean;
+    timeline: boolean;
+    embeddings: boolean;
+  };
+}
+
+export interface MemoryProvider {
+  retrieve(q: RetrieveQuery, caller?: CallerContext): Promise<RankedResult[]>;
+  getDocument(slug: string, companyId: string, brainId: string): Promise<Doc | null>;
+  factLookup(q: FactQuery): Promise<Fact[]>;
+  timelineFor(
+    entitySlug: string,
+    companyId: string,
+    brainId: string,
+  ): Promise<Fact[]>;
+  brainOverview(
+    companyId: string,
+    brainId: string,
+    folderPath?: string,
+  ): Promise<string>;
+  graphTraverse(q: TraverseQuery): Promise<Subgraph>;
+  ingestDocument(write: DocumentWrite): Promise<IngestResult>;
+  invalidateDocument(
+    slug: string,
+    companyId: string,
+    brainId: string,
+  ): Promise<void>;
+  describe(): ProviderCapabilities;
+}

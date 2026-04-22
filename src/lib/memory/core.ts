@@ -12,7 +12,9 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import type {
+  CallerContext,
   CompactIndex,
+  ConfidenceTier,
   RankedResult,
   RetrieveQuery,
 } from './types';
@@ -39,7 +41,23 @@ function asDate(v: Date | string): Date {
   return v instanceof Date ? v : new Date(v);
 }
 
-export async function retrieve(q: RetrieveQuery): Promise<RankedResult[]> {
+export function assertTierAllowed(
+  caller: CallerContext,
+  requested: ConfidenceTier,
+): void {
+  if (requested === 'inferred' && caller.role !== 'research_subagent') {
+    throw new Error(
+      `Retrieval: role "${caller.role}" cannot request tierCeiling "inferred". ` +
+        `Only research_subagent may.`,
+    );
+  }
+}
+
+export async function retrieve(
+  q: RetrieveQuery,
+  caller: CallerContext = { role: 'customer_facing' },
+): Promise<RankedResult[]> {
+  assertTierAllowed(caller, q.tierCeiling);
   const limit = q.limit ?? 10;
 
   const rows = (await db.execute(sql`

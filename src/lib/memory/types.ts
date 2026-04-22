@@ -79,3 +79,12 @@ export interface RankedResult {
   compactIndex?: CompactIndex;
   excerpt?: Excerpt;
 }
+
+// Caller role gate for tierCeiling enforcement. Strict-tier callers
+// (customer_facing, maintenance_agent) cannot request 'inferred'; only
+// the research_subagent role may. See spec §5 on the tier model.
+export type CallerRole = 'customer_facing' | 'research_subagent' | 'maintenance_agent';
+
+export interface CallerContext {
+  role: CallerRole;
+}

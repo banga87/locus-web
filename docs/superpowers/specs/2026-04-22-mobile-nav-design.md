@@ -177,7 +177,7 @@ The `SidebarMobileTrigger` import is removed. The `<SidebarMobileTrigger />` ele
 ## Accessibility requirements
 
 - **Hamburger button:** `aria-label="Open navigation"`, `focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)]`. Radix adds `aria-expanded` and `aria-controls` automatically.
-- **Sheet content:** MUST include a `<SheetTitle>` (visually hidden is fine). Without it, Radix logs a dev-mode accessibility warning. Also include `<SheetDescription>` for screen-reader context. The spec uses `radix-ui`'s `VisuallyHidden` utility (already a transitive dep of the shadcn setup); confirm availability during implementation — if unavailable, use an inline `className="sr-only"` span.
+- **Sheet content:** MUST include a `<SheetTitle>` (visually hidden is fine). Without it, Radix logs a dev-mode accessibility warning. Also include `<SheetDescription>` for screen-reader context. Wrap both in a `<div className="sr-only">` — NOT a `<span>`, because `SheetTitle` renders `<h2>` and `SheetDescription` renders `<p>`, which are invalid inside `<span>`.
 - **Active nav link:** `SidebarExpanded` should ideally mark the current route with `aria-current="page"`. The current file doesn't do this. Out of scope for THIS spec — filed as future work.
 - **Body scroll lock:** Radix handles when Sheet opens.
 - **Focus trap + focus return:** Radix handles.
@@ -240,7 +240,7 @@ Mobile path renders `SidebarExpanded` **directly**, never via `<Sidebar>`. This 
 
 - shadcn Sheet already installed at `src/components/ui/sheet.tsx`. No new dependency.
 - Safari ≥14 target: `matchMedia.addEventListener('change', ...)` is supported. No legacy `addListener` fallback needed for this project's audience.
-- `VisuallyHidden` from `radix-ui` — confirm import path (`radix-ui`'s `VisuallyHidden` submodule) before writing it; a `<span className="sr-only">` with the same content is an acceptable fallback.
+- SheetTitle/Description are wrapped in `<div className="sr-only">`. Do not use `<span>` — SheetTitle/Description render block elements (`<h2>`, `<p>`) that are invalid inside `<span>`.
 - Keep all existing `Wordmark`, `Icon`, `Sidebar`, `SidebarExpanded`, `SidebarRail`, `ResizeHandle`, `useSidebarLayout` internals unchanged.
 - Rail's `.side-rail` element also has class `.side` (rail line 18: `"side side-rail"`) — the CSS `display: none` rule on `.side, .side-rail` is redundant-but-explicit; safe.
 - After deletion, grep `src/` for `sidebar-mobile-trigger` and `SidebarMobileTrigger` to confirm zero references remain.

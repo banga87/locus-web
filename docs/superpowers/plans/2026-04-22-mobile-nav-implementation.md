@@ -94,7 +94,7 @@ git commit -m "mobile nav: add MobileTopBar component"
 ```tsx
 // src/components/shell/__tests__/mobile-nav-sheet.test.tsx
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // We control what usePathname returns across renders via a ref-like mock.
 let currentPath = '/home';
@@ -117,7 +117,7 @@ const sidebarProps = {
 };
 
 describe('<MobileNavSheet>', () => {
-  it('closes when pathname changes', () => {
+  it('closes when pathname changes', async () => {
     currentPath = '/home';
     const { rerender } = render(<MobileNavSheet {...sidebarProps} />);
     // Open the sheet
@@ -126,11 +126,12 @@ describe('<MobileNavSheet>', () => {
 
     // Simulate a route change
     currentPath = '/recent';
-    act(() => {
-      rerender(<MobileNavSheet {...sidebarProps} />);
-    });
+    rerender(<MobileNavSheet {...sidebarProps} />);
 
-    expect(screen.queryByTestId('sidebar-expanded')).not.toBeInTheDocument();
+    // Radix may animate content out — wait for it to detach from the DOM.
+    await waitFor(() => {
+      expect(screen.queryByTestId('sidebar-expanded')).not.toBeInTheDocument();
+    });
   });
 });
 ```
@@ -210,10 +211,10 @@ export function MobileNavSheet(props: MobileNavSheetProps) {
         showCloseButton={false}
         className="w-[85vw] max-w-[320px] gap-0 overflow-y-auto rounded-none border-0 p-0 shadow-xl"
       >
-        <span className="sr-only">
+        <div className="sr-only">
           <SheetTitle>Navigation</SheetTitle>
           <SheetDescription>Primary navigation menu</SheetDescription>
-        </span>
+        </div>
         <SidebarExpanded {...props} />
       </SheetContent>
     </Sheet>
@@ -226,7 +227,7 @@ export function MobileNavSheet(props: MobileNavSheetProps) {
 Run: `cd C:/code/locus/locus-web && npx vitest run src/components/shell/__tests__/mobile-nav-sheet.test.tsx`
 Expected: 1 test, 1 passed.
 
-If the Sheet's animation causes the content to remain in the DOM briefly after close, wrap the assertion in `await waitFor(() => ...)` from `@testing-library/react`. The test should still pass without a timeout — the `useEffect` flushes synchronously under `act`.
+The test uses `await waitFor(...)` to handle Radix's close animation. The `useEffect([pathname])` fires after the rerender flushes; Radix then animates the content out and eventually detaches it from the DOM. Default waitFor timeout (1000ms) is plenty.
 
 - [ ] **Step 5: Typecheck**
 

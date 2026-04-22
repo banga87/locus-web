@@ -1117,7 +1117,10 @@
 
 @media (max-width: 767px) {
   .app { grid-template-columns: 1fr; }
-  .side, .side-rail, .sidebar-resize-handle { display: none; }
+  /* Child combinator spares .side inside the Sheet (portaled outside .app). */
+  .app > .side,
+  .app > .side-rail,
+  .app > .sidebar-resize-handle { display: none; }
   .main { padding-top: 56px; } /* reserve space for the fixed MobileTopBar (h-14) */
 }
 

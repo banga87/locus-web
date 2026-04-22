@@ -16,6 +16,7 @@
 
 import type { Metadata } from 'next';
 
+import { AllYourSystems } from '@/components/marketing/all-your-systems';
 import { Features } from '@/components/marketing/features';
 import { FinalCTA } from '@/components/marketing/final-cta';
 import { Footer } from '@/components/marketing/footer';
@@ -23,10 +24,11 @@ import { Hero } from '@/components/marketing/hero';
 import { HowItWorks } from '@/components/marketing/how-it-works';
 import { Positioning } from '@/components/marketing/positioning';
 import { PricingTeaser } from '@/components/marketing/pricing-teaser';
+import { WhoItsFor } from '@/components/marketing/who-its-for';
 
-const TITLE = "Tatara — The operator's console for AI labor";
+const TITLE = "Tatara: The operator's console for AI labor";
 const DESCRIPTION =
-  'A markdown-native workspace where you hire AI agents to run real work against your documents — versioned like code, rendered like Notion, with you firmly at the helm.';
+  'The operating knowledge behind every agent you run. Always current across your CRM, inbox, leads, and SOPs, so your AI works from the same picture you do, and you stay on the controls.';
 const OG_IMAGE = '/images/hero-og.jpg';
 const OG_ALT = 'A Victorian engine hall at working temperature.';
 
@@ -50,9 +52,11 @@ export default function HomePage() {
   return (
     <>
       <Hero />
+      <AllYourSystems />
       <HowItWorks />
       <Features />
       <Positioning />
+      <WhoItsFor />
       <PricingTeaser />
       <FinalCTA />
       <Footer />

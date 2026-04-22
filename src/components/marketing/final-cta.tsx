@@ -57,7 +57,7 @@ export function FinalCTA() {
           className="relative mx-auto max-w-[1100px] px-6 py-[96px] text-center lg:px-12 lg:py-[160px]"
           style={{ color: 'var(--ink-inverse)' }}
         >
-          <Eyebrow number="07" color="var(--brass-soft)">
+          <Eyebrow number="08" color="var(--brass-soft)">
             The Invitation
           </Eyebrow>
 
@@ -72,9 +72,9 @@ export function FinalCTA() {
             className="t-lede mx-auto mt-8 max-w-[620px]"
             style={{ color: 'var(--ink-inverse-2)' }}
           >
-            Tatara is in private beta. We&rsquo;re letting in a small number of operators at a time,
-            so the machine stays warm and everyone who&rsquo;s in it gets real attention from our
-            side.
+            Tatara is in private beta. We&rsquo;re letting in a small number of businesses at a
+            time, so the machinery stays warm and every team that joins gets real attention from
+            our side.
           </p>
 
           {isOk ? (

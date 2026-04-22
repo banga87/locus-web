@@ -14,51 +14,51 @@ interface Item {
 const ITEMS: readonly Item[] = [
   {
     n: '01',
-    title: 'Every run, a diff.',
-    body: 'Agent output lands as a proposed change — never a silent overwrite. Accept, amend, or discard. Your history is intact.',
+    title: 'Always-current knowledge.',
+    body: "As your systems change, Tatara updates itself. Your agents never work from yesterday's information.",
   },
   {
     n: '02',
-    title: 'Markdown, your way.',
-    body: 'Tatara reads and writes plain markdown on your filesystem. Obsidian-compatible. Works with your existing git workflow.',
+    title: 'Every answer traceable.',
+    body: 'Every agent response points back to where the knowledge came from. No more confidently wrong answers in front of your customers.',
   },
   {
     n: '03',
-    title: 'Gauges, not black boxes.',
-    body: 'Token spend, tool calls, and context windows visible at all times. Nothing hidden behind a loading spinner.',
+    title: 'Works with any agent.',
+    body: 'Tatara sits beneath whatever framework your team is using now, and whichever one you move to next.',
   },
   {
     n: '04',
-    title: 'Throttles and stops.',
-    body: 'Halt a run mid-stream. Lower the temperature. Restrict tool access. The controls are real, not cosmetic.',
+    title: 'Full version history.',
+    body: "Every change and every update is recorded and recoverable. Roll back your business's knowledge to any point, the way you'd roll back a change in any serious system.",
   },
   {
     n: '05',
-    title: 'Model-agnostic.',
-    body: 'Claude, GPT, Gemini, or a local model on your own metal. Swap mid-run. No vendor lock-in designed into the product.',
+    title: 'Token-efficient by design.',
+    body: 'Tatara hands your agents only the context they need for the job in front of them, not your whole business. Costs stay predictable as you scale.',
   },
   {
     n: '06',
-    title: 'Built for keeping.',
-    body: 'Documents are files, not rows in a database. Export is a no-op — everything you see is already on disk, where it belongs.',
+    title: 'Your knowledge, your control.',
+    body: 'Your operating knowledge lives in open formats you can export and audit any time. No vendor lock-in. No black box. No hostage data.',
   },
 ];
 
 export function Features() {
   return (
-    <SectionFrame id="product" number="03" kicker="The Console" dark>
+    <SectionFrame id="product" number="04" kicker="The Console" dark>
       {/* Heading + lede */}
       <div className="mb-14 grid grid-cols-1 items-end gap-10 lg:grid-cols-2 lg:gap-[72px]">
         <h2 className="t-h2" style={{ color: 'var(--ink-inverse)' }}>
-          What the operator
+          What sits
           <br />
           <span className="italic" style={{ color: 'var(--brass-soft)' }}>
-            has at hand.
+            under your agents.
           </span>
         </h2>
         <p className="t-body" style={{ color: 'var(--ink-inverse-2)' }}>
-          A short catalogue of the controls. Nothing magical, nothing mystic — just the affordances{/* tatara:allow-banned */}
-          you expect when you&rsquo;re the one running the machine.
+          A short catalogue of what Tatara gives you. Nothing hidden, nothing magical. Just the
+          controls and guarantees you&rsquo;d expect under a system you&rsquo;re going to trust.
         </p>
       </div>
 

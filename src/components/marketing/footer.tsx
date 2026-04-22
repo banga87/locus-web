@@ -51,8 +51,8 @@ export function Footer() {
                 color: 'var(--ink-2)',
               }}
             >
-              The operator&rsquo;s console for AI labor. Built in small batches, hand-tended,
-              kept warm.
+              The operating knowledge behind every agent that works. Built in small batches,
+              hand-tended, kept warm.
             </p>
           </div>
 

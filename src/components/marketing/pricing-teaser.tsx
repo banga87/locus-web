@@ -163,7 +163,7 @@ function TierBody({ tier, index }: { tier: Tier; index: number }) {
 
 export function PricingTeaser() {
   return (
-    <SectionFrame id="pricing" number="06" kicker="Grades & Rates">
+    <SectionFrame id="pricing" number="07" kicker="Grades & Rates">
       {/* Heading + lede — 1 col mobile, 1fr / 1.6fr from `lg:` up */}
       <div className="mb-14 grid grid-cols-1 items-start gap-10 lg:grid-cols-[1fr_1.6fr] lg:gap-[72px]">
         <h2 className="t-h2">
@@ -172,8 +172,8 @@ export function PricingTeaser() {
           <span style={{ fontStyle: 'italic', fontWeight: 300 }}>of operator.</span>
         </h2>
         <p className="t-body max-w-[560px] [text-wrap:pretty]">
-          Final rates are still being set. During the private beta, Tatara is free for solo
-          use &mdash; bring your own model keys and work at your own pace.
+          Final rates are still being set. During the private beta, Tatara is free for solo use.
+          Bring your own model keys and work at your own pace.
         </p>
       </div>
 

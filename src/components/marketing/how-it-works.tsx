@@ -19,21 +19,21 @@ interface Stage {
 const STAGES: readonly Stage[] = [
   {
     n: '01',
-    stage: 'ANNEAL',
-    title: 'Anneal the raw material.',
-    body: 'Pour in plain markdown. Your documents live on your filesystem, versioned like code — no proprietary format, no lock-in.',
+    stage: 'STOKE',
+    title: 'Connect your systems.',
+    body: 'Plug in your CRM, your inbox, your sales funnel, your SOPs, whatever runs the business. Tatara reads from each, automatically. No spreadsheet kept in sync by hand.',
   },
   {
     n: '02',
     stage: 'TEMPER',
-    title: 'Temper under heat.',
-    body: 'Hire an operator — researcher, drafter, reviewer — and hand it a document. Throttle the tokens, watch the gauges, stop it any time.',
+    title: 'Tatara keeps it current.',
+    body: 'As your business changes, Tatara notices. New deal, new policy, new launch. The operating knowledge your agents rely on updates itself. No stale information, no drift, no one chasing a document trail.',
   },
   {
     n: '03',
-    stage: 'STOKE',
-    title: 'Stoke what it returns.',
-    body: 'Every edit is a diff. Every run is versioned. Every tool call is logged. Accept, amend, or discard.',
+    stage: 'ANNEAL',
+    title: 'Your agents run on real context.',
+    body: 'Whatever agent framework your team uses, it reads from Tatara. Your AI now answers from the same picture you do, with sources you can trace and a knowledge base that never goes cold.',
   },
 ];
 
@@ -41,8 +41,8 @@ export function HowItWorks() {
   return (
     <SectionFrame
       id="how-it-works"
-      number="02"
-      kicker="HOW IT WORKS"
+      number="03"
+      kicker="HOW IT RUNS"
       title="Three stages, one fire kept lit."
     >
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-3 lg:gap-12">

@@ -10,17 +10,17 @@ import { SectionFrame } from '@/components/marketing/section-frame';
 import { Eyebrow } from '@/components/tatara';
 
 const ROWS: readonly [string, string][] = [
-  ['“Let AI run your business.”', 'Stay on the controls of your own work.'],
-  ['Hands-free. Set it and forget it.', 'Hands-on. Feel every turn of the crank.'], // tatara:allow-banned
-  ['Black box agents.', 'Visible gauges, legible state.'],
-  ['Data locked in the vendor.', 'Plain markdown, on your disk.'],
-  ['Unexpected charges.', 'Token meter always in view.'],
+  ['“Let AI run your business.”', 'Keep your agents in your control.'],
+  ["Agents working from yesterday's information.", 'Always-current operating knowledge.'],
+  ['Confidently wrong answers in front of customers.', 'Every answer traceable to a source.'],
+  ['Manual updates across five systems.', 'One place, automatically kept in sync.'],
+  ['A different prompt library on every laptop.', 'One shared context your whole team works from.'],
   ['A chat interface.', 'A console.'],
 ];
 
 export function Positioning() {
   return (
-    <SectionFrame id="position" number="04" kicker="A Position">
+    <SectionFrame id="position" number="05" kicker="A Position">
       <div className="grid grid-cols-1 items-start gap-10">
         {/* Preamble — anti-autopilot stance, kept brief above the ledger. tatara:allow-banned */}
         <div className="max-w-[760px]">
@@ -40,9 +40,23 @@ export function Positioning() {
             className="t-body mt-5 [text-wrap:pretty]"
             style={{ color: 'var(--ink-2)' }}
           >
-            The rest of the market is quietly terrified of full autonomy. They don&rsquo;t want
-            abandonment; they want control. They want to see what the machine is doing, throttle
-            it when it runs hot, and pull the lever themselves.
+            Most of the AI market sells autonomy: the promise of a business that runs itself. The
+            ops leads we talk to don&rsquo;t want that. They want leverage: a way to point their
+            agents at the work that matters and see, at a glance, that the agents are working from
+            current facts.
+          </p>
+          <p
+            className="mt-5 max-w-[520px] [text-wrap:pretty]"
+            style={{
+              fontFamily: 'var(--font-display), serif',
+              fontStyle: 'italic',
+              fontWeight: 300,
+              fontSize: 20,
+              lineHeight: 1.4,
+              color: 'var(--brass)',
+            }}
+          >
+            Tatara sells control, current context, and the dignity of running your own machine.
           </p>
         </div>
 

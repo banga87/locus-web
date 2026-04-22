@@ -88,8 +88,11 @@ export async function retrieve(q: RetrieveQuery): Promise<RankedResult[]> {
   scored.sort((a, b) => b.score - a.score);
   const top = scored.slice(0, limit);
 
-  return top.map(({ row, score }) => {
-    const r = toResult(row, score, q.mode);
+  return top.map(({ row, score }, idx) => {
+    // hybrid → top 3 use expand, rest use scan; otherwise pass through.
+    const rowMode: RetrieveQuery['mode'] =
+      q.mode === 'hybrid' ? (idx < 3 ? 'expand' : 'scan') : q.mode;
+    const r = toResult(row, score, rowMode);
     r.provenance.brainId = q.brainId;
     return r;
   });

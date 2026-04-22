@@ -123,8 +123,35 @@ function toResult(
     };
   }
 
-  // expand / hybrid are Tasks 18 and 19.
+  if (mode === 'expand') {
+    const { before, match, after } = sliceExcerpt(row.content, row.ts_headline);
+    return {
+      ...base,
+      snippet: { mode: 'headline', text: row.ts_headline ?? '' },
+      compactIndex: row.compact_index ?? undefined,
+      excerpt: { before, match, after },
+    };
+  }
+
+  // hybrid is Task 19.
   throw new Error(`retrieve: mode "${mode}" not yet implemented`);
+}
+
+function sliceExcerpt(
+  content: string,
+  headline: string,
+): { before: string; match: string; after: string } {
+  // Strip ts_headline markup (<b>…</b>) to find the match position.
+  const bare = (headline ?? '').replace(/<\/?b>/g, '');
+  const idx = bare ? content.indexOf(bare) : -1;
+  if (idx < 0) return { before: '', match: bare, after: '' };
+
+  const CONTEXT = 160;
+  return {
+    before: content.slice(Math.max(0, idx - CONTEXT), idx),
+    match: bare,
+    after: content.slice(idx + bare.length, idx + bare.length + CONTEXT),
+  };
 }
 
 function serializeCompact(ci: CompactIndex | null): string {

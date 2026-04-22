@@ -11,7 +11,7 @@
 import { NextResponse } from 'next/server';
 import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
-import { documents, users } from '@/db/schema';
+import { brains, documents, users } from '@/db/schema';
 import { createClient } from '@/lib/supabase/server';
 import { extractCompactIndex } from '@/lib/memory/compact-index/extract';
 
@@ -48,7 +48,29 @@ export async function POST(request: Request) {
   if (auth instanceof Response) return auth;
 
   const url = new URL(request.url);
-  const brainId = url.searchParams.get('brainId'); // optional scope
+  const brainId = url.searchParams.get('brainId');
+  if (!brainId) {
+    return NextResponse.json(
+      { error: 'brainId query param is required' },
+      { status: 400 },
+    );
+  }
+
+  // Confirm the brain belongs to the caller's company. Without this
+  // gate an owner could pass any brainId and rewrite rows in another
+  // tenant. Belt-and-suspenders: the WHERE clause below also constrains
+  // on company_id so a stale check won't leak either.
+  const [brainRow] = await db
+    .select({ id: brains.id })
+    .from(brains)
+    .where(and(eq(brains.id, brainId), eq(brains.companyId, auth.companyId)))
+    .limit(1);
+  if (!brainRow) {
+    return NextResponse.json(
+      { error: 'brainId does not belong to your company' },
+      { status: 403 },
+    );
+  }
 
   let totalUpdated = 0;
 
@@ -63,9 +85,11 @@ export async function POST(request: Request) {
       })
       .from(documents)
       .where(
-        brainId
-          ? and(isNull(documents.compactIndex), eq(documents.brainId, brainId))
-          : isNull(documents.compactIndex),
+        and(
+          isNull(documents.compactIndex),
+          eq(documents.companyId, auth.companyId),
+          eq(documents.brainId, brainId),
+        ),
       )
       .limit(BATCH_SIZE);
 

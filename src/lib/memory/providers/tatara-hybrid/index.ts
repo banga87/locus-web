@@ -5,6 +5,7 @@
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
+import { brains } from '@/db/schema/brains';
 import { documents } from '@/db/schema/documents';
 import { retrieve } from '../../core';
 import { regenerateFolderOverview } from '../../overview/invalidate';
@@ -49,14 +50,35 @@ export const tataraHybridProvider: MemoryProvider = {
     brainId: string,
     folderPath = 'root',
   ): Promise<string> {
+    // Verify (companyId, brainId) is a real tenant tuple before doing
+    // anything. Without this gate, a caller passing a bogus pair would
+    // cause regenerateFolderOverview to write an overview row stamped
+    // with whatever companyId was provided — a data-corruption vector
+    // and a cross-tenant leak. Silent empty return (no informative
+    // error) to avoid revealing internal state shape to a probing caller.
+    const [brainCheck] = await db
+      .select({ id: brains.id })
+      .from(brains)
+      .where(
+        and(eq(brains.id, brainId), eq(brains.companyId, companyId)),
+      )
+      .limit(1);
+    if (!brainCheck) return '';
+
     // Regenerate-on-read — Phase 1 keeps it simple. Phase 4 caches.
     await regenerateFolderOverview({ companyId, brainId, folderPath });
     const slug = `_overview-${folderPath || 'root'}`;
+    // Belt-and-suspenders tenancy: scope on company_id AND brain_id AND
+    // slug even after the tuple check above.
     const [row] = await db
       .select({ content: documents.content })
       .from(documents)
       .where(
-        and(eq(documents.brainId, brainId), eq(documents.slug, slug)),
+        and(
+          eq(documents.companyId, companyId),
+          eq(documents.brainId, brainId),
+          eq(documents.slug, slug),
+        ),
       )
       .limit(1);
     return row?.content ?? '';

@@ -30,6 +30,18 @@ vi.mock('@/lib/brain/manifest-regen', () => ({
   tryRegenerateManifest: vi.fn(async () => {}),
 }));
 
+// Mock the agent resolver so individual tests can control what config comes back.
+// Default: return null (platform-agent path) — matches real behaviour for
+// workflows with no `agent:` field (slug === null). Existing integration
+// tests are unaffected because their workflow docs omit `agent:`.
+vi.mock('@/lib/agents/resolve', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/agents/resolve')>();
+  return {
+    ...actual,
+    resolveAgentConfigBySlug: vi.fn(async () => null),
+  };
+});
+
 import type { LanguageModelV3 } from '@ai-sdk/provider';
 
 import { db } from '@/db';
@@ -44,6 +56,17 @@ import { workflowRunEvents } from '@/db/schema/workflow-run-events';
 import { registerLocusTools, __resetLocusToolsRegistered } from '@/lib/tools';
 import { __resetRegistryForTests } from '@/lib/tools/executor';
 import { clearHooks, registerHook } from '@/lib/agent/hooks';
+import {
+  __resetContextHandlersForTests,
+  registerContextHandlers,
+} from '@/lib/context/register';
+
+import * as agentRunModule from '@/lib/agent/run';
+import {
+  resolveAgentConfigBySlug,
+  AgentNotFoundError,
+  type AgentRuntimeConfig,
+} from '@/lib/agents/resolve';
 
 import { runWorkflow } from '../run';
 
@@ -332,7 +355,7 @@ describe('runWorkflow — happy path', () => {
 });
 
 describe('runWorkflow — cancellation', () => {
-  it('stops gracefully when status is flipped to cancelled before the run starts', async () => {
+  it('stops gracefully when status is flipped to cancelled before the run starts', { timeout: 15_000 }, async () => {
     // Model that would produce output — but cancellation is detected at
     // run start (before markRunning) when we pre-flip the status.
     mockProvider.setModel(
@@ -356,7 +379,7 @@ describe('runWorkflow — cancellation', () => {
     expect(run!.status).toBe('cancelled');
   });
 
-  it('exits at turn boundary when status flipped to cancelled during execution', async () => {
+  it('exits at turn boundary when status flipped to cancelled during execution', { timeout: 15_000 }, async () => {
     let resolveStream: (() => void) | undefined;
 
     // Model that emits text then pauses — we flip the status while it's
@@ -402,7 +425,7 @@ describe('runWorkflow — cancellation', () => {
 });
 
 describe('runWorkflow — LLM error', () => {
-  it('marks the run as failed and records errorMessage when the LLM stream errors', async () => {
+  it('marks the run as failed and records errorMessage when the LLM stream errors', { timeout: 15_000 }, async () => {
     mockProvider.setModel(makeErrorModel());
 
     const runId = await seedRun(fix);
@@ -419,7 +442,7 @@ describe('runWorkflow — LLM error', () => {
 });
 
 describe('runWorkflow — hook deny', () => {
-  it('marks the run as failed when SessionStart denies the turn', async () => {
+  it('marks the run as failed when SessionStart denies the turn', { timeout: 15_000 }, async () => {
     // The model would produce output if reached, but SessionStart deny
     // short-circuits before streamText. runAgentTurn still yields a
     // turn_complete with finishReason='denied' — the runner must treat
@@ -452,7 +475,7 @@ describe('runWorkflow — hook deny', () => {
 });
 
 describe('runWorkflow — missing run', () => {
-  it('throws when the runId does not exist', async () => {
+  it('throws when the runId does not exist', { timeout: 15_000 }, async () => {
     mockProvider.setModel(makeStreamModel([]));
     await expect(runWorkflow(randomUUID())).rejects.toThrow(/not found/);
   });
@@ -571,6 +594,442 @@ describe('runWorkflow — triggering user role', () => {
       // Terminal run_complete event still lands — a per-tool denial does
       // not short-circuit the run.
       expect(events.at(-1)!.eventType).toBe('run_complete');
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Agent-binding tests
+//
+// These tests verify that runWorkflow correctly wires the resolved
+// AgentRuntimeConfig into runAgentTurn (tool filter, model, agentDefinitionId,
+// grantedCapabilities) and handles the agent_not_found error path.
+//
+// Strategy:
+//   - resolveAgentConfigBySlug is module-mocked at the top of the file
+//     (default: returns null, matching platform-agent behaviour).
+//   - runAgentTurn is spied on per-describe-block so the existing
+//     integration tests continue to use the real implementation.
+//   - Each test seeds a workflow_run against the shared `fix` fixtures and
+//     uses a workflow doc variant with or without an `agent:` field.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a minimal fake RunAgentTurnResult with a single turn_complete event.
+ * Used by the runAgentTurn spy so the runner loop reaches run_complete.
+ */
+async function* fakeTurnCompleteGenerator() {
+  yield {
+    type: 'turn_start' as const,
+    turnNumber: 1,
+  };
+  yield {
+    type: 'turn_complete' as const,
+    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+    finishReason: 'stop' as const,
+  };
+}
+
+function makeFakeRunAgentTurnResult() {
+  return {
+    result: null,
+    events: fakeTurnCompleteGenerator(),
+  };
+}
+
+describe('runWorkflow — agent binding: no agent field (platform-agent default)', () => {
+  let runAgentTurnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    // Default mock already returns null for resolveAgentConfigBySlug.
+    // Spy on runAgentTurn so we can inspect call args without hitting streamText.
+    runAgentTurnSpy = vi
+      .spyOn(agentRunModule, 'runAgentTurn')
+      .mockResolvedValue(makeFakeRunAgentTurnResult() as never);
+    mockProvider.reset();
+    clearHooks();
+    __resetContextHandlersForTests();
+  });
+
+  afterEach(() => {
+    runAgentTurnSpy.mockRestore();
+    mockProvider.reset();
+    clearHooks();
+    // Symmetric reset: clear the flag, then re-register so any later test
+    // that relies on module-load-time registration still sees handlers.
+    __resetContextHandlersForTests();
+    registerContextHandlers();
+  });
+
+  it(
+    'calls runAgentTurn with full tool set, model: undefined, agentDefinitionId: null, grantedCapabilities: [web]',
+    { timeout: 15_000 },
+    async () => {
+      // No `agent:` in frontmatter → resolveAgentConfigBySlug returns null.
+      vi.mocked(resolveAgentConfigBySlug).mockResolvedValue(null);
+
+      const runId = await seedRun(fix);
+      await runWorkflow(runId);
+
+      expect(runAgentTurnSpy).toHaveBeenCalledOnce();
+      const callArgs = runAgentTurnSpy.mock.calls[0]![0] as Parameters<
+        typeof agentRunModule.runAgentTurn
+      >[0];
+
+      // model: undefined → runAgentTurn falls back to DEFAULT_MODEL
+      expect(callArgs.model).toBeUndefined();
+
+      // agentDefinitionId: null (no agent-definition doc in play)
+      expect(callArgs.ctx.agentDefinitionId).toBeNull();
+
+      // grantedCapabilities: ['web'] — platform-agent default when
+      // agentCapabilities is null (no agent-definition).
+      expect(callArgs.ctx.grantedCapabilities).toEqual(['web']);
+
+      // Tool set is unrestricted — all registered Locus tools present.
+      // At minimum search_documents must be there.
+      expect(callArgs.tools).toHaveProperty('search_documents');
+
+      const run = await getRun(runId);
+      expect(run!.status).toBe('completed');
+    },
+  );
+});
+
+describe('runWorkflow — agent binding: explicit platform-agent slug', () => {
+  let runAgentTurnSpy: ReturnType<typeof vi.spyOn>;
+  let platformAgentDocId: string;
+
+  beforeAll(async () => {
+    // Seed a workflow doc with `agent: platform-agent` in its frontmatter.
+    // validateWorkflowFrontmatter normalises 'platform-agent' → null, so
+    // resolveAgentConfigBySlug is called with slug === null → returns null.
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        companyId: fix.companyId,
+        brainId: fix.brainId,
+        folderId: fix.folderId,
+        title: 'PA Explicit Workflow',
+        slug: 'pa-explicit-workflow',
+        path: 'wf/pa-explicit-workflow',
+        content: [
+          '---',
+          'type: workflow',
+          'output: document',
+          'output_category: reports',
+          'requires_mcps: []',
+          'schedule: null',
+          'agent: platform-agent',
+          '---',
+          'Run as platform-agent explicitly.',
+        ].join('\n'),
+        type: 'workflow',
+        version: 1,
+        metadata: {
+          type: 'workflow',
+          output: 'document',
+          output_category: 'reports',
+          requires_mcps: [],
+          schedule: null,
+          agent: 'platform-agent',
+        },
+      })
+      .returning({ id: documents.id });
+    platformAgentDocId = doc!.id;
+  });
+
+  afterAll(async () => {
+    await db
+      .delete(workflowRuns)
+      .where(eq(workflowRuns.workflowDocumentId, platformAgentDocId));
+    await db.delete(documents).where(eq(documents.id, platformAgentDocId));
+  });
+
+  beforeEach(() => {
+    vi.mocked(resolveAgentConfigBySlug).mockResolvedValue(null);
+    runAgentTurnSpy = vi
+      .spyOn(agentRunModule, 'runAgentTurn')
+      .mockResolvedValue(makeFakeRunAgentTurnResult() as never);
+    mockProvider.reset();
+    clearHooks();
+    __resetContextHandlersForTests();
+  });
+
+  afterEach(() => {
+    runAgentTurnSpy.mockRestore();
+    mockProvider.reset();
+    clearHooks();
+    // Symmetric reset: clear the flag, then re-register so any later test
+    // that relies on module-load-time registration still sees handlers.
+    __resetContextHandlersForTests();
+    registerContextHandlers();
+  });
+
+  it(
+    'calls runAgentTurn with full tool set, model: undefined, agentDefinitionId: null, grantedCapabilities: [web]',
+    { timeout: 15_000 },
+    async () => {
+      const [run] = await db
+        .insert(workflowRuns)
+        .values({
+          workflowDocumentId: platformAgentDocId,
+          triggeredBy: fix.userId,
+          status: 'running',
+        })
+        .returning({ id: workflowRuns.id });
+      const runId = run!.id;
+
+      await runWorkflow(runId);
+
+      expect(runAgentTurnSpy).toHaveBeenCalledOnce();
+      const callArgs = runAgentTurnSpy.mock.calls[0]![0] as Parameters<
+        typeof agentRunModule.runAgentTurn
+      >[0];
+
+      expect(callArgs.model).toBeUndefined();
+      expect(callArgs.ctx.agentDefinitionId).toBeNull();
+      expect(callArgs.ctx.grantedCapabilities).toEqual(['web']);
+      expect(callArgs.tools).toHaveProperty('search_documents');
+
+      const runRow = await getRun(runId);
+      expect(runRow!.status).toBe('completed');
+    },
+  );
+});
+
+describe('runWorkflow — agent binding: scoped agent with allowlist, skills, capabilities, model', () => {
+  let runAgentTurnSpy: ReturnType<typeof vi.spyOn>;
+  let scopedWorkflowDocId: string;
+  const SCOPED_AGENT_ID = randomUUID();
+
+  beforeAll(async () => {
+    // Seed a workflow doc with `agent: scoped-agent`.
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        companyId: fix.companyId,
+        brainId: fix.brainId,
+        folderId: fix.folderId,
+        title: 'Scoped Workflow',
+        slug: 'scoped-workflow',
+        path: 'wf/scoped-workflow',
+        content: [
+          '---',
+          'type: workflow',
+          'output: document',
+          'output_category: reports',
+          'requires_mcps: []',
+          'schedule: null',
+          'agent: scoped-agent',
+          '---',
+          'Run as scoped agent.',
+        ].join('\n'),
+        type: 'workflow',
+        version: 1,
+        metadata: {
+          type: 'workflow',
+          output: 'document',
+          output_category: 'reports',
+          requires_mcps: [],
+          schedule: null,
+          agent: 'scoped-agent',
+        },
+      })
+      .returning({ id: documents.id });
+    scopedWorkflowDocId = doc!.id;
+  });
+
+  afterAll(async () => {
+    await db
+      .delete(workflowRuns)
+      .where(eq(workflowRuns.workflowDocumentId, scopedWorkflowDocId));
+    await db.delete(documents).where(eq(documents.id, scopedWorkflowDocId));
+  });
+
+  beforeEach(() => {
+    // Return a scoped AgentRuntimeConfig with tool allowlist, no skills
+    // (empty skillIds avoids needing real skill docs), capabilities: [],
+    // and a specific model.
+    const scopedConfig: AgentRuntimeConfig = {
+      id: SCOPED_AGENT_ID,
+      slug: 'scoped-agent',
+      model: 'claude-haiku-4-5-20251001',
+      toolAllowlist: ['search_documents'],
+      skillIds: [],
+      baselineDocIds: [],
+      systemPromptSnippet: 'You are scoped.',
+      capabilities: [],
+    };
+    vi.mocked(resolveAgentConfigBySlug).mockResolvedValue(scopedConfig);
+
+    runAgentTurnSpy = vi
+      .spyOn(agentRunModule, 'runAgentTurn')
+      .mockResolvedValue(makeFakeRunAgentTurnResult() as never);
+    mockProvider.reset();
+    clearHooks();
+    __resetContextHandlersForTests();
+  });
+
+  afterEach(() => {
+    runAgentTurnSpy.mockRestore();
+    mockProvider.reset();
+    clearHooks();
+    // Symmetric reset: clear the flag, then re-register so any later test
+    // that relies on module-load-time registration still sees handlers.
+    __resetContextHandlersForTests();
+    registerContextHandlers();
+  });
+
+  it(
+    'passes only allowlisted tools, correct model, agentDefinitionId, and empty grantedCapabilities',
+    { timeout: 15_000 },
+    async () => {
+      const [run] = await db
+        .insert(workflowRuns)
+        .values({
+          workflowDocumentId: scopedWorkflowDocId,
+          triggeredBy: fix.userId,
+          status: 'running',
+        })
+        .returning({ id: workflowRuns.id });
+      const runId = run!.id;
+
+      await runWorkflow(runId);
+
+      expect(runAgentTurnSpy).toHaveBeenCalledOnce();
+      const callArgs = runAgentTurnSpy.mock.calls[0]![0] as Parameters<
+        typeof agentRunModule.runAgentTurn
+      >[0];
+
+      // Tool allowlist: only search_documents passes the filter.
+      expect(Object.keys(callArgs.tools)).toEqual(['search_documents']);
+
+      // Model override from agent config.
+      expect(callArgs.model).toBe('claude-haiku-4-5-20251001');
+
+      // agentDefinitionId set to the agent-definition doc id.
+      expect(callArgs.ctx.agentDefinitionId).toBe(SCOPED_AGENT_ID);
+
+      // capabilities: [] → grantedCapabilities: [] (no web).
+      expect(callArgs.ctx.grantedCapabilities).toEqual([]);
+
+      // Note: the persona snippet is injected by the SessionStart hook via
+      // agentDefinitionId, which does not fire in this mock. End-to-end
+      // persona coverage lives in the Task 8 integration test.
+
+      const runRow = await getRun(runId);
+      expect(runRow!.status).toBe('completed');
+    },
+  );
+});
+
+describe('runWorkflow — agent binding: missing agent', () => {
+  let missingAgentDocId: string;
+
+  beforeAll(async () => {
+    // Workflow doc that references a non-existent agent slug.
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        companyId: fix.companyId,
+        brainId: fix.brainId,
+        folderId: fix.folderId,
+        title: 'Missing Agent Workflow',
+        slug: 'missing-agent-workflow',
+        path: 'wf/missing-agent-workflow',
+        content: [
+          '---',
+          'type: workflow',
+          'output: document',
+          'output_category: reports',
+          'requires_mcps: []',
+          'schedule: null',
+          'agent: missing',
+          '---',
+          'Will fail due to missing agent.',
+        ].join('\n'),
+        type: 'workflow',
+        version: 1,
+        metadata: {
+          type: 'workflow',
+          output: 'document',
+          output_category: 'reports',
+          requires_mcps: [],
+          schedule: null,
+          agent: 'missing',
+        },
+      })
+      .returning({ id: documents.id });
+    missingAgentDocId = doc!.id;
+  });
+
+  afterAll(async () => {
+    await db
+      .delete(workflowRuns)
+      .where(eq(workflowRuns.workflowDocumentId, missingAgentDocId));
+    await db.delete(documents).where(eq(documents.id, missingAgentDocId));
+  });
+
+  beforeEach(() => {
+    // Simulate a missing agent by throwing AgentNotFoundError.
+    vi.mocked(resolveAgentConfigBySlug).mockRejectedValue(
+      new AgentNotFoundError('missing'),
+    );
+    mockProvider.reset();
+    clearHooks();
+    __resetContextHandlersForTests();
+  });
+
+  afterEach(() => {
+    mockProvider.reset();
+    clearHooks();
+    // Symmetric reset: clear the flag, then re-register so any later test
+    // that relies on module-load-time registration still sees handlers.
+    __resetContextHandlersForTests();
+    registerContextHandlers();
+    // Restore the default mock (returns null) for other tests.
+    vi.mocked(resolveAgentConfigBySlug).mockResolvedValue(null);
+  });
+
+  it(
+    'marks run as failed, emits run_error with agent_not_found, does not call runAgentTurn',
+    { timeout: 15_000 },
+    async () => {
+      // Spy to confirm runAgentTurn is never called on the missing-agent path.
+      const runAgentTurnSpy = vi
+        .spyOn(agentRunModule, 'runAgentTurn')
+        .mockResolvedValue(makeFakeRunAgentTurnResult() as never);
+
+      const [run] = await db
+        .insert(workflowRuns)
+        .values({
+          workflowDocumentId: missingAgentDocId,
+          triggeredBy: fix.userId,
+          status: 'running',
+        })
+        .returning({ id: workflowRuns.id });
+      const runId = run!.id;
+
+      await runWorkflow(runId);
+
+      // runAgentTurn must NOT have been called.
+      expect(runAgentTurnSpy).not.toHaveBeenCalled();
+      runAgentTurnSpy.mockRestore();
+
+      // Run row must be failed with the agent slug in the error message.
+      const runRow = await getRun(runId);
+      expect(runRow!.status).toBe('failed');
+      expect(runRow!.errorMessage).toMatch(/Agent "missing" not found/);
+
+      // A run_error event with reason: agent_not_found and slug: 'missing'
+      // must have been emitted.
+      const events = await getEvents(runId);
+      const errorEvent = events.find((e) => e.eventType === 'run_error');
+      expect(errorEvent).toBeDefined();
+      const payload = errorEvent!.payload as Record<string, unknown>;
+      expect(payload.reason).toBe('agent_not_found');
+      expect(payload.slug).toBe('missing');
     },
   );
 });

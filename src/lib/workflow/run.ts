@@ -23,7 +23,7 @@
 // in-flight LLM turn + any tool calls it triggers may complete before
 // the runner stops.
 
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { documents } from '@/db/schema/documents';
@@ -38,6 +38,14 @@ import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { buildToolSet } from '@/lib/agent/tool-bridge';
 import { registerLocusTools } from '@/lib/tools';
 import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
+import { parseFrontmatterRaw } from '@/lib/brain/save';
+import { registerContextHandlers } from '@/lib/context/register';
+import {
+  resolveAgentConfigBySlug,
+  AgentNotFoundError,
+  type AgentRuntimeConfig,
+} from '@/lib/agents/resolve';
+import { deriveGrantedCapabilities } from '@/app/api/agent/chat/grantedCapabilities';
 
 import { insertEvent } from './events';
 import { markRunning, markCompleted, markFailed, markCancelled, getRunStatus } from './status';
@@ -47,6 +55,10 @@ import { wrapToolsWithStamping } from './stamp-middleware';
 // Ensure the tool registry is populated. Safe to call multiple times —
 // registerLocusTools is guarded by a `registered` flag.
 registerLocusTools();
+// Wire context-injection handlers (SessionStart → persona/baseline-doc
+// injection). Idempotent — a module-level flag in register.ts prevents
+// double-registration on hot-reloads or multiple callers.
+registerContextHandlers();
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -151,6 +163,27 @@ export async function runWorkflow(runId: string): Promise<void> {
   const frontmatter = fmResult.value;
   const workflowDocRef = workflowDoc.path;
 
+  // ---- Resolve the agent config ------------------------------------------
+  // Fail fast before any DB lookups — a missing agent should not proceed
+  // to user resolution or system-prompt construction.
+  let agentConfig: AgentRuntimeConfig | null = null;
+  try {
+    agentConfig = await resolveAgentConfigBySlug(
+      workflowDoc.brainId,
+      frontmatter.agent,
+    );
+  } catch (e) {
+    if (e instanceof AgentNotFoundError) {
+      await insertEvent(runId, 0, 'run_error', {
+        reason: 'agent_not_found',
+        slug: e.slug,
+      });
+      await markFailed(runId, `Agent "${e.slug}" not found`);
+      return;
+    }
+    throw e;
+  }
+
   // ---- Resolve the triggering user's role --------------------------------
   // The runner acts as a platform_agent on behalf of the user who triggered
   // the run — the permission evaluator (Task 1) gates write tools on
@@ -190,6 +223,21 @@ export async function runWorkflow(runId: string): Promise<void> {
   // the run. We give it write scope so the stamp middleware can call the
   // write tools (create_document / update_document). Role comes from the
   // DB lookup above — Task 1's evaluator gates write tools on role.
+
+  // Derive capabilities from agentConfig (null = platform-agent default → ['web']).
+  // Build agentContext.actor first so deriveGrantedCapabilities can read actor.type.
+  const agentActor = {
+    type: 'platform_agent' as const,
+    userId: run.triggeredBy,
+    companyId: workflowDoc.companyId,
+    scopes: ['read', 'write'],
+  };
+
+  const grantedCapabilities = deriveGrantedCapabilities({
+    actor: agentActor,
+    agentCapabilities: agentConfig?.capabilities ?? null,
+  });
+
   const toolContext = {
     actor: {
       type: 'platform_agent' as const,
@@ -199,22 +247,18 @@ export async function runWorkflow(runId: string): Promise<void> {
     },
     companyId: workflowDoc.companyId,
     brainId: workflowDoc.brainId,
-    grantedCapabilities: ['web'],
+    grantedCapabilities,
     webCallsThisTurn: 0,
   };
 
   const agentContext = {
-    actor: {
-      type: 'platform_agent' as const,
-      userId: run.triggeredBy,
-      companyId: workflowDoc.companyId,
-      scopes: ['read', 'write'],
-    },
+    actor: agentActor,
     brainId: workflowDoc.brainId,
     companyId: workflowDoc.companyId,
     sessionId: null,
     abortSignal: new AbortController().signal,
-    grantedCapabilities: ['web'],
+    agentDefinitionId: agentConfig?.id ?? null,
+    grantedCapabilities,
   };
 
   // ---- Build the tool set with stamp middleware -------------------------
@@ -224,6 +268,18 @@ export async function runWorkflow(runId: string): Promise<void> {
     { runId, workflowDocRef },
     toolContext,
   );
+
+  // Apply the agent's tool allowlist:
+  //   - null  → unrestricted (pass all tools through)
+  //   - []    → no tools (valid — explicitly no tools allowed)
+  //   - [...] → only listed tool names
+  const filteredTools = agentConfig?.toolAllowlist
+    ? Object.fromEntries(
+        Object.entries(tools).filter(([name]) =>
+          agentConfig!.toolAllowlist!.includes(name),
+        ),
+      )
+    : tools;
 
   // ---- Build the system prompt ----------------------------------------
   // Load brain + folders for the base prompt. Degrade gracefully if rows
@@ -245,10 +301,42 @@ export async function runWorkflow(runId: string): Promise<void> {
     .from(folders)
     .where(eq(folders.brainId, workflowDoc.brainId));
 
+  // ---- Build skill list from agentConfig.skillIds ----------------------
+  // Mirror the pattern from src/app/api/agent/chat/route.ts (lines ~215-250).
+  // When the agent has no skill ids, availableSkills stays empty.
+  //
+  // TODO: the chat route (src/app/api/agent/chat/route.ts ~lines 215-250)
+  // runs the same skill-loading query. Extract into a shared
+  // loadAvailableSkillsForAgent(db, { companyId, skillIds }) helper when
+  // a third caller lands — two call sites doesn't justify the indirection yet.
+  let availableSkills: Array<{ id: string; name: string; description: string }> = [];
+  if (agentConfig && agentConfig.skillIds.length > 0) {
+    const visibleSkills = await db
+      .select({ id: documents.id, content: documents.content })
+      .from(documents)
+      .where(
+        and(
+          inArray(documents.id, agentConfig.skillIds),
+          eq(documents.companyId, workflowDoc.companyId),
+          eq(documents.type, 'skill'),
+          isNull(documents.deletedAt),
+        ),
+      );
+    availableSkills = visibleSkills
+      .map((r) => {
+        const fm = parseFrontmatterRaw(r.content);
+        const name = typeof fm.name === 'string' ? fm.name : '';
+        const description = typeof fm.description === 'string' ? fm.description : '';
+        return { id: r.id, name, description };
+      })
+      .filter((s) => s.name && s.description);
+  }
+
   const baseSystemPrompt = buildSystemPrompt({
     brain: brainRow ?? { name: 'Brain', slug: 'brain' },
     companyName: companyRow?.name ?? 'your company',
     folders: folderRows,
+    availableSkills,
   });
 
   const system = buildWorkflowSystemPrompt(
@@ -286,8 +374,9 @@ export async function runWorkflow(runId: string): Promise<void> {
       ctx: agentContext,
       system,
       messages,
-      tools,
+      tools: filteredTools,
       maxSteps: 40,
+      model: agentConfig?.model,
     });
 
     for await (const ev of events) {

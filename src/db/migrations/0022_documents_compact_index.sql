@@ -5,7 +5,7 @@
 -- See docs/superpowers/specs/2026-04-22-agent-memory-architecture-design.md.
 
 ALTER TABLE documents
-  ADD COLUMN compact_index jsonb;
+  ADD COLUMN IF NOT EXISTS compact_index jsonb;
 
 -- GIN indexes on the fields agents filter by in retrieval.
 CREATE INDEX IF NOT EXISTS documents_compact_index_entities_idx

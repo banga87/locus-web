@@ -1,0 +1,20 @@
+{
+  "name": "smoke",
+  "corpus": [
+    {
+      "slug": "acme-pricing",
+      "title": "Acme Pricing",
+      "content": "Enterprise tier starts at $50k. Standard tier at $5k."
+    },
+    {
+      "slug": "acme-owners",
+      "title": "Acme Owners",
+      "content": "Jane Smith owns the Acme rollout as of 2026-04-22."
+    }
+  ],
+  "questions": [
+    { "query": "enterprise pricing", "gold_slugs": ["acme-pricing"] },
+    { "query": "Jane Smith", "gold_slugs": ["acme-owners"] },
+    { "query": "\"Acme rollout\"", "gold_slugs": ["acme-owners"] }
+  ]
+}

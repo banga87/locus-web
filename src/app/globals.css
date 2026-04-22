@@ -1128,6 +1128,11 @@
    rendered inside the mobile Sheet — the button is meaningless there. */
 [data-slot="sheet-content"] .brand-collapse { display: none; }
 
+/* Make SidebarExpanded fill the Sheet's height so its internal .side-body
+   flex: 1 still pushes .user-row to the bottom. Without this .side sizes
+   to intrinsic content and leaves a gap below. */
+[data-slot="sheet-content"] > .side { flex: 1; min-height: 0; }
+
 /* Prevent iOS Safari auto-zoom on focus (triggers when font-size < 16px).
    Safety net for raw form elements. Components using Tailwind text-sm
    utilities (e.g. shadcn Input, Textarea) must also override themselves

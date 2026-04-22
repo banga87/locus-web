@@ -13,6 +13,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import TurndownService from 'turndown';
+import useSWR from 'swr';
 
 import { workflowSchema } from '@/lib/frontmatter/schemas/workflow';
 import { joinFrontmatter } from '@/lib/frontmatter/markdown';
@@ -32,6 +33,34 @@ import {
   indentLabel,
 } from '@/components/brain/folder-dialogs';
 import type { ManifestFolder } from '@/lib/brain/manifest';
+
+// UI sentinel for "no custom agent selected" — distinct from the
+// reserved PLATFORM_AGENT_SLUG constant (which is the canonical slug
+// the runner uses). Radix <SelectItem> rejects value="", so we need
+// a non-empty sentinel that can't collide with a real slug.
+const PLATFORM_AGENT_SENTINEL = '__platform__';
+
+interface AgentOption {
+  id: string;
+  title: string;
+  slug: string;
+}
+
+interface AgentsResponse {
+  agents: AgentOption[];
+}
+
+// TODO: consolidate with the near-identical fetcher in
+// src/components/chat/session-sidebar.tsx when a third caller lands.
+const agentsFetcher = async (url: string): Promise<AgentsResponse> => {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const body = await res.json();
+  if (!body?.data?.agents || !Array.isArray(body.data.agents)) {
+    throw new Error('Unexpected /api/agents response shape');
+  }
+  return body.data as AgentsResponse;
+};
 
 interface Props {
   folders: ManifestFolder[];
@@ -59,9 +88,22 @@ export function NewWorkflowForm({ folders }: Props) {
   const flat = useMemo(() => flattenTree(folders), [folders]);
   const [title, setTitle] = useState('');
   const [folderId, setFolderId] = useState(flat[0]?.id ?? '');
+  // Sentinel-initialised — Radix Select forbids value="" on SelectItem,
+  // so we keep a non-empty placeholder here and map it back to "no
+  // override" (agent: null in the seed frontmatter) on submit.
+  const [selectedAgent, setSelectedAgent] = useState(PLATFORM_AGENT_SENTINEL);
   const htmlRef = useRef<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const {
+    data: agentsData,
+    error: agentsError,
+    isLoading: agentsLoading,
+  } = useSWR<AgentsResponse>('/api/agents', agentsFetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 30_000,
+  });
 
   const onSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -88,10 +130,17 @@ export function NewWorkflowForm({ folders }: Props) {
       setSubmitting(true);
 
       // Build document content: schema defaults frontmatter + body.
+      // If no agent was selected keep the default (agent: null); if one
+      // was selected, spread its slug into the seed so the YAML is
+      // pre-populated on first open.
       const bodyMd = htmlRef.current
         ? turndown.turndown(htmlRef.current)
         : WORKFLOW_BODY_PLACEHOLDER;
-      const content = joinFrontmatter(workflowSchema.defaults(), bodyMd, workflowSchema);
+      const seedFrontmatter =
+        selectedAgent === PLATFORM_AGENT_SENTINEL || selectedAgent === ''
+          ? workflowSchema.defaults()
+          : { ...workflowSchema.defaults(), agent: selectedAgent };
+      const content = joinFrontmatter(seedFrontmatter, bodyMd, workflowSchema);
 
       try {
         const res = await fetch('/api/brain/documents', {
@@ -120,7 +169,7 @@ export function NewWorkflowForm({ folders }: Props) {
         setSubmitting(false);
       }
     },
-    [title, folderId, router],
+    [title, folderId, selectedAgent, router],
   );
 
   return (
@@ -170,6 +219,36 @@ export function NewWorkflowForm({ folders }: Props) {
           </Select>
         </div>
       )}
+
+      <div className="space-y-2">
+        <Label htmlFor="wf-run-as">Run as</Label>
+        <div className="flex items-center gap-3">
+          <Select
+            value={selectedAgent}
+            onValueChange={(v) => setSelectedAgent(v ?? '')}
+            disabled={agentsLoading}
+          >
+            <SelectTrigger id="wf-run-as" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={PLATFORM_AGENT_SENTINEL}>
+                Platform agent (unrestricted)
+              </SelectItem>
+              {agentsData?.agents.map((agent) => (
+                <SelectItem key={agent.id} value={agent.slug}>
+                  {agent.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {agentsError && (
+            <span className="shrink-0 text-sm text-muted-foreground">
+              Couldn&apos;t load agents.
+            </span>
+          )}
+        </div>
+      </div>
 
       <div className="space-y-2">
         <Label>Description</Label>

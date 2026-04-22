@@ -28,6 +28,7 @@ import {
   markCommitted,
 } from '@/lib/ingestion/attachments';
 import { populateCompactIndexForWrite } from '@/lib/write-pipeline/ingest';
+import { regenerateFolderOverview } from '@/lib/memory/overview/invalidate';
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 
@@ -275,6 +276,23 @@ export const POST = (req: Request) =>
           await markCommitted(input.attachmentId, doc.id);
         } catch (err) {
           console.error('[api/brain/documents] markCommitted failed', err);
+        }
+      }
+
+      // Auto-regenerate the folder's overview document so retrieval always
+      // has a fresh rollup. Skipped when the saved doc is itself scaffolding,
+      // a skill, agent-def, or overview (type != null) — preventing loops.
+      if (documentType == null) {
+        try {
+          await regenerateFolderOverview({
+            companyId,
+            brainId: brain.id,
+            folderPath: folder.slug ?? 'root',
+          });
+        } catch (err) {
+          // Non-fatal: overview regeneration failure should not fail the
+          // user's save. Log and move on; next successful save will retry.
+          console.error('[api/brain/documents] regenerateFolderOverview POST failed', err);
         }
       }
 

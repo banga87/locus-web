@@ -1,36 +1,36 @@
 # Mobile Navigation — Design
 
 **Date:** 2026-04-22
-**Status:** Approved (pending spec review)
+**Status:** Approved (revised after spec review)
 **Author:** Founder + Claude
-**Replaces:** current CSS-transform mobile drawer in `globals.css` and `sidebar-mobile-trigger.tsx`
+**Replaces:** current CSS-transform mobile drawer in `globals.css` (lines 1118–1152) and `sidebar-mobile-trigger.tsx`
 
 ## Problem
 
-The current mobile navigation reuses the desktop sidebar grid layout with a `transform: translateX(-100%)` slide-in triggered by a floating 44×44 button in the top-left. Two bugs:
+The current mobile navigation reuses the desktop sidebar grid layout with a `transform: translateX(-100%)` slide-in triggered by a floating 44×44 button in the top-left. Two defects:
 
 1. When the sidebar is in "rail" mode (`SidebarRail`, 56px icon-only), the mobile breakpoint doesn't hide it — the rail renders at roughly full viewport width and dominates the mobile screen.
-2. The floating trigger is off to one side with no branded context, making discovery difficult and leaving no space for future top-bar controls (search, user avatar).
+2. The floating trigger is out of visual context with no branded bar, making discovery difficult and leaving no room for future top-bar controls.
 
 ## Goals
 
-- Replace the CSS-transform drawer with a proper shadcn `Sheet` (`src/components/ui/sheet.tsx`) slide-in from the left.
-- Add a thin top app bar on mobile with hamburger + wordmark, so the trigger is unmissable and the brand stays present while the drawer is closed.
-- Leave desktop behavior untouched (grid with `SidebarRail` / `SidebarExpanded` toggle, resize handle).
+- Replace the CSS-transform drawer with a shadcn `Sheet` (`src/components/ui/sheet.tsx`) slide-in from the left.
+- Add a thin top app bar on mobile with hamburger + wordmark so the trigger is unmissable and the brand stays present while the drawer is closed.
+- Leave desktop behavior untouched.
 - Fix the rail-at-full-width bug.
-- Keep it simple — no tab bar, no bottom sheet, no redesign.
+- Keep it simple. No tab bar, no bottom sheet, no redesign.
 
 ## Non-goals
 
-- Search affordance in the top bar (reserved slot only; no implementation).
+- Search affordance in the top bar (reserved right slot only; no implementation).
 - User avatar/profile menu in the top bar.
-- Changing `useSidebarLayout` or `SidebarRail` in any way.
-- Redesigning `SidebarExpanded`.
+- Swipe-to-dismiss (Radix Dialog does not provide this natively; we would need `vaul` or a custom handler, which is out of scope).
+- Changing `useSidebarLayout`, `SidebarRail`, or `SidebarExpanded` internals.
 
 ## Breakpoint
 
 `md` (768px).
-- Below `md`: top bar + Sheet-driven nav. Desktop sidebar column is hidden.
+- Below `md`: top bar + Sheet nav. Desktop grid sidebar column is hidden.
 - `md` and up: current desktop behavior unchanged.
 
 ## Components
@@ -39,126 +39,161 @@ The current mobile navigation reuses the desktop sidebar grid layout with a `tra
 
 **File:** `src/components/shell/mobile-top-bar.tsx` (client component)
 
-- Fixed: `top-0 left-0 right-0 h-14 md:hidden z-40`.
-- Surface: `var(--surface-0)` (matches sidebar cream in light, indigo-deep in dark), 1px bottom rule using `var(--rule-1)`.
-- `env(safe-area-inset-top)` padding so notched devices don't overlap content.
-- Layout: flex row, three slots
-  - **Left** (44×44): hamburger button. Wrapped by `SheetTrigger asChild` from the `MobileNavSheet`. `aria-label="Open navigation"`.
-  - **Center**: `<Wordmark size={20} />` from `@/components/tatara` + `.brand-dot`.
-  - **Right** (44×44): empty `<div aria-hidden />` placeholder to visually balance the hamburger. No content yet.
-- Above the top bar (z-index): Sheet overlay (when open), any modal portals.
+- Fixed: `fixed top-0 left-0 right-0 h-14 md:hidden z-30`.
+  - `z-30` sits below the Sheet overlay (`z-50`), so while the Sheet is open, the overlay and Sheet content cover the top bar. That's correct — we don't want the top bar visible over the active drawer.
+- Surface: `bg-[var(--surface-0)]`, 1px bottom rule via `border-b border-[var(--rule-1)]`.
+- `style={{ paddingTop: 'env(safe-area-inset-top)' }}` so notched devices don't overlap content.
+- Content: composes children. The consumer passes the trigger (hamburger) as a child so Sheet state stays encapsulated.
+- Structural slots:
+  - Left 44×44 — `children` (will be the `SheetTrigger` hamburger passed from `MobileNavSheet`).
+  - Center — `<Wordmark size={20} />` + `.brand-dot` inside a flex center region.
+  - Right 44×44 — empty `<div aria-hidden />` placeholder (future: search/avatar).
 
 ### New: `MobileNavSheet`
 
 **File:** `src/components/shell/mobile-nav-sheet.tsx` (client component)
 
-- Wraps shadcn `<Sheet>` with `side="left"`.
-- Props: same as `SidebarExpandedProps` — `companyName`, `user`, `tree`, `pinned`, `workflowsBadge`.
-- Trigger: exposes a named export `MobileNavTrigger` (or the Sheet's `SheetTrigger asChild` pattern) so `MobileTopBar` can render its own hamburger button inside it. Implementation detail: have `MobileNavSheet` render the Sheet AND accept a child/trigger, OR split into `MobileNavSheet` (the drawer) + `MobileNavTrigger` (the button) sharing a module-level context. **Chosen approach:** single `MobileNavSheet` component that takes `trigger: ReactNode` as a prop and wraps it in `SheetTrigger asChild`. Simpler than a context.
-- State: controlled open/closed via `useState` inside the Sheet wrapper.
-- Auto-close triggers:
-  1. **Backdrop click** — native to Radix Dialog.
-  2. **Swipe-left** — native to Radix Dialog's overlay, confirmed in shadcn's Sheet default.
-  3. **Close button** (shadcn's default X in `SheetContent`) — native.
-  4. **Nav link tap** — attach a single `onClick` on the `SheetContent`'s inner wrapper that calls `setOpen(false)` if `event.target` or an ancestor within `SheetContent` is an `<a>` tag. Cheap + robust.
-  5. **Pathname change safety net** — `useEffect` on `usePathname()` from `next/navigation`: when the pathname changes, close the sheet. Handles programmatic router.push cases.
-- Width: `className="w-[85vw] sm:max-w-sm p-0"` on `SheetContent`. The `p-0` lets `SidebarExpanded` own its own padding.
-- Content: `<SidebarExpanded {...props} />` — unchanged. Rendered directly, NOT via `<Sidebar>` (which would re-read `useSidebarLayout()` and could render `SidebarRail` if the desktop collapsed cookie is set).
-- Accessibility: `aria-label="Navigation menu"` on `SheetContent` (or visually-hidden `SheetTitle`). Radix manages focus trap, aria-expanded on trigger, scroll lock, focus return on close.
+A single Sheet root wraps both the trigger (hamburger) and the content (`SidebarExpanded`), so state stays internal to Radix and we don't prop-drill open/close.
+
+**Composition (chosen shape):** The component returns a single `<Sheet>` root whose children are the trigger and content as siblings. The trigger is intended to be rendered in the top bar's left slot; because Radix uses React context, the trigger and content share the same root no matter where they render in the tree — but putting them as siblings is the canonical pattern and is how shadcn examples work.
+
+```tsx
+'use client';
+import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { Sheet, SheetTrigger, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { VisuallyHidden } from 'radix-ui'; // or an equivalent utility
+import { Icon } from '@/components/tatara';
+import { SidebarExpanded } from './sidebar/sidebar-expanded';
+
+export function MobileNavSheet(props: SidebarExpandedProps) {
+  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Auto-close on route change (the only auto-close mechanism we use).
+  useEffect(() => { setOpen(false); }, [pathname]);
+
+  // Close if viewport crosses into desktop while open.
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const onChange = (e: MediaQueryListEvent) => { if (e.matches) setOpen(false); };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <button
+          type="button"
+          aria-label="Open navigation"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)]"
+        >
+          <Icon name="Menu" size={20} />
+        </button>
+      </SheetTrigger>
+      <SheetContent
+        side="left"
+        showCloseButton={false}
+        className="w-[85vw] max-w-[320px] p-0 gap-0 rounded-none border-0 shadow-xl"
+      >
+        <VisuallyHidden.Root>
+          <SheetTitle>Navigation</SheetTitle>
+          <SheetDescription>Primary navigation menu</SheetDescription>
+        </VisuallyHidden.Root>
+        <SidebarExpanded {...props} />
+      </SheetContent>
+    </Sheet>
+  );
+}
+```
+
+**Key decisions recorded inline above:**
+- `showCloseButton={false}` — prevents the shadcn default close X from colliding with `SidebarExpanded`'s brand row. Users close via: Esc, backdrop tap, or tapping any nav link (which triggers the pathname-change auto-close).
+- `className="w-[85vw] max-w-[320px] p-0 gap-0 rounded-none border-0 shadow-xl"` — explicitly overrides the `SheetContent` defaults (`rounded-[var(--radius-md)]`, `border`, `gap-4`, `w-3/4 sm:max-w-sm`) so the drawer is a flush-left full-height panel with `SidebarExpanded`'s own padding.
+- **Auto-close is exclusively pathname-based** (one mechanism, not two). A click handler on the content tree would race `router.push` and cause focus-return flicker. A single `useEffect` on `usePathname()` is deterministic and sufficient because every link in `SidebarExpanded` navigates.
+- Trigger is a plain `<button>` inside `SheetTrigger asChild`. Radix wires `aria-expanded`, `aria-controls`, and focus return automatically.
 
 ### Modified: `new-app-shell.tsx`
 
-**File:** `src/components/shell/new-app-shell.tsx`
-
-Current (35 lines):
 ```tsx
-<div className="app">
-  <Sidebar {...props} workflowsBadge={workflowsBadge} />
-  <ResizeHandle />
-  <section className="main">
-    <SidebarMobileTrigger />
-    {children}
-  </section>
-</div>
+export function NewAppShell({ children, workflowsBadge, ...props }: NewAppShellProps) {
+  return (
+    <div className="app">
+      <MobileTopBar>
+        <MobileNavSheet {...props} workflowsBadge={workflowsBadge} />
+      </MobileTopBar>
+      <Sidebar {...props} workflowsBadge={workflowsBadge} />
+      <ResizeHandle />
+      <section className="main">
+        {children}
+      </section>
+    </div>
+  );
+}
 ```
 
-New:
-```tsx
-<div className="app">
-  <MobileTopBar
-    sheet={
-      <MobileNavSheet
-        companyName={companyName}
-        user={user}
-        tree={tree}
-        pinned={pinned}
-        workflowsBadge={workflowsBadge}
-      />
-    }
-  />
-  <Sidebar {...props} workflowsBadge={workflowsBadge} />
-  <ResizeHandle />
-  <section className="main">
-    {children}
-  </section>
-</div>
-```
+Note: `MobileNavSheet` renders BOTH its own `SheetTrigger` (the hamburger) AND the `SheetContent`. The trigger slots itself into `MobileTopBar`'s left region via the Tailwind layout (flex row); the content is portaled to the `<body>` by Radix so its DOM position doesn't matter.
 
-The old `<SidebarMobileTrigger />` is removed from the `.main` section.
-
-Alternative compositional shape (equivalent):
-- `<MobileTopBar>` owns the hamburger button and accepts `onMenuClick`. State lives in a higher-up wrapper. Slightly more prop-drilling.
-- **Chosen:** the `MobileTopBar` takes a `sheet` ReactNode slot. The `MobileNavSheet` renders both its own trigger (the hamburger, passed as a prop back to MobileTopBar) AND the Sheet — keeping open state encapsulated.
-
-**Refined composition decision** — to avoid circular prop passing:
-- `MobileNavSheet` owns open state AND renders the trigger button AND renders the Sheet.
-- `MobileTopBar` accepts `leftSlot: ReactNode` and places whatever is passed in. The hamburger comes from `MobileNavSheet`'s exported trigger.
-- Cleanest: `MobileTopBar` accepts its children shape; the parent composes:
-  ```tsx
-  <MobileTopBar>
-    <MobileNavSheet {...sidebarProps} />
-  </MobileTopBar>
-  ```
-  where `MobileNavSheet` returns `<><SheetTrigger>hamburger</SheetTrigger><SheetContent>...</SheetContent></Sheet>` as siblings. Since `Sheet` wraps both trigger and content, they share state.
+The `SidebarMobileTrigger` import is removed. The `<SidebarMobileTrigger />` element is removed from inside `.main`.
 
 ### Modified: `globals.css`
 
-Remove:
-- `@media (max-width: 767px) { .app { grid-template-columns: 1fr; } .side, .side-rail { ... position: fixed; transform ... } ... }` (lines ~1118–1137)
-- `.sidebar-mobile-trigger { ... }` rule and its `@media` (lines ~1139–1152)
+**Remove** (lines ~1118–1152):
+```css
+@media (max-width: 767px) {
+  .app { grid-template-columns: 1fr; }
+  .side, .side-rail { position: fixed; ... transform: translateX(-100%); ... }
+  .app[data-sidebar-mobile-open="true"] .side, ... { transform: translateX(0); ... }
+  .sidebar-resize-handle { display: none; }
+}
 
-Add:
-- No new CSS. `.side` being hidden on mobile is handled by Tailwind `hidden md:block` added to the `<aside className="side ...">` in `sidebar-expanded.tsx` and `sidebar-rail.tsx`, OR by a single CSS rule `@media (max-width: 767px) { .side, .side-rail { display: none; } .app { grid-template-columns: 1fr; } }`. Chosen: keep a small CSS block since `.side` already lives in CSS; don't scatter Tailwind.
+.sidebar-mobile-trigger { ... }
+@media (max-width: 767px) { .sidebar-mobile-trigger { display: grid; place-items: center; } }
+```
 
-Final mobile CSS:
+**Replace with** (same location):
 ```css
 @media (max-width: 767px) {
   .app { grid-template-columns: 1fr; }
   .side, .side-rail, .sidebar-resize-handle { display: none; }
+  .main { padding-top: 56px; } /* reserve space for the fixed top bar (h-14) */
 }
-```
 
-Hide the `.brand-collapse` button (the desktop collapse toggle that lives inside `SidebarExpanded`'s brand row) when inside the Sheet:
-```css
+/* Hide the desktop "collapse sidebar" button when SidebarExpanded is rendered
+   inside the mobile Sheet — the button is meaningless there. */
 [data-slot="sheet-content"] .brand-collapse { display: none; }
 ```
-This relies on Radix adding `data-slot="sheet-content"` — already present in `src/components/ui/sheet.tsx`.
+
+**Verified class names** (sidebar-rail.tsx line 18 confirms `<aside className="side side-rail">`, sidebar-expanded.tsx line 42 confirms `<aside className="side">`). Both selectors hit.
+
+**Input font-size mobile floor** (from prior mobile work) is not affected.
 
 ### Deleted
 
 - `src/components/shell/sidebar/sidebar-mobile-trigger.tsx`
-- Its export from any barrel file (if any — grep to confirm).
+- Expect `grep -r SidebarMobileTrigger src/` to find only `new-app-shell.tsx`; delete that import too.
+
+## Accessibility requirements
+
+- **Hamburger button:** `aria-label="Open navigation"`, `focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)]`. Radix adds `aria-expanded` and `aria-controls` automatically.
+- **Sheet content:** MUST include a `<SheetTitle>` (visually hidden is fine). Without it, Radix logs a dev-mode accessibility warning. Also include `<SheetDescription>` for screen-reader context. The spec uses `radix-ui`'s `VisuallyHidden` utility (already a transitive dep of the shadcn setup); confirm availability during implementation — if unavailable, use an inline `className="sr-only"` span.
+- **Active nav link:** `SidebarExpanded` should ideally mark the current route with `aria-current="page"`. The current file doesn't do this. Out of scope for THIS spec — filed as future work.
+- **Body scroll lock:** Radix handles when Sheet opens.
+- **Focus trap + focus return:** Radix handles.
+- **Escape key:** Radix handles.
 
 ## Data flow
 
 ```
 NewAppShell (server component)
 │
-├── MobileTopBar (client, md:hidden)
+├── MobileTopBar (client, visible <md)
 │   └── MobileNavSheet (client)
-│       ├── SheetTrigger (hamburger button in top bar)
-│       └── SheetContent
-│           └── SidebarExpanded (client)
+│       ├── <SheetTrigger asChild><button>hamburger</button></SheetTrigger>  (rendered in top bar)
+│       └── <SheetContent side="left">  (portaled to <body> while open)
+│           ├── <VisuallyHidden><SheetTitle/><SheetDescription/></VisuallyHidden>
+│           └── SidebarExpanded (client) — unchanged
 │               ├── Wordmark, WorkspaceRow
 │               ├── nav links, workflowsBadge
 │               ├── BrainSection, PinnedSection
@@ -166,45 +201,49 @@ NewAppShell (server component)
 │               └── user-row
 │
 └── .app grid (visible md+ only)
-    ├── Sidebar (rail or expanded)
+    ├── Sidebar → SidebarRail | SidebarExpanded (driven by useSidebarLayout, unchanged)
     ├── ResizeHandle
     └── main
         └── {children}
 ```
 
-`workflowsBadge` (server component) is rendered once by the route layout and passed into `NewAppShell` as a prop. The same node is passed into both `Sidebar` (desktop) and `MobileNavSheet` (mobile). Since it's rendered at most once per render pass (React reconciles duplicates fine), this is safe.
+Mobile path renders `SidebarExpanded` **directly**, never via `<Sidebar>`. This is how we bypass `useSidebarLayout()` on mobile so the desktop collapsed-rail cookie cannot leak into the Sheet.
 
-## Error handling & edge cases
+`workflowsBadge` is a server component (`global-run-badge.tsx`, `async`, uses `db` directly). Its rendered React node is passed to both `Sidebar` (desktop) and `MobileNavSheet` (mobile). Only one path is visible at a time via CSS. React has no problem rendering the same server-rendered node in two places.
 
-- **Sheet open on resize to desktop:** `useEffect` listener on `window.matchMedia('(min-width: 768px)').addEventListener('change', e => e.matches && setOpen(false))`. Prevents the Sheet from being "stuck" open when rotating iPad portrait → landscape into desktop layout.
-- **Cookie-driven collapse state leaks into Sheet:** prevented by rendering `SidebarExpanded` directly, not via `<Sidebar>`.
-- **Duplicate DOM from `workflowsBadge`:** both `Sidebar` (desktop) and `MobileNavSheet` (mobile) render the same server component. Only one is visible at a time (mobile vs desktop, via CSS display). Not a functional bug; React won't complain. If the badge runs expensive client logic, we could conditionally render — but as a pure SC, it's fine.
-- **Focus return:** Radix returns focus to the trigger on close. Verified by shadcn docs; nothing to implement.
-- **Link taps that do NOT change route** (e.g. `#` anchors): auto-close on link click still fires. Acceptable.
-- **Keyboard escape:** Radix handles. `aria-label` required because there's no `SheetTitle` in the default composition — either add a visually-hidden `SheetTitle`/`SheetDescription` pair, or pass `aria-label` on `SheetContent`. Prefer visually-hidden `SheetTitle` + `SheetDescription` for screen-reader completeness.
+## Edge cases & error handling
+
+- **Viewport crosses into desktop while Sheet is open** → `useEffect` with `matchMedia('(min-width: 768px)')` listener closes the Sheet (code above).
+- **Programmatic navigation** (agent redirects, middleware-driven) → pathname-change `useEffect` closes the Sheet.
+- **Anchor link to a hash on the same page** → pathname doesn't change, Sheet stays open. Acceptable (a `#section` jump on mobile inside the drawer is weird but not broken; the overlay stays up and the user can dismiss via Esc or backdrop).
+- **Sheet content overflow** → `SidebarExpanded` already handles its own overflow; `SheetContent` flex-column with `p-0` lets the child scroll naturally. Add `overflow-y-auto` explicitly on `SheetContent` if the child doesn't.
+- **Dark theme** → `bg-[var(--surface-0)]` resolves correctly; tokens already theme-switch via `data-theme="dark"`.
+- **Animation reduce-motion** → Radix respects `prefers-reduced-motion` by default for the slide transform.
 
 ## Testing
 
-- **Manual:**
-  - 375×667 (iPhone SE), 390×844 (iPhone 14), 768×1024 (iPad portrait), 1440×900 (desktop)
-  - Light + dark themes
-  - Tap hamburger → Sheet opens; tap backdrop → closes; swipe left → closes; tap nav link → closes + navigates; rotate iPad to desktop → Sheet closes; keyboard Esc → closes
-  - Focus-visible ring on hamburger when focused by keyboard tabs
-- **Unit:** one Vitest in `src/components/shell/sidebar/__tests__/mobile-nav-sheet.test.tsx`:
-  - Clicking a nav link inside `SheetContent` calls `onOpenChange(false)`.
-  - Can be deferred per keep-simple directive; low priority.
+**Manual (required):**
+- 375×667, 390×844, 768×1024 (crossing breakpoint), 1440×900
+- Light + dark
+- Tap hamburger → drawer slides in left
+- Tap backdrop → drawer closes
+- Tap a nav link (e.g. `/home`) → drawer closes + route changes
+- Press Esc while drawer open → drawer closes
+- Rotate iPad portrait → landscape crossing 768 → drawer closes
+- Keyboard: Tab focuses hamburger; Enter opens; Tab cycles inside drawer only; Esc closes; focus returns to hamburger
+- Verify Radix does NOT log an a11y warning in dev about missing SheetTitle
 
-## Out of scope
-
-- Bottom tab bar.
-- Gestures beyond Radix defaults (no pinch, no pull-to-refresh).
-- Theme toggle relocation to top bar.
-- Top bar content beyond wordmark + hamburger + placeholder.
+**Automated (optional, defer):**
+- Vitest: `MobileNavSheet` closes when `usePathname` changes. Low priority.
 
 ## Implementation notes for the plan step
 
-- `shadcn/ui` Sheet is already installed at `src/components/ui/sheet.tsx`. No new dependency.
-- `Wordmark`, `Icon` from `@/components/tatara`, `Link` from `next/link`, `usePathname` from `next/navigation`.
-- `SidebarExpanded` is a `'use client'` component; it will run fine inside the Sheet.
-- Visit every file that imports `SidebarMobileTrigger` and remove the import. Grep expected to find only `new-app-shell.tsx`.
-- Remove the `sidebar-mobile-trigger` lines from `globals.css` and the associated `@media (max-width: 767px)` blocks around lines 1118–1152.
+- shadcn Sheet already installed at `src/components/ui/sheet.tsx`. No new dependency.
+- `VisuallyHidden` from `radix-ui` — confirm import path (`radix-ui`'s `VisuallyHidden` submodule) before writing it; a `<span className="sr-only">` with the same content is an acceptable fallback.
+- Keep all existing `Wordmark`, `Icon`, `Sidebar`, `SidebarExpanded`, `SidebarRail`, `ResizeHandle`, `useSidebarLayout` internals unchanged.
+- Rail's `.side-rail` element also has class `.side` (rail line 18: `"side side-rail"`) — the CSS `display: none` rule on `.side, .side-rail` is redundant-but-explicit; safe.
+- After deletion, grep `src/` for `sidebar-mobile-trigger` and `SidebarMobileTrigger` to confirm zero references remain.
+
+## Rollback
+
+Revert the commit series. No schema changes, no env vars, no data migrations.

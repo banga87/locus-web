@@ -47,7 +47,7 @@ describe('agent wizard input validation', () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects reserved slug 'platform-agent'", () => {
+  it("accepts slug 'platform-agent' (no longer reserved)", () => {
     const result = agentWizardInputSchema.safeParse({
       title: 'Platform Agent',
       slug: 'platform-agent',
@@ -56,7 +56,7 @@ describe('agent wizard input validation', () => {
       skillIds: [],
       systemPromptSnippet: '',
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 });
 

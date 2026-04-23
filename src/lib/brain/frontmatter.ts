@@ -173,12 +173,6 @@ export interface WorkflowFrontmatter {
   requires_mcps: string[];
   /** Cron string (reserved for Phase 2) or null. */
   schedule: string | null;
-  /**
-   * Agent slug to run this workflow as, or null to use the platform default.
-   * 'platform-agent' is normalised to null (it is the reserved default value).
-   * Must match /^[a-z0-9-]+$/ and be 1–128 characters if set.
-   */
-  agent: string | null;
 }
 
 /**
@@ -219,9 +213,6 @@ export type WorkflowFrontmatterResult =
 
 const WORKFLOW_OUTPUT_VALUES: WorkflowOutput[] = ['document', 'message', 'both'];
 
-/** Slug pattern for the workflow `agent` field: lowercase alphanumeric + hyphen. */
-const AGENT_SLUG_RE = /^[a-z0-9-]+$/;
-
 /**
  * Validate a raw frontmatter object as `WorkflowFrontmatter`. Accepts any
  * `unknown` input and returns a tagged-union result so callers can branch
@@ -233,11 +224,8 @@ const AGENT_SLUG_RE = /^[a-z0-9-]+$/;
  *   - `requires_mcps` must be an array of strings; missing → invalid
  *   - `output_category` may be string, null, or absent (absent → null)
  *   - `schedule` may be string, null, or absent (absent → null)
- *   - `agent` may be string, null, or absent (absent → null); the literal
- *     `'platform-agent'` is normalised to null; other strings must match
- *     `/^[a-z0-9-]+$/` and be 1–128 characters
  *
- * On success, `output_category`, `schedule`, and `agent` are always present
+ * On success, `output_category` and `schedule` are always present
  * in the returned `value` — absence in the input is normalised to `null`.
  */
 export function validateWorkflowFrontmatter(
@@ -296,25 +284,6 @@ export function validateWorkflowFrontmatter(
     errors.push({ field: 'schedule', message: 'must be a string or null' });
   }
 
-  // agent — optional string or null; 'platform-agent' is reserved and normalised to null;
-  // other strings must match /^[a-z0-9-]+$/ and be 1–128 characters
-  let agentValue: string | null = null;
-  if ('agent' in fm && fm['agent'] !== null && fm['agent'] !== undefined) {
-    if (typeof fm['agent'] !== 'string') {
-      errors.push({ field: 'agent', message: 'must be a string or null' });
-    } else if (fm['agent'] === 'platform-agent') {
-      // reserved literal — normalise to null (leave agentValue as null)
-    } else if (fm['agent'].length === 0 || fm['agent'].length > 128 || !AGENT_SLUG_RE.test(fm['agent'])) {
-      errors.push({
-        field: 'agent',
-        message:
-          'must be a lowercase alphanumeric slug (a-z, 0-9, hyphen), 1–128 characters',
-      });
-    } else {
-      agentValue = fm['agent'];
-    }
-  }
-
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -331,7 +300,6 @@ export function validateWorkflowFrontmatter(
       requires_mcps: fm['requires_mcps'] as string[],
       schedule:
         'schedule' in fm ? (fm['schedule'] as string | null) : null,
-      agent: agentValue,
     },
   };
 }

@@ -8,7 +8,6 @@ describe('workflowSchema', () => {
       output: 'document',
       output_category: null,
       requires_mcps: [],
-      agent: null,
       schedule: null,
     });
   });
@@ -27,7 +26,6 @@ describe('workflowSchema', () => {
         output: 'message',
         output_category: 'Reports',
         requires_mcps: ['sentry'],
-        agent: null,
         schedule: null,
       });
     }
@@ -43,12 +41,11 @@ describe('workflowSchema', () => {
     expect(r.ok).toBe(false);
   });
 
-  it('has five fields in spec-declared order', () => {
+  it('has four fields in spec-declared order', () => {
     expect(workflowSchema.fields.map((f) => f.name)).toEqual([
       'output',
       'output_category',
       'requires_mcps',
-      'agent',
       'schedule',
     ]);
   });

@@ -34,11 +34,7 @@ export const agentWizardInputSchema = z.object({
     .string()
     .regex(/^[a-z0-9-]+$/)
     .min(1)
-    .max(128)
-    // Prevent user agents from shadowing the synthetic 'platform-agent' default.
-    .refine((s) => s !== 'platform-agent', {
-      message: "'platform-agent' is reserved — choose a different slug",
-    }),
+    .max(128),
   model: z.enum(ALLOWED_MODELS),
   toolAllowlist: z.array(z.string()).optional(),
   baselineDocIds: z.array(z.string().uuid()),

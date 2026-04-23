@@ -29,6 +29,7 @@ import {
 } from '@/lib/ingestion/attachments';
 import { populateCompactIndexForWrite } from '@/lib/write-pipeline/ingest';
 import { regenerateFolderOverview } from '@/lib/memory/overview/invalidate';
+import { triggerEmbeddingFor } from '@/lib/memory/embedding/trigger';
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 
@@ -277,6 +278,20 @@ export const POST = (req: Request) =>
         } catch (err) {
           console.error('[api/brain/documents] markCommitted failed', err);
         }
+      }
+
+      // Phase 2: enqueue embedding generation. Fire-and-forget; the
+      // workflow runs out-of-band and updates documents.embedding when it
+      // completes. A failure here shouldn't fail the user's save, so wrap
+      // in try/catch with a log.
+      try {
+        await triggerEmbeddingFor({
+          documentId: doc.id,
+          companyId,
+          brainId: brain.id,
+        });
+      } catch (err) {
+        console.error('[api/brain/documents POST] triggerEmbeddingFor failed', err);
       }
 
       // Auto-regenerate the folder's overview document so retrieval always

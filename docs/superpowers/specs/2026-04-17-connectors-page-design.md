@@ -6,7 +6,7 @@
 
 ## Motivation
 
-Outbound tool connections are central to the Platform Agent's value — they're what makes the agent useful beyond Locus itself. Today:
+Outbound tool connections are central to the Platform Agent's value — they're what makes the agent useful beyond Tatara itself. Today:
 
 1. **The sidebar link is broken.** `SidebarExpanded` links to `/mcp`, which is a 404. The real page lives at `/settings/mcp-connections`.
 2. **The add-connector flow is raw.** Paste a server URL, paste a bearer token. Works, but has no product framing and no affordance for "here are things you can connect."
@@ -15,7 +15,7 @@ Outbound tool connections are central to the Platform Agent's value — they're 
 
 This spec promotes outbound connections to a sidebar-level surface modelled on claude.ai/settings/connectors, with a curated catalog + one-click OAuth via MCP's standard DCR spec, and a "Custom connector" escape hatch for power users pointing at arbitrary MCP endpoints.
 
-Inbound concerns — the per-user OAuth clients listed under "Connected apps", and the company-level "Access tokens" — stay on `/settings/agent-access` untouched. They serve a different job (audit/revoke of *things that act in Locus*) and the two-page split was intentional; revisiting that page is a separate pass after this lands.
+Inbound concerns — the per-user OAuth clients listed under "Connected apps", and the company-level "Access tokens" — stay on `/settings/agent-access` untouched. They serve a different job (audit/revoke of *things that act in Tatara*) and the two-page split was intentional; revisiting that page is a separate pass after this lands.
 
 ## Decisions taken during brainstorming
 

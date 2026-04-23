@@ -14,15 +14,15 @@ Fill in observed behavior next to each item.
 ## Happy path — Chrome (clean profile)
 
 - [ ] In Claude Code, run `claude mcp add --transport http locus https://<preview>.vercel.app/api/mcp`.
-- [ ] First tool call opens a browser tab. Logged out of Locus → redirected to `/login`.
+- [ ] First tool call opens a browser tab. Logged out of Tatara → redirected to `/login`.
 - [ ] Log in. Consent page renders with client name "Claude Code" and the description.
-- [ ] Click Connect. See the branded success screen with "Connected to Locus".
+- [ ] Click Connect. See the branded success screen with "Connected to Tatara".
 - [ ] Claude Code reports the tool call worked.
 - [ ] Hit a second tool call. Uses the cached token. Succeeds without reopening the browser.
 
 ## Happy path — already logged in
 
-- [ ] Same flow but start already logged into Locus. Consent page renders immediately without a login detour.
+- [ ] Same flow but start already logged into Tatara. Consent page renders immediately without a login detour.
 
 ## Other browsers
 

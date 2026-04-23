@@ -1,4 +1,4 @@
-# Locus attachment extractor fixture
+# Tatara attachment extractor fixture
 
 This markdown file is read verbatim by `extractPlainText` and
 `extractByMime('text/markdown', …)` in the unit tests. The distinctive

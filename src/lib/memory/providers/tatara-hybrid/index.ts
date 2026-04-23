@@ -9,6 +9,7 @@ import { brains } from '@/db/schema/brains';
 import { documents } from '@/db/schema/documents';
 import { retrieve } from '../../core';
 import { regenerateFolderOverview } from '../../overview/invalidate';
+import { triggerEmbeddingFor } from '../../embedding/trigger';
 import type {
   CallerContext,
   Doc,
@@ -94,18 +95,39 @@ export const tataraHybridProvider: MemoryProvider = {
     );
   },
 
-  async invalidateDocument(): Promise<void> {
-    // No-op in Phase 1. Phase 2+ will invalidate embeddings here.
+  async invalidateDocument(
+    slug: string,
+    companyId: string,
+    brainId: string,
+  ): Promise<void> {
+    // Resolve slug → documentId via the tenant-scoped read.
+    const [row] = await db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.slug, slug),
+          eq(documents.companyId, companyId),
+          eq(documents.brainId, brainId),
+        ),
+      )
+      .limit(1);
+    if (!row) return;                                // unknown slug — silent no-op
+    await triggerEmbeddingFor({
+      documentId: row.id,
+      companyId,
+      brainId,
+    });
   },
 
   describe(): ProviderCapabilities {
     return {
       name: 'tatara-hybrid',
       supports: {
-        factLookup: false,
-        graphTraverse: false,
-        timeline: false,
-        embeddings: false,
+        factLookup: false,           // Phase 3
+        graphTraverse: false,        // Phase 5
+        timeline: false,             // Phase 3
+        embeddings: true,            // Phase 2
       },
     };
   },

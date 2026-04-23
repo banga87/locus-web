@@ -49,6 +49,23 @@ describe('openaiEmbedder', () => {
     expect(out[0].promptTokens + out[1].promptTokens + out[2].promptTokens).toBe(30);
   });
 
+  it('embedMany() puts the remainder tokens on the first result', async () => {
+    const fakeVec = new Array(EMBEDDING_DIMENSION).fill(0.5);
+    embedManyMock.mockResolvedValueOnce({
+      embeddings: [fakeVec, fakeVec, fakeVec],
+      usage: { tokens: 31 },
+    });
+
+    const out = await openaiEmbedder.embedMany(['a', 'b', 'c']);
+
+    // Total preserved exactly: floor(31/3) = 10, remainder = 1.
+    // So out[0] gets 11, out[1] and out[2] get 10 each. Sum = 31.
+    expect(out[0].promptTokens).toBe(11);
+    expect(out[1].promptTokens).toBe(10);
+    expect(out[2].promptTokens).toBe(10);
+    expect(out[0].promptTokens + out[1].promptTokens + out[2].promptTokens).toBe(31);
+  });
+
   it('describe() returns the model id and dimension', () => {
     expect(openaiEmbedder.describe()).toEqual({
       model: EMBEDDING_MODEL_ID,

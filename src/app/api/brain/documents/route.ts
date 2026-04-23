@@ -20,7 +20,7 @@ import { decodeCursor, encodeCursor } from '@/lib/api/pagination';
 import { created, error, paginated } from '@/lib/api/response';
 import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import { getBrainForCompany } from '@/lib/brain/queries';
-import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
+import { validateSkillTrigger } from '@/lib/brain/frontmatter';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import { extractDocumentTypeFromContent } from '@/lib/brain/save';
 import {
@@ -168,26 +168,27 @@ export const POST = (req: Request) =>
     // lookups can hit the index instead of parsing content.
     const documentType = extractDocumentTypeFromContent(input.content);
 
-    // Phase 1.5 workflow-doc frontmatter sync: mirrors the PATCH route's
+    // Phase 1.5 skill-trigger frontmatter sync: mirrors the PATCH route's
     // logic (see /api/brain/documents/[id]/route.ts). When the new doc is a
-    // workflow, parse the YAML body and seed metadata with the authored
-    // fields so the trigger route's preflight reads the right values on the
-    // very first run — without this, a freshly-created workflow doc has no
-    // `output`/`requires_mcps` in metadata and every Run click fails
+    // skill AND its YAML frontmatter carries a nested `trigger:` block, parse
+    // it and seed `metadata.trigger` with the authored fields so the trigger
+    // route's preflight reads the right values on the very first run —
+    // without this, a freshly-created triggerable skill has no
+    // `output`/`requires_mcps` in metadata.trigger and every Run click fails
     // validation until the doc is saved at least once.
     //
-    // Silent-skip policy: invalid YAML or an invalid workflow frontmatter
-    // shape does not block creation. Trigger-time validation catches bad
-    // shapes at run time.
+    // Silent-skip policy: invalid YAML, missing `trigger:` key, or an invalid
+    // trigger-block shape does not block creation. Trigger-time validation
+    // catches bad shapes at run time.
     //
-    // Silent-skip preserves empty workflowMetadata on any invalid/missing
-    // frontmatter. Consequence: a new workflow doc with malformed frontmatter
-    // will have no workflow fields in metadata until the next save with a
-    // valid block. Trigger-time preflight will fail loudly rather than
-    // running with stale or missing values — this is intentional for POST
-    // (no existing metadata to preserve) and mirrors the PATCH semantics.
-    let workflowMetadata: Record<string, unknown> = {};
-    if (documentType === 'workflow') {
+    // Silent-skip preserves empty triggerPatch on any invalid/missing trigger
+    // block. Consequence: a new skill doc with malformed trigger YAML will
+    // have no trigger fields in metadata until the next save with a valid
+    // block. Trigger-time preflight will fail loudly rather than running with
+    // stale or missing values — this is intentional for POST (no existing
+    // metadata to preserve) and mirrors the PATCH semantics.
+    let triggerPatch: { trigger?: Record<string, unknown> } = {};
+    if (documentType === 'skill') {
       // CRLF-safe: \r? handles Windows line endings. Without it, content
       // pasted from a Windows editor silently skips the sync even when the
       // frontmatter block is structurally valid.
@@ -195,14 +196,21 @@ export const POST = (req: Request) =>
       if (fmMatch) {
         try {
           const parsed = yaml.load(fmMatch[1]) as unknown;
-          const validated = validateWorkflowFrontmatter(parsed);
-          if (validated.ok) {
-            workflowMetadata = {
-              output: validated.value.output,
-              output_category: validated.value.output_category,
-              requires_mcps: validated.value.requires_mcps,
-              schedule: validated.value.schedule,
-            };
+          if (parsed && typeof parsed === 'object') {
+            const fm = parsed as Record<string, unknown>;
+            if ('trigger' in fm && fm['trigger'] !== undefined) {
+              const validated = validateSkillTrigger(fm['trigger']);
+              if (validated.ok) {
+                triggerPatch = {
+                  trigger: {
+                    output: validated.value.output,
+                    output_category: validated.value.output_category,
+                    requires_mcps: validated.value.requires_mcps,
+                    schedule: validated.value.schedule,
+                  },
+                };
+              }
+            }
           }
         } catch {
           // YAML parse error — skip sync; trigger-time validation will catch it.
@@ -229,7 +237,7 @@ export const POST = (req: Request) =>
           type: documentType,
           metadata: {
             outbound_links: parseOutboundLinks(input.content),
-            ...workflowMetadata,
+            ...triggerPatch,
           },
           version: 1,
         })

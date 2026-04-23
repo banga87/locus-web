@@ -22,7 +22,7 @@ import { withAuth, requireCompany } from '@/lib/api/handler';
 import { error, success } from '@/lib/api/response';
 import { parseOutboundLinks } from '@/lib/brain-pulse/markdown-links';
 import { getBrainForCompany } from '@/lib/brain/queries';
-import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
+import { validateSkillTrigger } from '@/lib/brain/frontmatter';
 import { tryRegenerateManifest } from '@/lib/brain/manifest-regen';
 import { extractDocumentTypeFromContent } from '@/lib/brain/save';
 import {
@@ -203,33 +203,39 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
 
     // Recompute outbound_links when content changes; preserve other metadata fields.
     //
-    // Workflow-doc frontmatter sync (Phase 1.5): when the updated content
-    // resolves to `type: workflow`, parse the YAML frontmatter from the body
-    // and mirror the authored fields (output, output_category, requires_mcps,
-    // schedule) into `documents.metadata`. The trigger route's preflight reads
-    // these from metadata — without this sync, user edits to requires_mcps in
-    // the body are silently invisible at run time.
+    // Skill-trigger frontmatter sync (Phase 1.5): when the updated content
+    // resolves to `type: skill` AND the YAML frontmatter carries a nested
+    // `trigger:` block, parse the block and mirror the authored fields
+    // (output, output_category, requires_mcps, schedule) under
+    // `documents.metadata.trigger`. The trigger route's preflight reads this
+    // sub-object — without this sync, user edits to requires_mcps in the body
+    // are silently invisible at run time.
     //
-    // Silent-skip policy: invalid YAML or an invalid workflow-frontmatter
-    // shape does not block the save. Users save half-edited YAML mid-thought;
-    // we don't want to fight them. The trigger-time preflight +
-    // validateWorkflowFrontmatter catches bad shapes at run time.
+    // Silent-skip policy: invalid YAML, missing `trigger:` key, or an invalid
+    // trigger-block shape does not block the save. Users save half-edited YAML
+    // mid-thought; we don't want to fight them. On skip we preserve the
+    // existing `metadata.trigger` sub-object verbatim so stale values stay
+    // stable until the user re-saves with a valid block. The trigger-time
+    // validator + preflight catches bad shapes at run time.
     //
     // Uses js-yaml (not parseFrontmatterRaw in save.ts) because the hand-rolled
-    // parser there doesn't handle YAML arrays like `requires_mcps: [a, b]`.
+    // parser there doesn't handle YAML arrays like `requires_mcps: [a, b]` or
+    // nested mappings like the `trigger:` block.
     let metadataUpdate: { metadata?: unknown } = {};
     if (patch.content !== undefined) {
       const existingMetadata =
         (existing.metadata as Record<string, unknown> | null) ?? {};
 
-      // Silent-skip preserves existingMetadata on any invalid/missing frontmatter.
-      // Consequence: removing a required field (e.g. requires_mcps) from the body
-      // does NOT clear it from metadata — trigger-time preflight will still enforce
-      // the stale value until the user either restores the field with a new value
-      // or the doc is saved with a valid frontmatter block. This is intentional:
-      // we don't want to clobber metadata on every half-edited save.
-      let workflowMetadata: Record<string, unknown> = {};
-      if (newType === 'workflow') {
+      // Silent-skip preserves existingMetadata on any invalid/missing
+      // frontmatter — including the `trigger` sub-object. Consequence:
+      // removing a required trigger field (e.g. requires_mcps) from the body
+      // does NOT clear metadata.trigger — trigger-time preflight will still
+      // enforce the stale value until the user either restores the field with
+      // a new value or the doc is saved with a valid trigger block. This is
+      // intentional: we don't want to clobber metadata.trigger on every
+      // half-edited save.
+      let triggerPatch: { trigger?: Record<string, unknown> } = {};
+      if (newType === 'skill') {
         // CRLF-safe: \r? handles Windows line endings. Content pasted from
         // Windows editors uses \r\n; without \r? the match silently fails and
         // the sync no-ops even though the frontmatter block is structurally
@@ -238,18 +244,26 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
         if (fmMatch) {
           try {
             const parsed = yaml.load(fmMatch[1]) as unknown;
-            const validated = validateWorkflowFrontmatter(parsed);
-            if (validated.ok) {
-              workflowMetadata = {
-                output: validated.value.output,
-                output_category: validated.value.output_category,
-                requires_mcps: validated.value.requires_mcps,
-                schedule: validated.value.schedule,
-              };
+            if (parsed && typeof parsed === 'object') {
+              const fm = parsed as Record<string, unknown>;
+              if ('trigger' in fm && fm['trigger'] !== undefined) {
+                const validated = validateSkillTrigger(fm['trigger']);
+                if (validated.ok) {
+                  triggerPatch = {
+                    trigger: {
+                      output: validated.value.output,
+                      output_category: validated.value.output_category,
+                      requires_mcps: validated.value.requires_mcps,
+                      schedule: validated.value.schedule,
+                    },
+                  };
+                }
+                // invalid shape → skip sync, preserve existing metadata.trigger.
+              }
+              // no `trigger:` key → skip sync, preserve existing metadata.trigger.
             }
-            // invalid shape → skip sync, keep existing metadata fields.
           } catch {
-            // YAML parse error → skip sync, keep existing metadata fields.
+            // YAML parse error → skip sync, preserve existing metadata.trigger.
           }
         }
       }
@@ -258,7 +272,7 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
         metadata: {
           ...existingMetadata,
           outbound_links: parseOutboundLinks(patch.content),
-          ...workflowMetadata,
+          ...triggerPatch,
         },
       };
     }

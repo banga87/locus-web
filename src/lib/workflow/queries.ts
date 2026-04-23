@@ -2,12 +2,17 @@
 // src/db/queries/ (that directory does not exist; plan §4 Implementation Notes
 // recommends colocation for workflow-related DB calls).
 //
+// Naming note: these helpers target the operational `workflow_runs` table,
+// which keeps its name across the skill/workflow unification (the user-facing
+// concept is "triggered skill" but the runs table is an internal artefact —
+// see docs/superpowers/plans/2026-04-23-skill-workflow-unification.md).
+//
 // Consumers:
-//   - POST /api/workflows/runs  (createWorkflowRun, getWorkflowDocById)
-//   - GET  /api/workflows/runs/[id]  (getWorkflowRunById)
+//   - POST /api/skills/runs              (createWorkflowRun, getSkillDocById)
+//   - GET  /api/workflows/runs/[id]      (getWorkflowRunById)
 //   - GET  /api/workflows/runs/[id]/events  (getRunEvents)
 //   - POST /api/workflows/runs/[id]/cancel  (cancelWorkflowRun)
-//   - GET  /api/cron/zombie-sweeper  (sweepZombies)
+//   - GET  /api/cron/zombie-sweeper      (sweepZombies)
 
 import { eq, gt, and, sql } from 'drizzle-orm';
 
@@ -22,10 +27,10 @@ import { workflowRunEvents } from '@/db/schema/workflow-run-events';
 
 /**
  * Load a single document by id. Returns `null` if not found.
- * Used by the trigger route to check `type === 'workflow'` and pull
- * frontmatter before inserting the run row.
+ * Used by the trigger route to check `type === 'skill'` and pull the
+ * nested `metadata.trigger` block before inserting the run row.
  */
-export async function getWorkflowDocById(id: string) {
+export async function getSkillDocById(id: string) {
   const [row] = await db
     .select()
     .from(documents)

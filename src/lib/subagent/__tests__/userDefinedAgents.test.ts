@@ -284,3 +284,70 @@ describe('listUserDefinedAgents — soft-deleted', () => {
     expect(found).toBeUndefined();
   });
 });
+
+describe('listUserDefinedAgents — malformed YAML (C1)', () => {
+  it('resolves without throwing and skips the corrupt doc while keeping valid ones', async () => {
+    const badSlug = `malformed-${randomUUID().slice(0, 8)}`;
+    const goodSlug = `good-${randomUUID().slice(0, 8)}`;
+
+    // Insert the malformed doc directly — bypassing buildAgentDefContent
+    // so we can inject genuinely invalid YAML (an unclosed array).
+    await db.insert(documents).values({
+      companyId: f.companyId,
+      brainId: f.brainId,
+      title: 'Malformed Agent',
+      slug: badSlug,
+      path: `agents/${badSlug}`,
+      content: `---\ntool_allowlist: [unclosed\n---\n`,
+      type: 'agent-definition',
+      version: 1,
+    });
+
+    // Seed a valid doc in the same company.
+    await seedAgentDef(f.companyId, f.brainId, goodSlug, {
+      title: 'Good Agent',
+      description: 'Healthy description.',
+      model: 'claude-sonnet-4-6',
+    });
+
+    // Must not throw — resolves to an array.
+    await expect(listUserDefinedAgents(f.companyId)).resolves.toBeInstanceOf(Array);
+
+    const agents = await listUserDefinedAgents(f.companyId);
+
+    // The corrupt doc is silently skipped.
+    const badEntry = agents.find((a) => a.agentType === badSlug);
+    expect(badEntry).toBeUndefined();
+
+    // The valid doc is still present.
+    const goodEntry = agents.find((a) => a.agentType === goodSlug);
+    expect(goodEntry).toBeDefined();
+  });
+});
+
+describe('listUserDefinedAgents — capabilities and skills in getSystemPrompt (I3)', () => {
+  it('renders capabilities and skill_ids into the system prompt', async () => {
+    const slug = `caps-skills-${randomUUID().slice(0, 8)}`;
+    await seedAgentDef(f.companyId, f.brainId, slug, {
+      title: 'Capable Agent',
+      description: 'Does many things.',
+      model: 'claude-sonnet-4-6',
+      system_prompt_snippet: 'Handle requests carefully.',
+      capabilities: ['web', 'code_execution'],
+      skills: ['skill-uuid-abc', 'skill-uuid-def'],
+    });
+
+    const agents = await listUserDefinedAgents(f.companyId);
+    const agent = agents.find((a) => a.agentType === slug);
+
+    expect(agent).toBeDefined();
+    const sp = agent!.getSystemPrompt();
+
+    // buildSystemPromptForUserAgent renders:
+    //   "You have access to: <capabilities joined by ', '>"
+    expect(sp).toContain('web, code_execution');
+
+    // "The following skill IDs are available to you: <skills joined by ', '>"
+    expect(sp).toContain('skill-uuid-abc, skill-uuid-def');
+  });
+});

@@ -121,7 +121,18 @@ export async function listUserDefinedAgents(
     );
 
   return rows.flatMap((row) => {
-    const fm = parseFrontmatterYaml(row.content);
+    let fm: Record<string, unknown>;
+    try {
+      fm = parseFrontmatterYaml(row.content);
+    } catch (err) {
+      console.warn(
+        '[subagent/userDefinedAgents] skipping agent-definition doc',
+        row.slug ?? '(no slug)',
+        '— malformed frontmatter',
+        err,
+      );
+      return [];
+    }
 
     const slug = row.slug;
     if (!slug) return [];

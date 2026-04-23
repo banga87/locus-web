@@ -320,8 +320,18 @@ export async function POST(req: Request) {
   // and the `subagent_type` enum so the model only sees valid slugs.
   let routedExternalTools: Record<string, Tool> = externalTools;
   if (subagentsEnabled) {
-    const userAgents = await listUserDefinedAgents(auth.companyId);
-    const agents = [...getBuiltInAgents(), ...userAgents];
+    const builtIns = getBuiltInAgents();
+    const userDefined = await listUserDefinedAgents(auth.companyId);
+    // Dedupe by agentType: user-defined agents win over built-ins with the
+    // same slug. This prevents the model from seeing two conflicting
+    // descriptions for the same agentType in the tool description, while
+    // still letting companies override built-in behaviour via their own
+    // agent-definition docs.
+    const userSlugs = new Set(userDefined.map((a) => a.agentType));
+    const agents = [
+      ...builtIns.filter((a) => !userSlugs.has(a.agentType)),
+      ...userDefined,
+    ];
     // Build a fast lookup map for the lookupAgent callback passed to
     // runSubagent — checked before the built-in registry so user-defined
     // agents take precedence over any built-in with the same slug.

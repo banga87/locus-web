@@ -31,6 +31,7 @@ import {
 } from '@/lib/ingestion/attachments';
 import { populateCompactIndexForWrite } from '@/lib/write-pipeline/ingest';
 import { regenerateFolderOverview } from '@/lib/memory/overview/invalidate';
+import { triggerEmbeddingFor } from '@/lib/memory/embedding/trigger';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -294,6 +295,22 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
       })
       .where(eq(documents.id, id))
       .returning();
+
+    // Phase 2: re-embed only when content actually changed. Metadata-only
+    // updates (title rename, folder move, status change) do not affect the
+    // embedding because the workflow embeds doc.content. Mirrors the same
+    // content-change gate as compactIndex / regenerateFolderOverview.
+    if (patch.content !== undefined && patch.content !== existing.content) {
+      try {
+        await triggerEmbeddingFor({
+          documentId: existing.id,
+          companyId,
+          brainId: brain.id,
+        });
+      } catch (err) {
+        console.error('[api/brain/documents/[id] PATCH] triggerEmbeddingFor failed', err);
+      }
+    }
 
     await db.insert(documentVersions).values({
       companyId,

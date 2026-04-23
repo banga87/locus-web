@@ -72,13 +72,19 @@ describe('embedDocumentWorkflow', () => {
         companyId: other.companyId,                // wrong company
         brainId: seed.brainId,
       });
-      // First test already wrote an embedding; we only assert no THROW
-      // here. The mismatched tuple causes loadDoc to return null and
-      // the workflow short-circuits.
     } finally {
       await teardownSeed(other);
     }
-    expect(true).toBe(true);
+    // Verify write isolation: the original doc's embedding (written in
+    // test 1 as a 1536-vector of 0.42) must be untouched. A bug in
+    // persistEmbedding's WHERE clause that matched the wrong row would
+    // be caught here.
+    const [row] = await db
+      .select({ embedding: documents.embedding })
+      .from(documents)
+      .where(eq(documents.id, seed.docs[0].id));
+    expect(row.embedding).not.toBeNull();
+    expect(row.embedding![0]).toBeCloseTo(0.42, 5);
   }, 30_000);
 
   it('no-ops when the document was deleted between trigger and run', async () => {

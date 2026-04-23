@@ -88,7 +88,7 @@ src/lib/memory/
     ├── workflow.ts                  # embedDocumentWorkflow ('use workflow')
     ├── trigger.ts                   # triggerEmbeddingFor(doc) — write-pipeline hook
     ├── backfill.ts                  # CLI: enumerate NULL embeddings, trigger each
-    ├── usage.ts                     # records token usage to usage_records
+    ├── usage.ts                     # recordEmbeddingUsage() helper — invoked by workflow's recordUsage step
     └── __tests__/
         ├── openai.test.ts           # mock-embedder unit tests
         ├── workflow.test.ts         # workflow logic tests
@@ -185,6 +185,8 @@ async function recordUsage(args: EmbedJobArgs, tokens: number) {
 - The whole workflow is idempotent: re-running on the same doc produces the same embedding (assuming content unchanged) and overwrites the same row.
 - `loadDoc` returning null short-circuits the workflow (doc deleted between trigger and run, OR tuple does not match — same effect).
 - Workflow runs are observable in the Vercel dashboard without us building any UI.
+
+**Trust boundary clarification:** the workflow itself does *not* re-validate that the caller is allowed to operate on `(companyId, brainId)`. The trust boundary is the route handler that calls `triggerEmbeddingFor` — it has already authenticated the user, scoped the request to their company, and resolved the brain they own. The workflow is downstream of that gate. The tenant-scoped `WHERE` predicates in `loadDoc`/`persistEmbedding` are defense-in-depth (catch a bug where a wrong tuple gets passed in), not the primary gate.
 
 ### 5.4 Trigger from write pipeline
 

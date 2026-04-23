@@ -1,7 +1,7 @@
 # Agent Memory Architecture — Design
 
-**Date:** 2026-04-22
-**Status:** Design complete, pending spec review
+**Date:** 2026-04-22 (last updated 2026-04-23)
+**Status:** Phases 1 + 2 shipped 2026-04-23 on `feature/agent-memory-phase-1`. Phases 3–5 pending. See §12.7 Implementation log for empirical results and spec drift recorded at each phase completion.
 **Scope:** Retrieval, knowledge-graph, write pipeline, research subagent, and Maintenance Agent — the "brain" substrate that agents in the Tatara harness consume. Five-phase rollout, each phase independently shippable and reversible.
 **Related docs:**
 - `docs/superpowers/research/2026-04-21-mempalace-memory-research.md` — MemPalace transferable ideas
@@ -174,6 +174,8 @@ CREATE INDEX ON documents USING hnsw (embedding vector_cosine_ops);
 ```
 
 Existing columns untouched. `embedding` dimension is model-dependent — chosen in Phase 2 via benchmark; 1024 accommodates Voyage `voyage-3` and most alternatives.
+
+> **Phase 2 resolution:** shipped as `vector(1536)` for OpenAI `text-embedding-3-small` via Vercel AI Gateway. Migration is `0023_documents_embedding.sql`. See §12.7.
 
 ### 6.2 Entities as documents
 
@@ -689,14 +691,73 @@ Five phases, each independently valuable and reversible. Between phases: benchma
 
 15–20 weeks end-to-end. Phase 1 delivers token-reduction wins; Phase 2 first measurable hallucination-rate improvement; Phases 3–4 the business-tier defensibility story; Phase 5 the ambition.
 
+### 12.7 Implementation log
+
+Append-only record of what each completed phase actually shipped, what diverged from spec, and what signal it produced. Future plan-scoping sessions read this section for ground truth instead of inferring from git log.
+
+#### Phase 1 — Retrieval contract + compact_index — shipped 2026-04-22
+
+**Branch:** `feature/agent-memory-phase-1` (Phase 1 commits 633036a..[before Phase 2 start])
+
+**Delivered per spec:**
+- Migrations 0021 (`compact_index jsonb`) + 0022 (GIN indexes on entities/topics/flags)
+- `MemoryProvider` interface extracted at `src/lib/memory/types.ts`; `tatara-hybrid` provider in `src/lib/memory/providers/tatara-hybrid/`
+- Rule-based extractor (`src/lib/memory/extractor/`)
+- Three retrieval modes (`scan`, `expand`, `hybrid`) with tier-gate enforced inside `core.ts`
+- `search_documents` returns `RankedResult` shape with provenance
+- Cross-tenancy isolation test suite green
+- Benchmark runner scaffold at `tests/benchmarks/runner.ts`
+- Backfill: 165 production docs received `compact_index`
+
+**Spec drift:**
+- `_OVERVIEW.md` rollups (§6.5) deferred — not required for retrieval to work; revisit when nav UX justifies.
+- Per-brain weight overrides deferred to Phase 3 (will land with `brain_configs`).
+
+#### Phase 2 — pgvector + hybrid fusion — shipped 2026-04-23
+
+**Branch:** same; Phase 2 commits 633036a..748a689 (~71 total commits across both phases)
+
+**Delivered per spec:**
+- Migration 0023 (`vector(1536)` + HNSW index `documents_embedding_hnsw_idx` using `vector_cosine_ops`)
+- Embedding worker at `src/lib/memory/embedding/` — Vercel Workflow with `'use workflow'` / `'use step'` directives, OpenAI `text-embedding-3-small` via Vercel AI Gateway
+- Async write-pipeline integration: POST/PATCH document routes fire-and-forget `triggerEmbeddingFor`
+- Hybrid scoring composer extends Phase 1's `composeBoostedScore` with `cosine_similarity` term; SQL `ORDER BY` includes null-safe `COALESCE(1 - embedding <=> query, 0)` fallback
+- Default weights: `MEMORY_WEIGHT_TS=0.4` / `MEMORY_WEIGHT_VEC=0.6` (env-overridable for benchmark sweeps)
+- In-process LRU for query embeddings (best-effort under fluid compute)
+- `usage_records` cost transparency with `source='embedding_worker'`
+- Smoke benchmark (10 docs / 30 questions) + LongMemEval benchmark (10 questions / 493 sessions) wired into `tests/benchmarks/`
+- CI gate: smoke regression check on `npm run benchmark:smoke-check`
+- Backfill script `scripts/backfill-embeddings-phase2.ts` — synchronous path for local CLI
+
+**Empirical results:**
+- **Smoke fixture (Tatara-shape docs):** baseline MRR 0.944 → hybrid MRR **0.983** (R@5 = 1.0 / 1.0; R@10 = 1.0 / 1.0). Hybrid wins on focused markdown.
+- **LongMemEval (long conversational transcripts):** baseline MRR 0.683 → hybrid MRR **0.583**. Hybrid loses on long multi-topic content.
+- **Honest reading:** `text-embedding-3-small` produces sharp fingerprints for one-topic docs and muddy fingerprints for sprawling multi-topic docs. Tatara's production domain (markdown with frontmatter, one topic per file) matches the smoke pattern. LME is supplementary signal informing Phase 2.5 chunking and Phase 5 alternative-provider work.
+- Backfill: 153/165 production docs embedded; 12 exceeded 8192-token model limit and fell back to lexical-only.
+
+**Spec drift to record:**
+- **Embedding model:** `text-embedding-3-small` (1536 dims), not `voyage-3` (illustrative in §13). Driven by Vercel AI Gateway availability + ops simplicity (`VERCEL_OIDC_TOKEN` auth, no separate vendor account).
+- **Embedding dimension:** `vector(1536)`, not `vector(1024)` (illustrative in §6.1). Migration 0023 reflects actual.
+- **Workflow SDK import path:** `start` is exported from `workflow/api` subpath, not the `workflow` root. Plan was wrong; implementation adapted.
+- **Concurrent-workflow CI test** gated behind `RUN_WORKFLOW_SMOKE=1` env var — local Vitest cannot run the Vercel Workflow runtime; verifiable only post-deploy.
+
+**Deferrals carried forward:**
+- RAGAS / answer-quality benchmarks deferred (would require LLM-as-judge over full agent harness — see §14.2 note).
+- Workflow dashboard health verification deferred to first deploy.
+- Phase 2.5 chunking trigger updated (see §13).
+
+**Tests:** 90/90 memory subsystem tests passing. (Pre-existing 5 timeouts in `src/lib/workflow/__tests__/run.test.ts` are vitest-default-timeout flakes unrelated to Phase 2; tests pass with `--testTimeout=30000`.)
+
+**Decision next:** merge to `master`, deploy, observe production for 1–2 weeks (embedding job success rate, token-limit hit rate on *new* docs, customer cost transparency, Workflow runtime stability). The next-phase decision (Phase 2.5 chunking vs. Phase 3 KG vs. an end-to-end agent benchmark) is gated on observed production behavior. See §14.2 input ⚠️ for guidance.
+
 ## 13. Open questions (deferred)
 
-- **Embedding model choice** — Voyage `voyage-3` vs. OpenAI `text-embedding-3-small` vs. others. Phase 2, benchmark-driven.
-- **Hybrid-scoring weights** — hand-tuned defaults vs. per-brain learned. Starts hand-tuned; learning deferred until we have enough rating data.
+- **~~Embedding model choice~~** — **Resolved Phase 2:** OpenAI `text-embedding-3-small` (1536 dims) via Vercel AI Gateway. Choice driven by Gateway availability + ops simplicity (single-vendor auth via `VERCEL_OIDC_TOKEN`, no separate Voyage account). Phase 5 may revisit if benchmarks justify alternative providers — particularly for long multi-topic docs where text-embedding-3-small fingerprints dilute (see §12.7 LME finding).
+- **Hybrid-scoring weights** — Phase 2 ships hand-tuned `MEMORY_WEIGHT_TS=0.4` / `MEMORY_WEIGHT_VEC=0.6` defaults. Per-brain overrides await Phase 3 (`brain_configs.retrieval_config`); learned weights await tenant rating data.
 - **Community detection frequency** — nightly vs. weekly vs. on-write-threshold. Phase 5 decision.
 - **Inferred-tier retention policy** — how long do inferred triples persist? Expiry rules? Phase 5.
-- **External benchmark shortlist** — specific subset of LongMemEval/HotpotQA/FanOutQA/RAGAS to adopt as standard. Separate session.
-- **Semantic chunking** — Phase 2.5 if whole-doc embeddings show a recall gap at scale.
+- **External benchmark shortlist** — Phase 2 adopted smoke fixture (Tatara-shape) + LongMemEval (long conversational). RAGAS / HotpotQA / FanOutQA still deferred. Open question: is an end-to-end agent benchmark (LLM-judge over the full harness) more valuable as the next signal than retrieval-only metrics? See §12.7.
+- **Semantic chunking** — Phase 2.5 trigger originally framed as "if whole-doc embeddings show a recall gap." Phase 2 backfill produced 12 oversize-doc fallbacks (8192-token model limit) — not yet a recall gap, but a scope-pressure signal. Updated trigger: meaningful fraction of *new* production docs hitting the limit, observed post-deploy.
 - **Agent diary implementation details** — trigger cadence, schema, consumer pattern. Deferred.
 - **Maintenance Agent per-brain model choice** — Haiku vs. Sonnet; tenant-configurable vs. Tatara-chosen.
 
@@ -762,10 +823,11 @@ This section exists so that Phase 2–5 plans can be authored from this spec wit
 - §6.2 (entities as `type:entity` documents), §6.3 (`kg_triples` schema), §6.4 (`brain_configs`), §7.4 (kg_query / kg_timeline tools), §8.3 Path 1 (generating-agent frontmatter), §10.5 (dangling-entity detector), §10.6 (predicate vocab), §12 Phase 3
 
 **Inputs from prior phase (Phase 2):**
-- ✅ pgvector + embeddings stable in production
-- ✅ Hybrid scoring beats Phase 1 baseline on chosen benchmark
-- ✅ Embedding worker has not breached cost budgets in pilot tenants
-- ✅ Phase 2 retrieval metrics recorded as the new baseline for Phase 3 to inherit
+- ⏳ pgvector + embeddings live in code; production validation pending first deploy (Vercel Workflow runtime is non-local — embedding job execution + dashboard health verifiable only post-deploy)
+- ⚠️ Hybrid scoring: **WINS** on smoke fixture (MRR 0.944 → 0.983, Tatara-shape content); **LOSES** on LongMemEval (MRR 0.683 → 0.583, long multi-topic conversational transcripts). Phase 3 reads this as: production domain matches the smoke pattern, ship-as-is. The LME loss is informative for Phase 2.5 chunking scope, not a Phase 3 blocker. See §12.7.
+- ⏳ Embedding worker cost in production: no signal yet (workflow runtime requires deploy). Backfill 153/165 succeeded; 12 docs exceeded 8192-token limit and fell back to lexical-only.
+- ✅ Phase 2 retrieval metrics recorded as the new baseline for Phase 3 to inherit (`tests/benchmarks/results/baseline.json`, `hybrid.json`, `lme-baseline.json`, `lme-hybrid.json`)
+- 🔍 **Phase 3 should consider before starting:** an end-to-end agent benchmark (LLM-judge over the full harness with vector on vs off) may be more valuable than rushing into KG layer. Phase 2 only proved retrieval-component lift, not agent-answer-quality lift. Decision deferred to Phase 3 plan-scoping session.
 
 **Probable task skeleton:**
 

@@ -27,6 +27,9 @@ import {
   getAttachment,
   markCommitted,
 } from '@/lib/ingestion/attachments';
+import { populateCompactIndexForWrite } from '@/lib/write-pipeline/ingest';
+import { regenerateFolderOverview } from '@/lib/memory/overview/invalidate';
+import { triggerEmbeddingFor } from '@/lib/memory/embedding/trigger';
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 
@@ -240,6 +243,12 @@ export const POST = (req: Request) =>
             ...triggerPatch,
           },
           version: 1,
+          compactIndex: populateCompactIndexForWrite({
+            content: input.content,
+            // Phase 1: parseFrontmatterRaw doesn't support arrays, and
+            // entities-as-frontmatter is a Phase 3 feature. Pass empty.
+            frontmatterEntities: [],
+          }),
         })
         .returning();
 
@@ -276,6 +285,37 @@ export const POST = (req: Request) =>
           await markCommitted(input.attachmentId, doc.id);
         } catch (err) {
           console.error('[api/brain/documents] markCommitted failed', err);
+        }
+      }
+
+      // Phase 2: enqueue embedding generation. Fire-and-forget; the
+      // workflow runs out-of-band and updates documents.embedding when it
+      // completes. A failure here shouldn't fail the user's save, so wrap
+      // in try/catch with a log.
+      try {
+        await triggerEmbeddingFor({
+          documentId: doc.id,
+          companyId,
+          brainId: brain.id,
+        });
+      } catch (err) {
+        console.error('[api/brain/documents POST] triggerEmbeddingFor failed', err);
+      }
+
+      // Auto-regenerate the folder's overview document so retrieval always
+      // has a fresh rollup. Skipped when the saved doc is itself scaffolding,
+      // a skill, agent-def, or overview (type != null) — preventing loops.
+      if (documentType == null) {
+        try {
+          await regenerateFolderOverview({
+            companyId,
+            brainId: brain.id,
+            folderPath: folder.slug ?? 'root',
+          });
+        } catch (err) {
+          // Non-fatal: overview regeneration failure should not fail the
+          // user's save. Log and move on; next successful save will retry.
+          console.error('[api/brain/documents] regenerateFolderOverview POST failed', err);
         }
       }
 

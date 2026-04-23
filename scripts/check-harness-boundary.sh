@@ -7,7 +7,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET_DIRS=("${ROOT_DIR}/src/lib/agent" "${ROOT_DIR}/src/lib/connectors")
+TARGET_DIRS=("${ROOT_DIR}/src/lib/agent" "${ROOT_DIR}/src/lib/connectors" "${ROOT_DIR}/src/lib/memory")
 
 # Forbidden imports: any `from 'next'`, `from 'next/...'`, or
 # `from '@vercel/functions'`. Single or double quotes both match.
@@ -31,7 +31,7 @@ done
 SUBAGENT_PATTERN="from[[:space:]]+['\"](@/lib/subagent|\.\./subagent|\./subagent)"
 for TARGET_DIR in "${TARGET_DIRS[@]}"; do
   if [ ! -d "${TARGET_DIR}" ]; then continue; fi
-  if [ "${TARGET_DIR}" = "${ROOT_DIR}/src/lib/agent" ] && \
+  if ([ "${TARGET_DIR}" = "${ROOT_DIR}/src/lib/agent" ] || [ "${TARGET_DIR}" = "${ROOT_DIR}/src/lib/memory" ]) && \
      grep -rEn --include="*.ts" --include="*.tsx" "${SUBAGENT_PATTERN}" "${TARGET_DIR}"; then
     echo ""
     echo "ERROR: src/lib/agent/ must not import from src/lib/subagent/ — see AGENTS.md."

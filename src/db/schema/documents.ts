@@ -35,6 +35,25 @@ const tsvector = customType<{ data: string }>({
   },
 });
 
+// pgvector. The column is written by the embedDocumentWorkflow
+// (src/lib/memory/embedding/workflow.ts) — Drizzle just needs a
+// matching column type. Null-safe in both directions because
+// freshly-written docs have NULL until the async workflow lands.
+const vector = customType<{ data: number[] | null; driverData: string | null }>({
+  dataType() {
+    return 'vector(1536)';
+  },
+  toDriver(value: number[] | null): string | null {
+    return value === null ? null : `[${value.join(',')}]`;
+  },
+  fromDriver(value: string | null): number[] | null {
+    if (value === null || value === undefined) return null;
+    const stripped = value.replace(/^\[|\]$/g, '');
+    if (!stripped) return null;
+    return stripped.split(',').map(Number);
+  },
+});
+
 export const documents = pgTable(
   'documents',
   {
@@ -142,6 +161,18 @@ export const documents = pgTable(
     // Structured frontmatter catch-all (applies_to, changelog, supersedes).
     metadata: jsonb('metadata').default({}),
 
+    // Rule-based structured summary written by
+    // src/lib/memory/compact-index/extract.ts on every document save.
+    // Target ~40 tokens when serialized. See
+    // docs/superpowers/specs/2026-04-22-agent-memory-architecture-design.md
+    // §6.1 for the shape.
+    compactIndex: jsonb('compact_index'),
+
+    // 1536-dim OpenAI text-embedding-3-small vector. Written
+    // asynchronously by embedDocumentWorkflow; NULL until the workflow
+    // completes for a freshly-saved doc.
+    embedding: vector('embedding'),
+
     // Full-text search vector. Written only by the Postgres trigger;
     // application code never mutates this column directly.
     searchVector: tsvector('search_vector'),
@@ -190,5 +221,21 @@ export const documents = pgTable(
     uniqueIndex('documents_skill_resource_path')
       .on(table.parentSkillId, table.relativePath)
       .where(sql`"parent_skill_id" IS NOT NULL`),
+    index('documents_compact_index_entities_idx').using(
+      'gin',
+      sql`(${table.compactIndex} -> 'entities')`,
+    ),
+    index('documents_compact_index_topics_idx').using(
+      'gin',
+      sql`(${table.compactIndex} -> 'topics')`,
+    ),
+    index('documents_compact_index_flags_idx').using(
+      'gin',
+      sql`(${table.compactIndex} -> 'flags')`,
+    ),
+    index('documents_embedding_hnsw_idx').using(
+      'hnsw',
+      sql`embedding vector_cosine_ops`,
+    ),
   ]
 );

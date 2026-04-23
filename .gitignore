@@ -47,3 +47,13 @@ next-env.d.ts
 
 # git worktrees
 /.worktrees
+
+.vercel
+.env*.local
+
+# benchmark result snapshots (committed manually after review)
+# tests/benchmarks/results/baseline.json
+# tests/benchmarks/results/hybrid.json
+
+# LongMemEval downloaded dataset (large, download on demand)
+tests/benchmarks/fixtures/longmemeval.json

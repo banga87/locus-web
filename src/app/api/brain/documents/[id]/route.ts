@@ -29,6 +29,9 @@ import {
   getAttachment,
   markCommitted,
 } from '@/lib/ingestion/attachments';
+import { populateCompactIndexForWrite } from '@/lib/write-pipeline/ingest';
+import { regenerateFolderOverview } from '@/lib/memory/overview/invalidate';
+import { triggerEmbeddingFor } from '@/lib/memory/embedding/trigger';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -293,11 +296,35 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
         ...(newPath !== undefined ? { path: newPath } : {}),
         ...typeUpdate,
         ...metadataUpdate,
+        ...(patch.content !== undefined
+          ? {
+              compactIndex: populateCompactIndexForWrite({
+                content: patch.content,
+                frontmatterEntities: [],
+              }),
+            }
+          : {}),
         version: nextVersion,
         updatedAt: new Date(),
       })
       .where(eq(documents.id, id))
       .returning();
+
+    // Phase 2: re-embed only when content actually changed. Metadata-only
+    // updates (title rename, folder move, status change) do not affect the
+    // embedding because the workflow embeds doc.content. Mirrors the same
+    // content-change gate as compactIndex / regenerateFolderOverview.
+    if (patch.content !== undefined && patch.content !== existing.content) {
+      try {
+        await triggerEmbeddingFor({
+          documentId: existing.id,
+          companyId,
+          brainId: brain.id,
+        });
+      } catch (err) {
+        console.error('[api/brain/documents/[id] PATCH] triggerEmbeddingFor failed', err);
+      }
+    }
 
     await db.insert(documentVersions).values({
       companyId,
@@ -330,6 +357,38 @@ export const PATCH = (req: Request, { params }: RouteCtx) =>
         await markCommitted(patch.attachmentId, id);
       } catch (err) {
         console.error('[api/brain/documents/[id]] markCommitted failed', err);
+      }
+    }
+
+    // If the row is user-authored (type IS NULL) and a field worth
+    // re-rolling changed (content, title, or folder), regenerate the
+    // folder overview. For a folder-move, regenerate BOTH old and new.
+    if (existing.type == null) {
+      const oldFolderSlug = existing.folderId
+        ? (await db
+            .select({ slug: folders.slug })
+            .from(folders)
+            .where(eq(folders.id, existing.folderId))
+            .limit(1))[0]?.slug
+        : undefined;
+      const newFolderSlug = (newPath !== undefined
+        ? newPath.split('/')[0]
+        : oldFolderSlug);
+      try {
+        await regenerateFolderOverview({
+          companyId,
+          brainId: brain.id,
+          folderPath: newFolderSlug ?? 'root',
+        });
+        if (oldFolderSlug && oldFolderSlug !== newFolderSlug) {
+          await regenerateFolderOverview({
+            companyId,
+            brainId: brain.id,
+            folderPath: oldFolderSlug,
+          });
+        }
+      } catch (err) {
+        console.error('[api/brain/documents/[id]] regenerateFolderOverview PATCH failed', err);
       }
     }
 

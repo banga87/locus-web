@@ -1,16 +1,25 @@
-// src/lib/frontmatter/schemas/workflow.ts
+// src/lib/frontmatter/schemas/skill-trigger.ts
 //
-// Wraps the existing `validateWorkflowFrontmatter` (narrow-typed) behind
-// the generic FrontmatterSchema contract. The wrapper injects `type:
-// 'workflow'` before calling the inner validator because the validator
-// enforces it; the panel doesn't surface `type` as an editable field.
+// Describes the nested `trigger:` block that marks a skill doc as
+// triggerable. The panel uses this to render + edit the four authored
+// trigger fields in place.
+//
+// NOTE on the `type` field below: `'skill-trigger'` is a panel sentinel
+// used by the frontmatter schema registry / emitter to identify THIS
+// schema. It is NOT a value that appears on `documents.type` — the
+// enclosing doc's `documents.type` is always `'skill'`. See
+// `docs/superpowers/specs/2026-04-23-skill-workflow-unification-design.md`.
+//
+// The validator delegates to `validateSkillTrigger` in
+// `@/lib/brain/frontmatter`, which enforces the nested-block shape (no
+// top-level `type:` check — the trigger block does not carry a type).
 
-import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
+import { validateSkillTrigger } from '@/lib/brain/frontmatter';
 import type { FrontmatterSchema } from './types';
 
-export const workflowSchema: FrontmatterSchema = {
-  type: 'workflow',
-  label: 'Workflow',
+export const triggerSchema: FrontmatterSchema = {
+  type: 'skill-trigger',
+  label: 'Trigger',
   fields: [
     {
       kind: 'enum',
@@ -45,10 +54,7 @@ export const workflowSchema: FrontmatterSchema = {
     schedule: null,
   }),
   validate: (input) => {
-    if (typeof input !== 'object' || input === null) {
-      return { ok: false, errors: [{ field: 'input', message: 'must be an object' }] };
-    }
-    const r = validateWorkflowFrontmatter({ type: 'workflow', ...(input as Record<string, unknown>) });
+    const r = validateSkillTrigger(input);
     if (!r.ok) return { ok: false, errors: r.errors };
     return {
       ok: true,

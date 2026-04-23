@@ -28,8 +28,10 @@
 //   null               — plain knowledge document (no type set)
 //   'agent-scaffolding'
 //   'agent-definition'
-//   'skill'
-//   'workflow'         — agent-run workflow definition (Phase 1.5)
+//   'skill'            — authored instructions for an agent to execute.
+//                        Optional `trigger:` block in the frontmatter marks
+//                        the skill as triggerable (scheduled / on-demand run).
+//                        See SkillTrigger below.
 
 export interface DocumentFrontmatter {
   title: string;
@@ -141,62 +143,67 @@ export function parseFrontmatter(raw: string): {
 }
 
 // ---------------------------------------------------------------------------
-// Workflow document frontmatter
+// Skill trigger frontmatter
 // ---------------------------------------------------------------------------
 //
-// `type: workflow` documents carry extra authored fields (output, schedule,
-// requires_mcps, output_category) stored in the `metadata` jsonb column.
-// Runtime-stamped provenance fields (created_by_workflow, etc.) are written
-// exclusively by workflow-run code paths and are modelled in WorkflowOutputStamp.
+// A `type: skill` document becomes triggerable when its frontmatter carries a
+// nested `trigger:` block. The block's fields (output, schedule,
+// requires_mcps, output_category) are stored under `metadata.trigger` on the
+// `documents` row.
 //
-// Storage: all fields go into `documents.metadata` (existing jsonb catch-all).
-// No new DB columns are needed.
-
-/** Valid values for the `output` field of a workflow document. */
-export type WorkflowOutput = 'document' | 'message' | 'both';
+// Runtime-stamped provenance fields (created_by_workflow, etc.) are written
+// exclusively by triggered-skill run code paths and are modelled in
+// WorkflowOutputStamp below. The stamp names retain the "workflow" prefix
+// because the underlying `workflow_runs` operational table keeps its name —
+// it records runs, not doc types.
+//
+// Storage: the trigger block is mirrored into `documents.metadata.trigger`
+// (existing jsonb catch-all). No new DB columns are needed.
 
 /**
- * Authored fields on a `type: workflow` document (user-editable via the
- * Tiptap editor / frontmatter block).
+ * The four authored fields of a skill's `trigger:` block (user-editable via
+ * the Tiptap editor / frontmatter panel).
  *
  * `output_category` and `schedule` are always present in the validated value
- * (`validateWorkflowFrontmatter` normalises absent → null), so callers never
- * need to distinguish `undefined` vs `null`.
+ * (`validateSkillTrigger` normalises absent → null), so callers never need to
+ * distinguish `undefined` vs `null`.
  */
-export interface WorkflowFrontmatter {
-  type: 'workflow';
-  /** What the workflow produces when it runs. */
-  output: WorkflowOutput;
+export interface SkillTrigger {
+  /** Cron string (reserved — nothing reads it yet) or null. */
+  schedule: string | null;
+  /** What the triggered skill produces when it runs. */
+  output: 'document' | 'message' | 'both';
   /** Slug of the folder/category where output docs get filed. */
   output_category: string | null;
   /** MCP slugs that must be connected before the run can start. */
   requires_mcps: string[];
-  /** Cron string (reserved for Phase 2) or null. */
-  schedule: string | null;
 }
 
 /**
  * Runtime-stamped provenance fields written on documents that were created or
- * last touched by a workflow run. NOT user-editable — stamped by workflow-run
- * code paths and excluded from user-facing input schemas.
+ * last touched by a triggered-skill run. NOT user-editable — stamped by
+ * triggered-skill run code paths and excluded from user-facing input schemas.
  *
  * Discriminated union: a stamp is either the "created" pair (immutable once
- * set, written exactly once when a workflow creates a doc) OR the
- * "last-touched" pair (overwritten on every workflow update of an existing
- * doc). Task 5's stamp middleware constructs one variant per operation type
- * — never both in a single write, never neither, never mixed.
+ * set, written exactly once when a run creates a doc) OR the "last-touched"
+ * pair (overwritten on every run update of an existing doc). The stamp
+ * middleware constructs one variant per operation type — never both in a
+ * single write, never neither, never mixed.
+ *
+ * Field names keep the "workflow" prefix because they name columns produced
+ * by the `workflow_runs` table, which keeps its name.
  */
 export type WorkflowOutputStamp =
   | {
-      /** Ref of the workflow doc that created this document (immutable). */
+      /** Ref of the skill doc that created this document (immutable). */
       created_by_workflow: string;
-      /** UUID of the workflow run that created this document (immutable). */
+      /** UUID of the run that created this document (immutable). */
       created_by_workflow_run_id: string;
     }
   | {
-      /** Ref of the workflow doc that last touched this document. */
+      /** Ref of the skill doc that last touched this document. */
       last_touched_by_workflow: string;
-      /** UUID of the workflow run that last touched this document. */
+      /** UUID of the run that last touched this document. */
       last_touched_by_workflow_run_id: string;
     };
 
@@ -206,31 +213,32 @@ export interface ValidationError {
   message: string;
 }
 
-/** Tagged-union result returned by `validateWorkflowFrontmatter`. */
-export type WorkflowFrontmatterResult =
-  | { ok: true; value: WorkflowFrontmatter }
-  | { ok: false; errors: ValidationError[] };
-
-const WORKFLOW_OUTPUT_VALUES: WorkflowOutput[] = ['document', 'message', 'both'];
+const SKILL_TRIGGER_OUTPUT_VALUES: SkillTrigger['output'][] = [
+  'document',
+  'message',
+  'both',
+];
 
 /**
- * Validate a raw frontmatter object as `WorkflowFrontmatter`. Accepts any
- * `unknown` input and returns a tagged-union result so callers can branch
- * without throwing.
+ * Validate a raw trigger-block object as `SkillTrigger`. Accepts any `unknown`
+ * input (the nested block — NOT the whole frontmatter, so there is no
+ * top-level `type` field to check) and returns a tagged-union result so
+ * callers can branch without throwing.
  *
  * Rules:
- *   - `type` must equal `'workflow'`
  *   - `output` is required and must be `'document' | 'message' | 'both'`
  *   - `requires_mcps` must be an array of strings; missing → invalid
  *   - `output_category` may be string, null, or absent (absent → null)
  *   - `schedule` may be string, null, or absent (absent → null)
  *
- * On success, `output_category` and `schedule` are always present
- * in the returned `value` — absence in the input is normalised to `null`.
+ * On success, `output_category` and `schedule` are always present in the
+ * returned `value` — absence in the input is normalised to `null`.
  */
-export function validateWorkflowFrontmatter(
+export function validateSkillTrigger(
   input: unknown,
-): WorkflowFrontmatterResult {
+):
+  | { ok: true; value: SkillTrigger }
+  | { ok: false; errors: ValidationError[] } {
   const errors: ValidationError[] = [];
 
   if (typeof input !== 'object' || input === null) {
@@ -242,18 +250,15 @@ export function validateWorkflowFrontmatter(
 
   const fm = input as Record<string, unknown>;
 
-  // type
-  if (fm['type'] !== 'workflow') {
-    errors.push({ field: 'type', message: "must equal 'workflow'" });
-  }
-
   // output — required
   if (!('output' in fm) || fm['output'] === undefined || fm['output'] === null) {
     errors.push({ field: 'output', message: 'is required' });
-  } else if (!WORKFLOW_OUTPUT_VALUES.includes(fm['output'] as WorkflowOutput)) {
+  } else if (
+    !SKILL_TRIGGER_OUTPUT_VALUES.includes(fm['output'] as SkillTrigger['output'])
+  ) {
     errors.push({
       field: 'output',
-      message: `must be one of: ${WORKFLOW_OUTPUT_VALUES.join(', ')}`,
+      message: `must be one of: ${SKILL_TRIGGER_OUTPUT_VALUES.join(', ')}`,
     });
   }
 
@@ -291,8 +296,7 @@ export function validateWorkflowFrontmatter(
   return {
     ok: true,
     value: {
-      type: 'workflow',
-      output: fm['output'] as WorkflowOutput,
+      output: fm['output'] as SkillTrigger['output'],
       output_category:
         'output_category' in fm
           ? (fm['output_category'] as string | null)

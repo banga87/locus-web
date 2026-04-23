@@ -3,7 +3,7 @@ import { marked } from 'marked';
 import TurndownService from 'turndown';
 
 import { splitFrontmatter, joinFrontmatter } from '../markdown';
-import { workflowSchema } from '../schemas/workflow';
+import { triggerSchema } from '../schemas/skill-trigger';
 import { extractDocumentTypeFromContent } from '@/lib/brain/save';
 
 const turndown = new TurndownService({
@@ -13,8 +13,12 @@ const turndown = new TurndownService({
 });
 
 describe('Tiptap round-trip regression', () => {
+  // Uses the `skill-trigger` panel sentinel — NOT a doc `type` value. The
+  // triggerSchema's emission happens to write a top-level `type:` key that
+  // identifies the schema; this fixture exercises the same emit/parse round
+  // trip the panel uses for the trigger block.
   const pristine =
-    '---\ntype: workflow\noutput: document\noutput_category: null\nrequires_mcps: []\nschedule: null\n---\n\nDescribe the workflow here.\n';
+    '---\ntype: skill-trigger\noutput: document\noutput_category: null\nrequires_mcps: []\nschedule: null\n---\n\nDescribe the triggered skill here.\n';
 
   it('OLD (broken) path: marked+turndown destroys frontmatter', () => {
     // Prove the bug exists when we DON'T split first.
@@ -32,16 +36,16 @@ describe('Tiptap round-trip regression', () => {
     const editedHtml = html + '<p>new paragraph</p>';
     const newBodyMd = turndown.turndown(editedHtml);
 
-    const value = workflowSchema.defaults();
-    const rejoined = joinFrontmatter(value, newBodyMd, workflowSchema);
+    const value = triggerSchema.defaults();
+    const rejoined = joinFrontmatter(value, newBodyMd, triggerSchema);
 
-    expect(extractDocumentTypeFromContent(rejoined)).toBe('workflow');
+    expect(extractDocumentTypeFromContent(rejoined)).toBe('skill-trigger');
     expect(rejoined).toContain('new paragraph');
   });
 
   it('is byte-stable when nothing in the frontmatter changes', () => {
     const { frontmatterText, body } = splitFrontmatter(pristine);
-    const rejoined = joinFrontmatter(workflowSchema.defaults(), body, workflowSchema);
+    const rejoined = joinFrontmatter(triggerSchema.defaults(), body, triggerSchema);
     expect(rejoined).toBe(pristine);
     // extra sanity: the rejoined file also parses cleanly.
     expect(splitFrontmatter(rejoined).frontmatterText).toBe(frontmatterText);

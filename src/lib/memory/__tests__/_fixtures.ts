@@ -113,6 +113,34 @@ export async function seedBrainInCompany(opts: {
   return { ...base, docs: seeded };
 }
 
+/**
+ * Like seedBrainInCompany, but also writes a deterministic embedding
+ * for each seeded document. Tests that need to exercise the cosine
+ * path use this; tests that only care about lexical can keep using
+ * seedBrainInCompany.
+ *
+ * The embedding is derived from the doc's index in the array — doc 0
+ * gets a vector of all 0.1, doc 1 gets all 0.2, etc. Cosine sim
+ * between any two seeded docs is therefore 1.0 (identical vectors are
+ * scaled multiples; cosine is direction-only). Tests asserting
+ * "different docs have different cosine to a query" should set
+ * embeddings explicitly via the optional `embeddings` parameter.
+ */
+export async function seedBrainWithEmbeddings(opts: {
+  docs: SeedDocInput[];
+  embeddings?: number[][];                 // override per-doc vectors
+}): Promise<SeededBrain> {
+  const seeded = await seedBrainInCompany({ docs: opts.docs });
+  for (let i = 0; i < seeded.docs.length; i++) {
+    const vec = opts.embeddings?.[i] ?? new Array(1536).fill((i + 1) * 0.1);
+    const literal = `[${vec.join(',')}]`;
+    await db.execute(
+      sql`UPDATE documents SET embedding = ${literal}::vector WHERE id = ${seeded.docs[i].id}`,
+    );
+  }
+  return seeded;
+}
+
 export interface TwoDocsCtx {
   companyId: string;
   brainId: string;

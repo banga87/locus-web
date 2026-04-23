@@ -14,8 +14,20 @@ import { phraseBoost } from './phrase-boost';
 import { properNounBoost } from './proper-noun-boost';
 import { temporalProximity } from './temporal-proximity';
 
-export const DEFAULT_WEIGHT_TS = 0.4;
-export const DEFAULT_WEIGHT_VEC = 0.6;
+// Defaults are hand-tuned (semantic-leaning); per-brain overrides land
+// in Phase 3 with brain_configs. The MEMORY_WEIGHT_TS / MEMORY_WEIGHT_VEC
+// env vars exist solely so the benchmark runner can compare lexical-only
+// vs hybrid without code changes — they are NOT a tenant-facing tuning
+// knob (that would violate the plug-and-play UX principle).
+function envWeight(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export const DEFAULT_WEIGHT_TS = envWeight('MEMORY_WEIGHT_TS', 0.4);
+export const DEFAULT_WEIGHT_VEC = envWeight('MEMORY_WEIGHT_VEC', 0.6);
 
 export interface ComposeInput {
   tsRank: number;

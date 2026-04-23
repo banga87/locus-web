@@ -13,7 +13,6 @@ import { retrieve } from '../../src/lib/memory/core';
 import {
   seedBenchmarkBrain,
   teardownBenchmarkSeed,
-  waitForEmbeddings,
 } from './seed';
 
 interface Benchmark {
@@ -41,9 +40,10 @@ async function main(): Promise<void> {
   const bench: Benchmark = JSON.parse(raw);
 
   console.log(`[bench] seeding "${bench.name}" (${bench.corpus.length} docs)`);
+  // seedBenchmarkBrain calls embedDocumentWorkflow directly (synchronous path,
+  // bypassing the Vercel Workflow runtime). Embeddings are already in the DB
+  // by the time this returns — no waitForEmbeddings poll needed.
   const seeded = await seedBenchmarkBrain(bench.corpus);
-  console.log(`[bench] waiting for embeddings...`);
-  await waitForEmbeddings(seeded.brainId, bench.corpus.length);
 
   console.log(`[bench] running ${bench.questions.length} questions, weight_vec=${weightVec}`);
   const ranks: Array<number | null> = [];

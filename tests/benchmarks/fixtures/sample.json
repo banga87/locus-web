@@ -2,19 +2,86 @@
   "name": "smoke",
   "corpus": [
     {
-      "slug": "acme-pricing",
-      "title": "Acme Pricing",
-      "content": "Enterprise tier starts at $50k. Standard tier at $5k."
+      "slug": "pricing-policy",
+      "title": "Pricing Policy",
+      "content": "Tatara offers three subscription tiers: Starter at $299/month, Growth at $999/month, and Enterprise at $4,999/month. Enterprise customers with annual commitments receive a 20% volume discount applied at invoice time. Refund requests must be submitted within 14 calendar days of the billing date; enterprise accounts have a 30-day refund window. Pricing is reviewed each January by the Revenue Committee. Mid-cycle upgrades are prorated."
     },
     {
-      "slug": "acme-owners",
-      "title": "Acme Owners",
-      "content": "Jane Smith owns the Acme rollout as of 2026-04-22."
+      "slug": "enterprise-tiers",
+      "title": "Enterprise Tier Definitions",
+      "content": "Enterprise accounts are defined as organizations with more than 500 seats or $100k ARR. Qualifying organizations unlock dedicated support, custom SLAs, and SSO provisioning. The enterprise tier also enables the Platform Agent with unlimited workflow runs. Volume pricing is negotiated individually by the Sales team; the floor discount for large accounts is 15%. Strategic partners may receive additional concessions approved by the CEO."
+    },
+    {
+      "slug": "pivot-decision-ops-directors",
+      "title": "ADR-007: Pivot to Ops Director Buyer",
+      "content": "On 2026-03-14 the founding team decided to reposition Tatara's primary buyer persona from individual knowledge workers to ops directors and team leads in mid-market companies. This pivot was driven by discovery that ops directors control budget, feel the coordination pain acutely, and have authority to mandate tool adoption across their reports. The ICP is now defined as ops directors at companies with 50–500 employees. Marketing and onboarding flows were updated to reflect this decision in Q1 2026."
+    },
+    {
+      "slug": "refund-policy",
+      "title": "Refund and Cancellation Policy",
+      "content": "Standard accounts may request a full refund within 14 days of any charge. Enterprise accounts receive a 30-day refund window per their master service agreement. Refunds are not available for usage-based overage charges. To initiate a refund, customers must email billing@tatara.ai with their account ID and invoice number. Cancellations take effect at the end of the current billing period; no partial-month credits are issued for standard plans."
+    },
+    {
+      "slug": "platform-agent-overview",
+      "title": "Platform Agent Overview",
+      "content": "The Platform Agent is Tatara's AI reasoning layer that reads and writes to the connected knowledge brain. It surfaces relevant context, drafts replies, and can execute multi-step workflows on behalf of ops teams. Access is gated by tier: Starter users receive read-only suggestions, Growth users get full draft generation, and Enterprise users unlock autonomous workflow execution. Usage is metered per 1,000 tokens processed. The agent is powered by large language models accessed through Tatara's AI gateway and no model names are exposed to end users."
+    },
+    {
+      "slug": "data-retention",
+      "title": "Data Retention and Deletion Policy",
+      "content": "Customer data is retained for the duration of the subscription plus 90 days. After account cancellation, data enters a 90-day grace period during which customers may export their knowledge base. After the grace period, all documents, embeddings, and associated metadata are permanently deleted from production storage. Backups are purged within 30 days of the grace-period expiry. GDPR deletion requests are fulfilled within 72 hours for PII fields and within 30 days for full data erasure."
+    },
+    {
+      "slug": "ownership-map",
+      "title": "Functional Ownership Map",
+      "content": "Pricing strategy is owned by the Revenue Committee, chaired by the CEO. Product roadmap is owned by the Head of Product. Customer onboarding is owned by the Customer Success lead. The Platform Agent feature set is owned by the Platform team, currently led by the Head of Engineering. Marketing copy and brand decisions are owned by the founding team. Data security and compliance is owned by the Security lead reporting to the CTO."
+    },
+    {
+      "slug": "sla-commitments",
+      "title": "Service Level Agreements",
+      "content": "Tatara guarantees 99.9% uptime for all paid tiers, measured monthly. Enterprise customers receive a 99.95% uptime SLA with financial penalties for breaches: 10% credit for each hour below threshold, up to 30% of the monthly fee. Planned maintenance windows are announced 48 hours in advance. Response time SLAs: P1 incidents (service down) are acknowledged within 15 minutes for Enterprise and 2 hours for Growth. P2 (degraded) acknowledged within 4 hours for Enterprise."
+    },
+    {
+      "slug": "mcp-integration-guide",
+      "title": "MCP Integration Guide",
+      "content": "Tatara exposes a Model Context Protocol server at mcp.tatara.ai that allows AI assistants and developer tools to query the connected knowledge brain. Authentication uses short-lived tokens generated from the user's API key. The MCP server supports read operations only; write operations must go through the REST API. Rate limits are 100 requests per minute per token. Developers can test the MCP connection using the CLI: `tatara mcp ping`. The integration is available on all tiers at no additional cost."
+    },
+    {
+      "slug": "security-incident-response",
+      "title": "Security Incident Response Runbook",
+      "content": "Security incidents are triaged by the on-call Security lead within 30 minutes of detection. A severity-1 incident (confirmed breach or data exposure) triggers immediate Slack notification to the executive team and legal counsel. Affected customers are notified within 24 hours via email. A post-mortem is completed within 5 business days and shared internally. Regulatory notifications (GDPR, SOC2) follow a 72-hour maximum timeline. All incidents are logged in the incident tracker with a unique IRN."
     }
   ],
   "questions": [
-    { "query": "enterprise pricing", "gold_slugs": ["acme-pricing"] },
-    { "query": "Jane Smith", "gold_slugs": ["acme-owners"] },
-    { "query": "\"Acme rollout\"", "gold_slugs": ["acme-owners"] }
+    { "query": "who owns the pricing strategy?", "gold_slugs": ["ownership-map"] },
+    { "query": "who is responsible for platform agent feature decisions?", "gold_slugs": ["ownership-map"] },
+    { "query": "who leads product roadmap decisions?", "gold_slugs": ["ownership-map"] },
+    { "query": "what is the refund window for enterprise accounts?", "gold_slugs": ["refund-policy", "pricing-policy"] },
+    { "query": "how many days do standard customers have to request a refund?", "gold_slugs": ["refund-policy"] },
+    { "query": "when did Tatara pivot to ops directors?", "gold_slugs": ["pivot-decision-ops-directors"] },
+    { "query": "why did the company change its target buyer persona?", "gold_slugs": ["pivot-decision-ops-directors"] },
+    { "query": "what is the ICP after the 2026 repositioning?", "gold_slugs": ["pivot-decision-ops-directors"] },
+    { "query": "what are the prices for each subscription tier?", "gold_slugs": ["pricing-policy"] },
+    { "query": "how does mid-cycle upgrade billing work?", "gold_slugs": ["pricing-policy"] },
+    { "query": "what is the uptime guarantee for enterprise customers?", "gold_slugs": ["sla-commitments"] },
+    { "query": "how quickly must P1 incidents be acknowledged for enterprise?", "gold_slugs": ["sla-commitments"] },
+    { "query": "how long is data kept after account cancellation?", "gold_slugs": ["data-retention"] },
+    { "query": "what happens to backups after the grace period?", "gold_slugs": ["data-retention"] },
+    { "query": "how do I connect an AI assistant to the knowledge base?", "gold_slugs": ["mcp-integration-guide"] },
+    { "query": "what is the rate limit for the developer integration?", "gold_slugs": ["mcp-integration-guide"] },
+    { "query": "cost reduction for high-volume customers", "gold_slugs": ["enterprise-tiers", "pricing-policy"] },
+    { "query": "big account discounts", "gold_slugs": ["enterprise-tiers", "pricing-policy"] },
+    { "query": "how to get money back on a subscription", "gold_slugs": ["refund-policy"] },
+    { "query": "AI reasoning capabilities available to paying customers", "gold_slugs": ["platform-agent-overview"] },
+    { "query": "automated decision-making features in higher plans", "gold_slugs": ["platform-agent-overview", "enterprise-tiers"] },
+    { "query": "coordinator pain addressed by product relaunch", "gold_slugs": ["pivot-decision-ops-directors"] },
+    { "query": "annual commitment reward for large organizations", "gold_slugs": ["pricing-policy", "enterprise-tiers"] },
+    { "query": "compliance notification obligations after a breach", "gold_slugs": ["security-incident-response", "data-retention"] },
+    { "query": "how quickly are customers told about security problems?", "gold_slugs": ["security-incident-response"] },
+    { "query": "what constitutes an enterprise-grade customer?", "gold_slugs": ["enterprise-tiers"] },
+    { "query": "exclusive capabilities unlocked at the top subscription level", "gold_slugs": ["enterprise-tiers", "platform-agent-overview"] },
+    { "query": "billing contact for invoicing disputes", "gold_slugs": ["refund-policy"] },
+    { "query": "permanent removal of user information from systems", "gold_slugs": ["data-retention"] },
+    { "query": "service availability guarantees and compensation terms", "gold_slugs": ["sla-commitments"] }
   ]
 }

@@ -50,3 +50,7 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# benchmark result snapshots (committed manually after review)
+# tests/benchmarks/results/baseline.json
+# tests/benchmarks/results/hybrid.json

@@ -16,8 +16,17 @@ import { companies } from '@/db/schema/companies';
 import { documents } from '@/db/schema/documents';
 import { folders } from '@/db/schema/folders';
 import { users } from '@/db/schema/users';
+import { usageRecords } from '@/db/schema/usage-records';
 import { extractCompactIndex } from '@/lib/memory/compact-index/extract';
-import { triggerEmbeddingFor } from '@/lib/memory/embedding/trigger';
+// Benchmarks call the workflow function directly rather than going through
+// triggerEmbeddingFor (which enqueues to the Vercel Workflow runtime). In a
+// plain tsx process the Workflow runtime is not running, so the enqueue call
+// would return immediately but the workflow would never execute, causing
+// waitForEmbeddings to time out. The 'use workflow' / 'use step' directives
+// are no-ops in a normal Node process, so the function runs synchronously
+// and writes the embedding inline — correct for benchmark purposes.
+// Production code (route handlers) still uses the fire-and-forget path.
+import { embedDocumentWorkflow } from '@/lib/memory/embedding/workflow';
 
 export interface BenchmarkDoc {
   slug: string;
@@ -81,10 +90,10 @@ export async function seedBenchmarkBrain(
       .returning({ id: documents.id });
     docIds[d.slug] = row.id;
 
-    // Fire embedding workflow synchronously (await trigger return,
-    // not workflow completion). The benchmark runner waits separately
-    // for embeddings to land before measuring.
-    await triggerEmbeddingFor({
+    // Call the workflow function directly so embeddings are persisted before
+    // this function returns. The Workflow runtime is not running in a plain
+    // tsx process, so the fire-and-forget path would never execute.
+    await embedDocumentWorkflow({
       documentId: row.id,
       companyId: company.id,
       brainId: brain.id,
@@ -96,6 +105,8 @@ export async function seedBenchmarkBrain(
 
 export async function teardownBenchmarkSeed(s: SeededBenchmark): Promise<void> {
   await db.delete(users).where(eq(users.id, s.ownerUserId));
+  // Delete usage_records before companies because the FK is onDelete: restrict.
+  await db.delete(usageRecords).where(eq(usageRecords.companyId, s.companyId));
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`ALTER TABLE document_versions DISABLE TRIGGER document_versions_immutable`,

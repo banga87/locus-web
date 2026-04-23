@@ -1,29 +1,49 @@
 # tests/benchmarks/
 
-Benchmark harness for the memory subsystem. Designed to point at
-`retrieve()` with different fixtures — smoke (small, in-repo),
-LongMemEval, HotpotQA, FanOutQA, RAGAS (external, Phase 2+).
+Benchmark harness for the memory subsystem.
 
-## Status
+## Status (Phase 2)
 
-Phase 1: scaffold only. The runner's seed step throws; Phase 2 wires
-in a CLI-friendly variant of `seedBrainInCompany` from the memory test
-fixtures.
+- Smoke fixture (in-repo): `fixtures/sample.json`
+- LongMemEval (downloaded on demand): `fixtures/longmemeval.json` (gitignored)
 
-## Run (once Phase 2 wires it)
+## Run
 
+Smoke (lexical-only baseline):
 ```bash
-DATABASE_URL=... npx tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json
+cross-env MEMORY_WEIGHT_VEC=0 BENCH_OUTPUT=results/smoke-baseline.json \
+  npx tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json
 ```
 
+Smoke (hybrid):
+```bash
+cross-env BENCH_OUTPUT=results/smoke-hybrid.json \
+  npx tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json
+```
+
+LongMemEval (download once):
+```bash
+npx tsx tests/benchmarks/load-longmemeval.ts \
+  --max-questions 100 \
+  --out tests/benchmarks/fixtures/longmemeval.json
+```
+
+LongMemEval baseline + hybrid:
+```bash
+cross-env MEMORY_WEIGHT_VEC=0 BENCH_OUTPUT=results/lme-baseline.json \
+  npx tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/longmemeval.json
+
+cross-env BENCH_OUTPUT=results/lme-hybrid.json \
+  npx tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/longmemeval.json
+```
+
+## CI smoke gate
+
+`npm run benchmark:smoke` runs the smoke fixture in hybrid mode and exits non-zero
+if R@5 drops by more than 5% vs the captured baseline (results/baseline.json).
+See package.json scripts.
+
 ## Add a benchmark
-
-1. Place fixture JSON in `fixtures/` with shape `{ corpus[], questions[] }`.
+1. Place fixture JSON in `fixtures/` with shape `{ name, corpus[], questions[] }`.
 2. Run the runner.
-3. Report metrics in the benchmark dashboard (Phase 5).
-
-## Metrics
-
-- `r_at_5`, `r_at_10`: recall at K across all questions.
-- `mrr`: mean reciprocal rank.
-- `n`: question count.
+3. Archive metrics in `results/`.

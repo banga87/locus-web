@@ -54,3 +54,6 @@ next-env.d.ts
 # benchmark result snapshots (committed manually after review)
 # tests/benchmarks/results/baseline.json
 # tests/benchmarks/results/hybrid.json
+
+# LongMemEval downloaded dataset (large, download on demand)
+tests/benchmarks/fixtures/longmemeval.json

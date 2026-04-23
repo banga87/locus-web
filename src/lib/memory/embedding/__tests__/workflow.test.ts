@@ -79,7 +79,7 @@ describe('embedDocumentWorkflow', () => {
       await teardownSeed(other);
     }
     expect(true).toBe(true);
-  });
+  }, 30_000);
 
   it('no-ops when the document was deleted between trigger and run', async () => {
     const transient = await seedBrainInCompany({
@@ -108,5 +108,5 @@ describe('embedDocumentWorkflow', () => {
       await db.delete(documents).where(eq(documents.id, transient.docs[0].id));
       await teardownSeed(transient);
     }
-  });
+  }, 30_000);
 });

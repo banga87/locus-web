@@ -59,7 +59,7 @@ The Workflow trigger function (`triggerEmbeddingFor`) is harness-pure — it imp
 
 Every embedding read filters by `company_id + brain_id` at the predicate level *before* the HNSW ORDER BY. pgvector applies WHERE filters before the ANN scan, so this is both correct and efficient.
 
-`embedding_jobs` is not introduced — Workflows manage their own state. But the workflow function itself loads the document via the tenant-scoped query path (`SELECT FROM documents WHERE id = $documentId AND company_id = ?`) using the company_id captured at trigger time.
+`embedding_jobs` is not introduced — Workflows manage their own state. The workflow function loads the document via the tenant-scoped query path (`SELECT FROM documents WHERE id = $documentId AND company_id = $companyId AND brain_id = $brainId`); the tenant tuple is captured at trigger time and passed through workflow args. Defense-in-depth: while document UUIDs are globally unique, every other read path in the codebase scopes by `(company_id, brain_id)` and embeddings should follow the same pattern.
 
 ### 4.3 Plug-and-play UX
 
@@ -123,23 +123,36 @@ Concrete impl `openai.ts` wraps `embed`/`embedMany` from the AI SDK with the `@a
 import { openaiEmbedder } from './openai';
 import { db } from '@/db';
 import { documents } from '@/db/schema/documents';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
-export async function embedDocumentWorkflow(documentId: string) {
+export interface EmbedJobArgs {
+  documentId: string;
+  companyId: string;
+  brainId: string;
+}
+
+export async function embedDocumentWorkflow(args: EmbedJobArgs) {
   'use workflow';
 
-  const doc = await loadDoc(documentId);
+  const doc = await loadDoc(args);
   if (!doc || doc.deletedAt) return;                    // doc deleted before run
   if (!doc.content || doc.content.trim().length === 0) return;
 
   const result = await generateEmbedding(doc.content);
-  await persistEmbedding(documentId, result.vector);
-  await recordUsage(doc.companyId, doc.brainId, documentId, result.promptTokens);
+  await persistEmbedding(args, result.vector);
+  await recordUsage(args, result.promptTokens);
 }
 
-async function loadDoc(id: string) {
+async function loadDoc(args: EmbedJobArgs) {
   'use step';
-  const [row] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
+  // Tenant-scoped read — defense-in-depth even though documentId is unique.
+  const [row] = await db.select().from(documents).where(
+    and(
+      eq(documents.id, args.documentId),
+      eq(documents.companyId, args.companyId),
+      eq(documents.brainId, args.brainId),
+    ),
+  ).limit(1);
   return row ?? null;
 }
 
@@ -148,22 +161,29 @@ async function generateEmbedding(content: string) {
   return openaiEmbedder.embed(content);
 }
 
-async function persistEmbedding(id: string, vector: number[]) {
+async function persistEmbedding(args: EmbedJobArgs, vector: number[]) {
   'use step';
-  await db.update(documents).set({ embedding: vector }).where(eq(documents.id, id));
+  // Tenant-scoped write — same defense-in-depth pattern.
+  await db.update(documents).set({ embedding: vector }).where(
+    and(
+      eq(documents.id, args.documentId),
+      eq(documents.companyId, args.companyId),
+      eq(documents.brainId, args.brainId),
+    ),
+  );
 }
 
-async function recordUsage(companyId: string, brainId: string, docId: string, tokens: number) {
+async function recordUsage(args: EmbedJobArgs, tokens: number) {
   'use step';
   // Writes to usage_records with both estimated_cost_usd and customer_cost_usd
-  // (per ADR-003 dual-cost pattern)
+  // (per ADR-003 dual-cost pattern); attribution via args.companyId / args.brainId / args.documentId.
 }
 ```
 
 **Key Workflow properties:**
 - Each `'use step'` is independently retried by the Workflow runtime.
 - The whole workflow is idempotent: re-running on the same doc produces the same embedding (assuming content unchanged) and overwrites the same row.
-- `loadDoc` returning null short-circuits the workflow (doc deleted between trigger and run).
+- `loadDoc` returning null short-circuits the workflow (doc deleted between trigger and run, OR tuple does not match — same effect).
 - Workflow runs are observable in the Vercel dashboard without us building any UI.
 
 ### 5.4 Trigger from write pipeline
@@ -171,10 +191,10 @@ async function recordUsage(companyId: string, brainId: string, docId: string, to
 ```typescript
 // src/lib/memory/embedding/trigger.ts
 import { trigger } from 'workflow';
-import { embedDocumentWorkflow } from './workflow';
+import { embedDocumentWorkflow, type EmbedJobArgs } from './workflow';
 
-export async function triggerEmbeddingFor(documentId: string): Promise<void> {
-  await trigger(embedDocumentWorkflow, { args: [documentId] });
+export async function triggerEmbeddingFor(args: EmbedJobArgs): Promise<void> {
+  await trigger(embedDocumentWorkflow, { args: [args] });
 }
 ```
 
@@ -182,9 +202,13 @@ Existing route handlers gain one line. POST `/api/brain/documents`:
 
 ```typescript
 // src/app/api/brain/documents/route.ts (after the INSERT succeeds)
-populateCompactIndexForWrite(...);            // Phase 1 line, existing
-await triggerEmbeddingFor(newDoc.id);         // NEW
-await regenerateFolderOverview(...);          // Phase 1 line, existing
+populateCompactIndexForWrite(...);                          // Phase 1 line, existing
+await triggerEmbeddingFor({                                 // NEW
+  documentId: newDoc.id,
+  companyId: newDoc.companyId,
+  brainId: newDoc.brainId,
+});
+await regenerateFolderOverview(...);                        // Phase 1 line, existing
 ```
 
 PATCH `/api/brain/documents/[id]`:
@@ -192,7 +216,11 @@ PATCH `/api/brain/documents/[id]`:
 ```typescript
 // only re-trigger if content changed; metadata-only updates skip embedding
 if (input.content !== undefined && input.content !== existing.content) {
-  await triggerEmbeddingFor(existing.id);
+  await triggerEmbeddingFor({
+    documentId: existing.id,
+    companyId: existing.companyId,
+    brainId: existing.brainId,
+  });
 }
 ```
 
@@ -258,16 +286,34 @@ const WEIGHT_VEC = 0.6;
 
 **Default weights:** `0.4 lexical / 0.6 semantic`. Hand-tuned starting point; semantic-leaning to favor the long-tail-intent queries Phase 2 targets. Tuning is an empirical process driven by benchmark runs (§7.3); per-brain overrides land in Phase 3 with `brain_configs`.
 
-**Query embedding cache.** A per-process LRU (max 100 entries, key=query string) avoids re-embedding identical queries within a request lifecycle. Cleared on process restart; no Redis dependency. If query patterns prove repetitive in production, escalate to a real cache later.
+**Query embedding cache.** A per-process LRU (max 100 entries, key=query string) avoids re-embedding identical queries within a request lifecycle. Cleared on process restart; no Redis dependency. **Caveat:** under Vercel Functions' fluid compute, warm-instance lifetime varies — the cache is best-effort, not load-bearing. Hit rate matters most within a single request (e.g. agent calling retrieve() multiple times with the same query); cross-request hits are a bonus, not a guarantee. If query patterns prove repetitive in production, escalate to a Redis-backed cache later.
 
 ### 5.6 MemoryProvider provider updates
 
-`tatara-hybrid/index.ts` changes minimally:
+The `MemoryProvider.invalidateDocument(slug, companyId, brainId)` signature from Phase 1 (`src/lib/memory/types.ts:189-193`) is preserved. Phase 2 implements it instead of leaving it as a no-op:
 
 ```typescript
-async invalidateDocument(documentId: string): Promise<void> {
-  // Phase 2: re-trigger the embedding workflow on explicit invalidation
-  await triggerEmbeddingFor(documentId);
+// src/lib/memory/providers/tatara-hybrid/index.ts
+async invalidateDocument(
+  slug: string,
+  companyId: string,
+  brainId: string,
+): Promise<void> {
+  // Resolve slug → documentId via the tenant-scoped read.
+  const [row] = await db.select({ id: documents.id })
+    .from(documents)
+    .where(and(
+      eq(documents.slug, slug),
+      eq(documents.companyId, companyId),
+      eq(documents.brainId, brainId),
+    ))
+    .limit(1);
+  if (!row) return;                                // unknown slug — silent no-op
+  await triggerEmbeddingFor({
+    documentId: row.id,
+    companyId,
+    brainId,
+  });
 }
 
 describe(): ProviderCapabilities {
@@ -311,10 +357,13 @@ CREATE INDEX IF NOT EXISTS documents_embedding_hnsw_idx
 ```typescript
 import { customType } from 'drizzle-orm/pg-core';
 
-const vector = customType<{ data: number[]; driverData: string }>({
+const vector = customType<{ data: number[] | null; driverData: string | null }>({
   dataType() { return `vector(${EMBEDDING_DIMENSION})`; },
-  toDriver(value: number[]): string { return `[${value.join(',')}]`; },
-  fromDriver(value: string): number[] {
+  toDriver(value: number[] | null): string | null {
+    return value === null ? null : `[${value.join(',')}]`;
+  },
+  fromDriver(value: string | null): number[] | null {
+    if (value === null || value === undefined) return null;
     return value.replace(/^\[|\]$/g, '').split(',').map(Number);
   },
 });
@@ -325,6 +374,8 @@ embedding: vector('embedding'),
 // inside indexes section:
 embeddingHnswIdx: index('documents_embedding_hnsw_idx').using('hnsw', table.embedding.op('vector_cosine_ops')),
 ```
+
+**Null-handling is load-bearing** here — during backfill (and forever, for any doc whose workflow failed), the column will be NULL. Drizzle reads must return `null` cleanly without throwing on `value.replace(...)`.
 
 Same custom-type pattern as Phase 1's `tsvector` column. Drizzle's HNSW index helper has been stable since drizzle-orm 0.32+.
 
@@ -346,12 +397,20 @@ import { documents } from '@/db/schema/documents';
 import { triggerEmbeddingFor } from '@/lib/memory/embedding/trigger';
 
 async function main() {
-  const rows = await db.select({ id: documents.id })
+  const rows = await db.select({
+    id: documents.id,
+    companyId: documents.companyId,
+    brainId: documents.brainId,
+  })
     .from(documents)
     .where(isNull(documents.embedding));
 
   for (const row of rows) {
-    await triggerEmbeddingFor(row.id);
+    await triggerEmbeddingFor({
+      documentId: row.id,
+      companyId: row.companyId,
+      brainId: row.brainId,
+    });
     console.log(`[backfill] triggered embedding for ${row.id}`);
   }
   console.log(`[backfill] enqueued ${rows.length} workflow runs`);
@@ -389,7 +448,13 @@ Backfill is idempotent: re-running enqueues new workflow runs that overwrite the
 2. **Capture Phase 1 baseline.** Run the runner against `tests/benchmarks/fixtures/sample.json` *before* any Phase 2 SQL changes. Record R@5/R@10/MRR. This is the "beat this" target.
 3. **Smoke fixture (in-repo).** ~30 hand-crafted Q&A in `tests/benchmarks/fixtures/sample.json`. Both lexical-only mode (force `WEIGHT_VEC=0`) and hybrid mode are run; metrics reported side-by-side.
 4. **LongMemEval integration.** `tests/benchmarks/fixtures/longmemeval.json` downloaded from HuggingFace (~500 multi-turn questions). Loader script in `tests/benchmarks/load-longmemeval.ts`. Run once per phase; metrics archived in `tests/benchmarks/results/`.
-5. **CI smoke check.** `npm run benchmark:smoke` runs the smoke fixture and exits non-zero if hybrid R@5 drops by more than 5% vs the baseline captured in step 2. Wired into the existing pre-merge check.
+5. **CI smoke check.** `npm run benchmark:smoke` runs the smoke fixture in hybrid mode and exits non-zero if R@5 drops by more than 5% vs the baseline captured in step 2.
+
+   Two distinct gates to keep clear when reading later:
+   - **Floor gate (CI, this step):** `hybrid_R@5 >= phase1_baseline_R@5 - 0.05`. Catches regressions during ongoing development. Lexical-only baseline is the floor because hybrid should *never* be worse than what Phase 1 shipped.
+   - **Target gate (exit criterion §12):** `hybrid_R@5 > lexical_only_R@5` on at least one fixture, where both are measured *with Phase 2 SQL* (the only difference is `WEIGHT_VEC=0` vs `WEIGHT_VEC=0.6`). This is what "hybrid beats lexical-only" means and is the load-bearing reason to ship Phase 2.
+
+   Wire only the floor gate into pre-merge CI. The target gate is a one-shot human-readable comparison done before declaring Phase 2 done.
 
 ### 8.4 Workflow chaos test
 
@@ -397,6 +462,8 @@ Manually verify (not in CI):
 - Trigger workflow for a doc, kill the underlying step (mock OpenAI 503). Verify Workflow retries → eventually succeeds → embedding lands.
 - Trigger workflow for a doc that gets deleted between trigger and step-1. Verify graceful no-op, no error.
 - Trigger 500 backfill workflows simultaneously. Verify Workflow runtime serializes/parallelizes appropriately, no thundering-herd OpenAI rate-limit failures.
+
+**One promoted to CI smoke (lower N):** trigger 5 workflows simultaneously against the test corpus and verify all 5 embeddings land within a reasonable time bound. Cheap, exercises the trigger→workflow→DB roundtrip end-to-end, catches regressions in workflow registration without the cost of a full chaos run.
 
 ## 9. Cost & observability
 
@@ -454,9 +521,9 @@ Phase 2 (this spec):
 ```
 
 **Rollback Phase 2:**
-1. Set `WEIGHT_VEC = 0` in `compose.ts` (immediately disables semantic ranking; lexical-only mode resumes).
-2. Stop triggering the workflow on writes (comment out the `triggerEmbeddingFor` call).
-3. (Optional) `DROP INDEX documents_embedding_hnsw_idx; ALTER TABLE documents DROP COLUMN embedding;`.
+1. Set `WEIGHT_VEC = 0` in `compose.ts` (immediately disables semantic ranking; lexical-only mode resumes — equivalent to Phase 1 behavior).
+2. Stop triggering the workflow on writes (comment out the `triggerEmbeddingFor` calls). **Caveat:** new docs written after this step will have `embedding IS NULL`. Combined with step 1 (`WEIGHT_VEC=0`), this is benign — semantic scoring is off anyway. If step 1 is skipped and only step 2 is taken, freshly-written docs lose semantic scoring while older docs retain it; avoid that combination.
+3. (Optional, only if abandoning embeddings entirely) `DROP INDEX documents_embedding_hnsw_idx; ALTER TABLE documents DROP COLUMN embedding;`.
 
 Step 1 is the immediate rollback if hybrid produces worse results than lexical. Step 3 is only if we're abandoning embeddings entirely (unlikely).
 
@@ -490,6 +557,7 @@ These items came up while scoping Phase 2 but explicitly do *not* land here:
 - **HNSW tuning** — defaults work to ~1M vectors. Phase 5 if large brains show recall regressions.
 - **Query embedding cache backed by Redis** — in-process LRU is fine for MVP; escalate if production traffic patterns warrant.
 - **Fan-out batching inside workflows for bulk imports** — current per-doc trigger is fine for ≤10k docs; fan-out is a Phase 3+ optimization if enterprise import sizes grow.
+- **RAGAS integration** — parent spec §14.1 task 15 lists RAGAS (faithfulness / answer-relevance / context-precision via LLM-judge) as a Phase 2 task. Deferring to Phase 4 because: (a) RAGAS measures *generation* quality, not *retrieval* quality; Phase 2 is purely a retrieval upgrade with no generation component; (b) LLM-judge calls add ongoing cost that's better introduced alongside the Maintenance Agent's own LLM cost budget in Phase 4; (c) LongMemEval gives us retrieval R@K + MRR which is the right exit-criterion shape for this phase. Revisit when generation-quality gates first appear in Phase 4+.
 
 ## 14. References
 

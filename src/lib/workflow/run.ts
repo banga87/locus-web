@@ -24,6 +24,7 @@
 // the runner stops.
 
 import { eq } from 'drizzle-orm';
+import type { Tool } from 'ai';
 
 import { db } from '@/db';
 import { documents } from '@/db/schema/documents';
@@ -33,7 +34,7 @@ import { folders } from '@/db/schema/folders';
 import { companies } from '@/db/schema/companies';
 import { users } from '@/db/schema/users';
 
-import { runAgentTurn } from '@/lib/agent/run';
+import { runAgentTurn, DEFAULT_MODEL } from '@/lib/agent/run';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { buildToolSet } from '@/lib/agent/tool-bridge';
 import { loadMcpOutTools } from '@/lib/mcp-out/bridge';
@@ -41,6 +42,10 @@ import { registerLocusTools } from '@/lib/tools';
 import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
 import { registerContextHandlers } from '@/lib/context/register';
 import { deriveGrantedCapabilities } from '@/app/api/agent/chat/grantedCapabilities';
+import { getBuiltInAgents, getBuiltInAgent } from '@/lib/subagent/registry';
+import { listUserDefinedAgents } from '@/lib/subagent/userDefinedAgents';
+import { buildAgentTool } from '@/lib/subagent/AgentTool';
+import { buildAgentToolDescription } from '@/lib/subagent/prompt';
 
 import { insertEvent } from './events';
 import { markRunning, markCompleted, markFailed, markCancelled, getRunStatus } from './status';
@@ -251,8 +256,49 @@ export async function runWorkflow(runId: string): Promise<void> {
     close: closeMcp,
   } = await loadMcpOutTools(workflowDoc.companyId);
 
+  // ---- Wire subagent dispatch (always on for workflow runs) ------------
+  // Merge built-in + user-defined agents. User-defined wins on slug collision
+  // so a custom agent can replace a built-in if the company wants to. Mirrors
+  // the chat route pattern (src/app/api/agent/chat/route.ts ~line 324).
+  const builtIns = getBuiltInAgents();
+  const userDefined = await listUserDefinedAgents(workflowDoc.companyId);
+  const userSlugs = new Set(userDefined.map((a) => a.agentType));
+  const agents = [
+    ...builtIns.filter((a) => !userSlugs.has(a.agentType)),
+    ...userDefined,
+  ];
+
+  // Build a per-call lookup so runSubagent can resolve user-defined agents
+  // first, falling back to the built-in registry.
+  const userDefinedBySlug = new Map(userDefined.map((a) => [a.agentType, a]));
+  const lookupAgent = (slug: string) =>
+    userDefinedBySlug.get(slug) ?? getBuiltInAgent(slug);
+
+  const agentToolCap = { limit: 10, count: 0 };
+  const agentTool = buildAgentTool({
+    parentCtx: agentContext,
+    // Workflow runs have no parent `usage_records` row to FK to yet (Task 6
+    // stretch). Pass `null` permanently via a stable getter — first-in-run
+    // subagent calls are the only calls, so there's no attribution ordering
+    // concern to solve here like the chat route has.
+    getParentUsageRecordId: () => null,
+    description: buildAgentToolDescription(agents),
+    agents,
+    lookupAgent,
+    cap: agentToolCap,
+  });
+
+  // Merge the Agent dispatch tool into the external tools map. Workflow runs
+  // hard-enable subagents — no TATARA_SUBAGENTS_ENABLED gate here (unlike
+  // the chat route). Workflows are the proving ground for the coordinator
+  // model; chat keeps its gate until the pattern is proven.
+  const routedExternalTools: Record<string, Tool> = {
+    ...externalTools,
+    Agent: agentTool,
+  };
+
   // ---- Build the tool set with stamp middleware -------------------------
-  const baseTools = buildToolSet(toolContext, externalTools, externalToolMeta);
+  const baseTools = buildToolSet(toolContext, routedExternalTools, externalToolMeta);
   const tools = wrapToolsWithStamping(
     baseTools,
     { runId, workflowDocRef },
@@ -323,6 +369,7 @@ export async function runWorkflow(runId: string): Promise<void> {
       messages,
       tools,
       maxSteps: 40,
+      model: DEFAULT_MODEL,
     });
 
     for await (const ev of events) {

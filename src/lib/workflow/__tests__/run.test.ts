@@ -8,7 +8,7 @@
 //   2. Cancellation: status flipped to 'cancelled' mid-execution
 //   3. LLM error: streamText throws → run marked failed
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
 import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
 import { eq, sql } from 'drizzle-orm';
@@ -48,6 +48,9 @@ import {
   __resetContextHandlersForTests,
   registerContextHandlers,
 } from '@/lib/context/register';
+
+import * as agentRunModule from '@/lib/agent/run';
+import { DEFAULT_MODEL } from '@/lib/agent/run';
 
 import { runWorkflow } from '../run';
 
@@ -577,5 +580,63 @@ describe('runWorkflow — triggering user role', () => {
       expect(events.at(-1)!.eventType).toBe('run_complete');
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// Task 3 — coordinator wiring
+// ---------------------------------------------------------------------------
+
+describe('runWorkflow — coordinator wiring', () => {
+  it('uses the default platform model', { timeout: 15_000 }, async () => {
+    // Spy on runAgentTurn to capture the params it's called with.
+    // We replace it with a minimal stub that returns a turn_complete stream
+    // so the runner reaches markCompleted without touching the real LLM.
+    const spy = vi.spyOn(agentRunModule, 'runAgentTurn');
+
+    // Minimal fake turn: one text chunk, then stop. The spy is hoisted so
+    // the import-time mock (vi.mock('@ai-sdk/anthropic')) stays in place;
+    // we just need runAgentTurn to return without erroring.
+    mockProvider.setModel(
+      makeStreamModel([
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: 'done.' },
+        { type: 'text-end', id: 't1' },
+      ]),
+    );
+
+    const runId = await seedRun(fix);
+    await runWorkflow(runId);
+
+    // runAgentTurn must have been called exactly once with model: DEFAULT_MODEL.
+    expect(spy).toHaveBeenCalledOnce();
+    const callArgs = spy.mock.calls[0]![0];
+    expect(callArgs.model).toBe(DEFAULT_MODEL);
+
+    spy.mockRestore();
+  });
+
+  it('includes the Agent dispatch tool in the tool set', { timeout: 15_000 }, async () => {
+    // Spy on runAgentTurn to capture the `tools` argument.
+    const spy = vi.spyOn(agentRunModule, 'runAgentTurn');
+
+    mockProvider.setModel(
+      makeStreamModel([
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: 'done.' },
+        { type: 'text-end', id: 't1' },
+      ]),
+    );
+
+    const runId = await seedRun(fix);
+    await runWorkflow(runId);
+
+    expect(spy).toHaveBeenCalledOnce();
+    const callArgs = spy.mock.calls[0]![0];
+    // The Agent tool must be present in the final tool set. We don't invoke
+    // it here — just verify presence so we know the dispatch path is wired.
+    expect(callArgs.tools).toHaveProperty('Agent');
+
+    spy.mockRestore();
+  });
 });
 

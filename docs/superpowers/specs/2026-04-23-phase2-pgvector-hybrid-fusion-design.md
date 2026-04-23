@@ -540,7 +540,7 @@ Phase 2 ships when **all** of:
 - [x] Benchmark runner's seed step works end-to-end (no `throw`).
 - [x] Phase 1 baseline R@5 captured on smoke fixture and recorded in `tests/benchmarks/results/baseline.json`.
 - [x] Hybrid mode beats tsvector-only mode on at least one fixture (smoke or LongMemEval) on R@5.
-- [ ] LongMemEval fixture loaded; baseline + hybrid results archived. *(deferred to Phase 3+; run failed on FK violation; smoke MRR 0.944 → 0.983 is sufficient exit-criterion proof)*
+- [x] LongMemEval fixture loaded; baseline + hybrid results archived. *(10-question slice, 493 conversational sessions; baseline MRR 0.683, hybrid MRR 0.583 — hybrid LOST on this fixture. Honest finding: text-embedding-3-small underperforms on long conversational transcripts vs. focused factual lookup. Smoke fixture (Tatara-domain structured docs) shows the opposite — hybrid MRR 0.944 → 0.983. Phase 2 ships because the production domain is the smoke pattern, not LME-style chat history; LME is supplementary signal that informs Phase 2.5 chunking + Phase 5 alternative-provider work.)*
 - [x] `usage_records` has `kind='embedding'` rows for every embedding API call.
 - [ ] Vercel Workflow visible in the project dashboard with non-zero runs. *(deferred to deployment time; workflow runtime runs in deployed env)*
 - [x] Harness-boundary check passes (no Next.js / Vercel-platform imports inside `src/lib/memory/embedding/`).

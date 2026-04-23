@@ -1,0 +1,8 @@
+{
+  "name": "longmemeval",
+  "mode": "lexical-only",
+  "n": 10,
+  "r_at_5": 1,
+  "r_at_10": 1,
+  "mrr": 0.6833333333333333
+}

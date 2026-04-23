@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 // Real SDK exports `start`, not `trigger`. Mock it accordingly.
 const startMock = vi.fn();
-vi.mock('workflow', () => ({
+vi.mock('workflow/api', () => ({
   start: (fn: unknown, args: unknown) => startMock(fn, args),
 }));
 vi.mock('../workflow', () => ({

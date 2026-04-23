@@ -12,7 +12,7 @@
 //
 // Public signature is load-bearing — Task 11 + 12 call this unchanged.
 
-import { start } from 'workflow';
+import { start } from 'workflow/api';
 import { embedDocumentWorkflow } from './workflow';
 import type { EmbedJobArgs } from './types';
 

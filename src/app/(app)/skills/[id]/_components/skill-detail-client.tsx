@@ -7,6 +7,7 @@
 // require client-side navigation/state.
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Trash2Icon } from 'lucide-react';
 
@@ -158,7 +159,7 @@ export function SkillDetailClient({
       {/* Topbar */}
       <div className="topbar">
         <nav className="crumbs" aria-label="Breadcrumb">
-          <a href="/skills" className="crumb">Skills</a>
+          <Link href="/skills" className="crumb">Skills</Link>
           <span className="cur">{root.title}</span>
         </nav>
         <div className="topbar-spacer" />

@@ -1,10 +1,10 @@
-// Run view — /skills/[id]/runs/[id]
+// Run view — /skills/[id]/runs/[runId]
 //
 // Relocated from /workflows/[slug]/runs/[id] during the skill/workflow
 // unification. Lookup is id-based (matches the rest of /skills). The
 // owning document is fetched by id + type='skill'; the run UUID is still
-// the authoritative key and the [id] pair (skill id then run id) lets the
-// breadcrumb/back-link stay consistent with the detail page.
+// the authoritative key and the skill-id/run-id pair lets the breadcrumb
+// and back-link stay consistent with the detail page.
 //
 // Server responsibilities:
 //   1. Auth + ACL: requireAuth() + canAccessRun() (tenant isolation).
@@ -31,17 +31,11 @@ import { getWorkflowRunById } from '@/lib/workflow/queries';
 import { RunView } from '@/components/skills/run-view';
 
 interface PageProps {
-  // Next.js dynamic route: `/skills/[id]/runs/[id]` — both segments share
-  // the name `id` and Next resolves the inner one as the canonical value.
-  // Using the outer `skillId` would require renaming the segment, which
-  // would break every existing link pattern. Instead we accept the shape
-  // Next gives us and derive both values by re-parsing the pathname
-  // below — the run UUID is what matters for the query.
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string; runId: string }>;
 }
 
 export default async function RunViewPage({ params }: PageProps) {
-  const { id: runId } = await params;
+  const { runId } = await params;
 
   const ctx = await requireAuth();
   if (!ctx.companyId) return notFound();
@@ -59,11 +53,9 @@ export default async function RunViewPage({ params }: PageProps) {
     return notFound();
   }
 
-  // Load the owning skill doc — by id + type='skill'. We do NOT validate
-  // the URL's outer skill-id segment against run.workflowDocumentId here
-  // because Next.js collapses duplicate-named dynamic segments down to the
-  // inner value. The run's own `workflowDocumentId` is the authoritative
-  // link target; the breadcrumb and back-link use that id.
+  // Load the owning skill doc from the run's own workflowDocumentId —
+  // that's the authoritative link, so we don't cross-check against the
+  // URL's outer skill-id segment.
   const [doc] = await db
     .select({
       id: documents.id,

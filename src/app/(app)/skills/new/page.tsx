@@ -117,7 +117,7 @@ export default function NewSkillPage() {
     <>
       <div className="topbar">
         <nav className="crumbs" aria-label="Breadcrumb">
-          <a href="/skills" className="crumb">Skills</a>
+          <Link href="/skills" className="crumb">Skills</Link>
           <span className="cur">
             {wantsTriggerable ? 'New triggerable skill' : 'New skill'}
           </span>

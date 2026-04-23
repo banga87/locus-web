@@ -1,4 +1,9 @@
-// RunHistoryTable — lists past workflow runs for a document.
+// RunHistoryTable — lists past run rows for a triggered skill.
+//
+// Relocated from src/components/workflows/run-history-table.tsx during
+// the skill/workflow unification. Links now target /skills/[id]/runs/[id]
+// (id-based) instead of /workflows/[slug]/runs/[id].
+//
 // Server-renderable (no client hooks needed).
 
 import Link from 'next/link';
@@ -18,8 +23,8 @@ interface RunRow {
 
 interface Props {
   runs: RunRow[];
-  /** The workflow slug, used to build run-view links. */
-  workflowSlug: string;
+  /** The skill document id, used to build run-view links. */
+  skillId: string;
 }
 
 function statusVariant(
@@ -83,7 +88,7 @@ function formatCost(usd: string | null): string {
   return `$${n.toFixed(3)}`;
 }
 
-export function RunHistoryTable({ runs, workflowSlug }: Props) {
+export function RunHistoryTable({ runs, skillId }: Props) {
   if (runs.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-secondary px-6 py-10 text-center">
@@ -107,7 +112,7 @@ export function RunHistoryTable({ runs, workflowSlug }: Props) {
                 {statusLabel(run.status)}
               </Badge>
               <Link
-                href={`/workflows/${workflowSlug}/runs/${run.id}`}
+                href={`/skills/${skillId}/runs/${run.id}`}
                 className="text-sm text-muted-foreground underline-offset-4 hover:text-ink hover:underline"
               >
                 View
@@ -170,7 +175,7 @@ export function RunHistoryTable({ runs, workflowSlug }: Props) {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Link
-                    href={`/workflows/${workflowSlug}/runs/${run.id}`}
+                    href={`/skills/${skillId}/runs/${run.id}`}
                     className="text-xs text-muted-foreground underline-offset-4 hover:text-ink hover:underline"
                   >
                     View

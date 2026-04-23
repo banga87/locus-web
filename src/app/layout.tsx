@@ -27,7 +27,7 @@ const jetbrains = JetBrains_Mono({
 
 // Default app-wide metadata. The marketing home at `/` provides its own
 // richer metadata (title + OG + twitter) that overrides these defaults; app
-// routes (/home, /login, /workflows/…) fall through to these.
+// routes (/home, /login, /skills/…) fall through to these.
 //
 // `metadataBase` resolves relative OG/Twitter image URLs to absolute URLs
 // in the rendered <meta> tags. Vercel injects `VERCEL_PROJECT_PRODUCTION_URL`

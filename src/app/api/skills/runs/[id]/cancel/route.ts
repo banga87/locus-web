@@ -1,4 +1,8 @@
-// POST /api/workflows/runs/[id]/cancel — cancel a running workflow run.
+// POST /api/skills/runs/[id]/cancel — cancel a running triggered-skill run.
+//
+// Relocated from /api/workflows/runs/[id]/cancel during the skill/workflow
+// unification. The HTTP surface lives under /skills/; the underlying table
+// keeps the name `workflow_runs` (operational artefact).
 //
 // State machine: only `running → cancelled` is permitted. If the run is
 // already in a terminal state (completed / failed / cancelled), the route
@@ -16,11 +20,13 @@
 //
 // Audit trail: emits a `workflow.run.cancelled` event (category:
 // 'administration', actorType: 'human') on successful state transition.
-// The audit event is only emitted when the UPDATE actually landed — if
-// cancelWorkflowRun returns null (race: run reached a terminal state
-// between the read and the guarded update), no event is emitted because
-// no state change occurred. `waitUntil(flushEvents())` ensures the
-// buffered audit write lands before the function shuts down.
+// The audit event name keeps the `workflow` prefix for operational
+// continuity — the runs table is unchanged and log consumers filter by
+// this string. The audit event is only emitted when the UPDATE actually
+// landed — if cancelWorkflowRun returns null (race: run reached a
+// terminal state between the read and the guarded update), no event is
+// emitted because no state change occurred. `waitUntil(flushEvents())`
+// ensures the buffered audit write lands before the function shuts down.
 
 import { waitUntil } from '@vercel/functions';
 
@@ -91,6 +97,8 @@ export async function POST(
   // Confirmed state change: emit the audit event. Naming convention
   // matches `mcp.connection.{created,updated,disabled,deleted}` in
   // src/app/api/admin/mcp-connections — dotted lowercase, domain-scoped.
+  // Keeping `workflow.run.cancelled` for operational continuity (the
+  // runs table is unchanged and log consumers filter by this string).
   logEvent({
     companyId: auth.companyId!,
     category: 'administration',

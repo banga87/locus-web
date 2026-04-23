@@ -1,4 +1,8 @@
-// GET /api/workflows/runs/[id] — return the workflow_run row.
+// GET /api/skills/runs/[id] — return the workflow_run row.
+//
+// Relocated from /api/workflows/runs/[id] during the skill/workflow
+// unification. The HTTP surface is id-based + lives under /skills/; the
+// underlying table keeps the name `workflow_runs` (operational artefact).
 //
 // Access control delegated to `canAccessRun()` in @/lib/workflow/access.
 // Three rules apply: tenant isolation (auth.companyId == run.companyId),
@@ -7,7 +11,7 @@
 // On denial we return 404, not 403 — a 403 would confirm that the UUID
 // exists (just that the caller can't see it), which leaks information
 // across tenants. The trigger route uses the same approach for
-// cross-tenant workflow docs.
+// cross-tenant skill docs.
 
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';

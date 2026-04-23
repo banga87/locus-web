@@ -8,11 +8,11 @@
 // see docs/superpowers/plans/2026-04-23-skill-workflow-unification.md).
 //
 // Consumers:
-//   - POST /api/skills/runs              (createWorkflowRun, getSkillDocById)
-//   - GET  /api/workflows/runs/[id]      (getWorkflowRunById)
-//   - GET  /api/workflows/runs/[id]/events  (getRunEvents)
-//   - POST /api/workflows/runs/[id]/cancel  (cancelWorkflowRun)
-//   - GET  /api/cron/zombie-sweeper      (sweepZombies)
+//   - POST /api/skills/runs                  (createWorkflowRun, getSkillDocById)
+//   - GET  /api/skills/runs/[id]             (getWorkflowRunById)
+//   - GET  /api/skills/runs/[id]/events      (getRunEvents)
+//   - POST /api/skills/runs/[id]/cancel      (cancelWorkflowRun)
+//   - GET  /api/cron/zombie-sweeper          (sweepZombies)
 
 import { eq, gt, and, sql } from 'drizzle-orm';
 

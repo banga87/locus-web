@@ -2,15 +2,19 @@
 
 // useWorkflowRun — reattach-safe hook for the run view.
 //
-// Design contract (Task 8):
-//   1. On mount: GET /api/workflows/runs/:id/events → initial event list.
-//   2. On mount: GET /api/workflows/runs/:id → status metadata.
+// The hook's name preserves the underlying table name (workflow_runs) —
+// the HTTP surface moved to /api/skills/runs during the skill/workflow
+// unification, but the hook still reduces events from that table.
+//
+// Design contract:
+//   1. On mount: GET /api/skills/runs/:id/events → initial event list.
+//   2. On mount: GET /api/skills/runs/:id → status metadata.
 //   3. Subscribe Supabase Realtime INSERT on workflow_run_events for this run.
 //   4. On INSERT: append if sequence > last-seen (dedup idempotent).
 //   5. On run_complete / run_error: re-fetch status metadata.
 //   6. Periodic backfill: poll ?after=lastSeq every 10 s while running, to
 //      recover any events Realtime dropped (the DB is the source of truth).
-//   7. cancel(): POST /api/workflows/runs/:id/cancel.
+//   7. cancel(): POST /api/skills/runs/:id/cancel.
 //
 // Reattach safety: closing and reopening the tab re-runs the initial GET
 // from sequence 0, loading ALL events from the DB. Any events that arrived
@@ -112,7 +116,7 @@ export function useWorkflowRun(runId: string): UseWorkflowRunResult {
 
   const fetchMeta = useCallback(async () => {
     try {
-      const res = await fetch(`/api/workflows/runs/${runId}`);
+      const res = await fetch(`/api/skills/runs/${runId}`);
       if (!res.ok) return;
       const data = (await res.json()) as RunMeta;
       if (cancelledRef.current) return;
@@ -126,8 +130,8 @@ export function useWorkflowRun(runId: string): UseWorkflowRunResult {
     try {
       const url =
         after !== undefined && after >= 0
-          ? `/api/workflows/runs/${runId}/events?after=${after}`
-          : `/api/workflows/runs/${runId}/events`;
+          ? `/api/skills/runs/${runId}/events?after=${after}`
+          : `/api/skills/runs/${runId}/events`;
       const res = await fetch(url);
       if (!res.ok) return;
       const data = (await res.json()) as { events: WorkflowRunEvent[] };
@@ -241,7 +245,7 @@ export function useWorkflowRun(runId: string): UseWorkflowRunResult {
     if (cancelPending) return;
     setCancelPending(true);
     try {
-      const res = await fetch(`/api/workflows/runs/${runId}/cancel`, {
+      const res = await fetch(`/api/skills/runs/${runId}/cancel`, {
         method: 'POST',
       });
       if (res.status === 409) {

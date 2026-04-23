@@ -25,6 +25,8 @@ import { FileViewer } from './file-viewer';
 import { ForkButton } from './fork-button';
 import { UpdateModal } from './update-modal';
 import { AddFileInline } from './add-file-inline';
+import { RunButton } from '@/components/skills/run-button';
+import { RunHistoryTable } from '@/components/skills/run-history-table';
 import type { SkillOrigin } from '@/lib/skills/types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -45,11 +47,28 @@ export interface ResourceData {
   content: string;
 }
 
+type RunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'queued';
+
+interface RunRow {
+  id: string;
+  status: RunStatus;
+  startedAt: Date;
+  completedAt: Date | null;
+  summary: string | null;
+  totalCostUsd: string | null;
+}
+
 interface SkillDetailClientProps {
   root: RootSkillData;
   resources: ResourceData[];
   agentCount: number;
   canEdit: boolean;
+  /** Whether the skill has a `trigger:` block in metadata. */
+  isTriggerable?: boolean;
+  /** Whether the current user's role can trigger skills (owner/admin/editor). */
+  canRun?: boolean;
+  /** Most recent runs for a triggerable skill (newest first). */
+  recentRuns?: RunRow[];
 }
 
 // ─── Origin badge ─────────────────────────────────────────────────────────────
@@ -75,6 +94,9 @@ export function SkillDetailClient({
   resources,
   agentCount,
   canEdit,
+  isTriggerable = false,
+  canRun = false,
+  recentRuns = [],
 }: SkillDetailClientProps) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string>(root.id);
@@ -141,6 +163,10 @@ export function SkillDetailClient({
         </nav>
         <div className="topbar-spacer" />
         <div className="flex items-center gap-2">
+          {/* Run button — only for triggerable skills, gated by role.
+              Placed first so the primary action on a triggerable skill is
+              the most prominent control in the topbar. */}
+          {isTriggerable && canRun && <RunButton skillDocumentId={root.id} />}
           {root.origin.kind === 'installed' && canEdit && (
             <>
               <ForkButton skillId={root.id} />
@@ -259,6 +285,25 @@ export function SkillDetailClient({
               )}
             </div>
           </div>
+
+          {/* Runs section — only for triggerable skills. Sits between the
+              file viewer and the agent-count footer so triggerable skills
+              naturally get a dedicated area without disturbing on-demand
+              skill layout. */}
+          {isTriggerable && (
+            <section className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium text-ink">Recent runs</h2>
+                {recentRuns.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    Showing {recentRuns.length}{' '}
+                    {recentRuns.length === 1 ? 'run' : 'runs'}
+                  </span>
+                )}
+              </div>
+              <RunHistoryTable runs={recentRuns} skillId={root.id} />
+            </section>
+          )}
 
           {/* Footer */}
           <footer className="text-xs text-muted-foreground">

@@ -1,7 +1,12 @@
 /**
  * @vitest-environment node
  */
-// Integration test for POST /api/workflows/runs/[id]/cancel.
+// Integration test for POST /api/skills/runs/[id]/cancel.
+//
+// Relocated from /api/workflows/runs/[id]/cancel during the skill/workflow
+// unification. The underlying workflow_runs table keeps its name; only the
+// HTTP path moved. Fixture docs are seeded as type='skill' with a nested
+// `trigger:` block in metadata to match the new shape.
 //
 // Coverage:
 //   1. Happy path — running run is flipped to 'cancelled' and an
@@ -9,6 +14,8 @@
 //      inserted.
 //   2. Terminal-state guard — cancelling a completed run returns 409
 //      and emits no audit event.
+//   3. Cross-tenant denial — owner of Company B cannot cancel a run
+//      owned by Company A, even knowing the run UUID.
 //
 // Strategy mirrors the trigger route's integration test: real DB via
 // DATABASE_URL, mocked auth and mocked waitUntil. flushEvents is called
@@ -69,7 +76,7 @@ vi.mock('@vercel/functions', () => ({
 }));
 
 // Import the route AFTER mocks are installed.
-import { POST } from '@/app/api/workflows/runs/[id]/cancel/route';
+import { POST } from '@/app/api/skills/runs/[id]/cancel/route';
 
 // --- Fixtures -----------------------------------------------------------
 
@@ -77,7 +84,7 @@ const suffix = `cancel-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let companyId: string;
 let brainId: string;
 let userId: string;
-let workflowDocId: string;
+let skillDocId: string;
 
 // Secondary tenant — used to prove cross-tenant access is rejected even
 // when the caller holds role=owner in their own tenant.
@@ -121,28 +128,30 @@ beforeAll(async () => {
     })
     .returning({ id: folders.id });
 
-  const [wfDoc] = await db
+  const [skillDoc] = await db
     .insert(documents)
     .values({
       companyId,
       brainId,
       folderId: folder!.id,
-      title: 'Cancel WF',
-      slug: `cancel-wf-${suffix}`,
-      path: `cn-folder-${suffix}/cancel-wf-${suffix}`,
-      content: '---\ntype: workflow\noutput: document\nrequires_mcps: []\n---\nTest.',
-      type: 'workflow',
+      title: 'Cancel Skill',
+      slug: `cancel-skill-${suffix}`,
+      path: `cn-folder-${suffix}/cancel-skill-${suffix}`,
+      content:
+        '---\ntype: skill\ntrigger:\n  output: document\n  requires_mcps: []\n---\nTest.',
+      type: 'skill',
       metadata: {
-        type: 'workflow',
-        output: 'document',
-        requires_mcps: [],
-        output_category: null,
-        schedule: null,
+        trigger: {
+          output: 'document',
+          requires_mcps: [],
+          output_category: null,
+          schedule: null,
+        },
       },
       version: 1,
     })
     .returning({ id: documents.id });
-  workflowDocId = wfDoc!.id;
+  skillDocId = skillDoc!.id;
 
   // Secondary tenant — owner of Company B. They must NOT be able to
   // read/cancel runs owned by Company A even knowing the run UUID.
@@ -191,7 +200,7 @@ afterAll(async () => {
   });
   await db
     .delete(workflowRuns)
-    .where(eq(workflowRuns.workflowDocumentId, workflowDocId));
+    .where(eq(workflowRuns.workflowDocumentId, skillDocId));
   await db.delete(users).where(eq(users.id, userId));
   await db.delete(brains).where(eq(brains.id, brainId));
   await db.delete(companies).where(eq(companies.id, companyId));
@@ -207,7 +216,7 @@ async function seedRunningRun(): Promise<string> {
   const [row] = await db
     .insert(workflowRuns)
     .values({
-      workflowDocumentId: workflowDocId,
+      workflowDocumentId: skillDocId,
       triggeredBy: userId,
       status: 'running',
     })
@@ -219,7 +228,7 @@ async function seedCompletedRun(): Promise<string> {
   const [row] = await db
     .insert(workflowRuns)
     .values({
-      workflowDocumentId: workflowDocId,
+      workflowDocumentId: skillDocId,
       triggeredBy: userId,
       status: 'completed',
     })
@@ -228,7 +237,7 @@ async function seedCompletedRun(): Promise<string> {
 }
 
 function buildCancelRequest(): Request {
-  return new Request('http://localhost/api/workflows/runs/x/cancel', {
+  return new Request('http://localhost/api/skills/runs/x/cancel', {
     method: 'POST',
   });
 }
@@ -241,7 +250,7 @@ async function flushWaitUntil(): Promise<void> {
 
 // --- Tests --------------------------------------------------------------
 
-describe('POST /api/workflows/runs/[id]/cancel', () => {
+describe('POST /api/skills/runs/[id]/cancel', () => {
   it(
     'emits workflow.run.cancelled audit event on successful cancel',
     async () => {

@@ -2,6 +2,9 @@
 
 // RunStatusBanner — sticky top banner for the run view.
 //
+// Relocated from src/components/workflows/run-status-banner.tsx during the
+// skill/workflow unification. No behavioural changes.
+//
 // While running: animated dot + elapsed time ticker + Cancel button.
 // On complete:   "Completed in Xs" + optional "View output" link.
 // On failed:     "Failed" label + error message excerpt.

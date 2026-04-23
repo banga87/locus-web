@@ -4,9 +4,14 @@
 // joined through documents to confirm company-level tenant isolation
 // (workflow_runs has no direct company_id column).
 //
-// Renders a small "N running" badge next to the Workflows nav link.
+// The join now filters on `documents.type = 'skill'` — following the
+// skill/workflow unification, triggered runs belong to skill docs. The
+// workflow_runs table keeps its name (operational artefact), but the
+// user-facing concept and link target is /skills.
+//
+// Renders a small "N running" badge next to the Skills nav link.
 // Clicking navigates to the most recent running run's view URL,
-// or to /workflows if there are none.
+// or to /skills if there are none.
 //
 // Zero active runs: renders a subtle greyed label rather than nothing,
 // so the nav item stays stable in width and the user can still see
@@ -35,7 +40,7 @@ export async function GlobalRunBadge({ auth }: GlobalRunBadgeProps) {
       id: workflowRuns.id,
       workflowDocumentId: workflowRuns.workflowDocumentId,
       startedAt: workflowRuns.startedAt,
-      docSlug: documents.slug,
+      docId: documents.id,
     })
     .from(workflowRuns)
     .innerJoin(documents, eq(documents.id, workflowRuns.workflowDocumentId))
@@ -44,6 +49,7 @@ export async function GlobalRunBadge({ auth }: GlobalRunBadgeProps) {
         eq(workflowRuns.status, 'running'),
         eq(workflowRuns.triggeredBy, auth.userId),
         eq(documents.companyId, auth.companyId),
+        eq(documents.type, 'skill'),
       ),
     )
     .orderBy(desc(workflowRuns.startedAt))
@@ -53,19 +59,19 @@ export async function GlobalRunBadge({ auth }: GlobalRunBadgeProps) {
   const mostRecent = runningRuns[0];
 
   const href = mostRecent
-    ? `/workflows/${mostRecent.docSlug}/runs/${mostRecent.id}`
-    : '/workflows';
+    ? `/skills/${mostRecent.docId}/runs/${mostRecent.id}`
+    : '/skills';
 
   if (count === 0) {
     // Subtle "no active runs" label — keeps the nav item stable.
     return (
       <Link
-        href="/workflows"
+        href="/skills"
         className="quick-item text-muted-foreground"
-        aria-label="Workflows — no active runs"
+        aria-label="Skills — no active runs"
       >
-        <WorkflowsIcon />
-        Workflows
+        <SkillsIcon />
+        Skills
       </Link>
     );
   }
@@ -74,10 +80,10 @@ export async function GlobalRunBadge({ auth }: GlobalRunBadgeProps) {
     <Link
       href={href}
       className="quick-item"
-      aria-label={`Workflows — ${count} run${count === 1 ? '' : 's'} active`}
+      aria-label={`Skills — ${count} run${count === 1 ? '' : 's'} active`}
     >
       <GaugeNeedle size="sm" />
-      Workflows
+      Skills
       <span
         className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--ember)] px-1 text-[10px] font-medium leading-none text-[var(--cream)]"
         aria-hidden="true"
@@ -88,7 +94,7 @@ export async function GlobalRunBadge({ auth }: GlobalRunBadgeProps) {
   );
 }
 
-function WorkflowsIcon() {
+function SkillsIcon() {
   return (
     <svg
       width="15"

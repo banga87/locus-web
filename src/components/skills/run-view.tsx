@@ -1,9 +1,15 @@
 'use client';
 
-// RunView — reattachable live run view (Task 8).
+// RunView — reattachable live run view for triggered skills.
+//
+// Relocated from src/components/workflows/run-view.tsx during the
+// skill/workflow unification. The `workflowSlug` prop is replaced by
+// `skillId` (id-based detail path); everything else is unchanged.
 //
 // Architecture:
 //   - useWorkflowRun hook provides events + status metadata + cancel().
+//     (Hook keeps its name — it operates on the workflow_runs table which
+//     is unchanged; the user-facing concept is "triggered skill".)
 //   - A reducer collapses the flat event stream into UI-level "turns":
 //       Each turn has an ordered list of items — text, tool-call, reasoning —
 //       in the order they were emitted. Consecutive llm_delta / reasoning
@@ -21,7 +27,8 @@
 //
 // Payload field names are camelCase (toolName, toolCallId, isError, delta)
 // — matching the AgentEvent shape the runner strips `type` off and persists
-// verbatim (see `src/lib/workflow/run.ts` and `src/lib/agent/types.ts`).
+// verbatim (see `src/lib/skills/run-triggered.ts` and
+// `src/lib/agent/types.ts`).
 //
 // AI Elements reuse:
 //   - MessageResponse (Streamdown) for accumulated LLM text — same component
@@ -87,9 +94,10 @@ interface UIModel {
  * unit testing — the component itself wraps it in `useMemo`.
  *
  * Field-name discipline: payloads are the AgentEvent shape with `type`
- * stripped (see `src/lib/workflow/run.ts`), so field names are camelCase
- * (`toolName`, `toolCallId`, `isError`, `delta`). Reading snake_case keys
- * here would silently return undefined and render "Unknown" tool pills.
+ * stripped (see `src/lib/skills/run-triggered.ts`), so field names are
+ * camelCase (`toolName`, `toolCallId`, `isError`, `delta`). Reading
+ * snake_case keys here would silently return undefined and render
+ * "Unknown" tool pills.
  */
 export function buildUIModel(events: WorkflowRunEvent[]): UIModel {
   const turns: Turn[] = [];
@@ -289,10 +297,20 @@ function EmptyState({ loading }: { loading: boolean }) {
 
 interface RunViewProps {
   runId: string;
-  workflowSlug: string;
+  /**
+   * The owning skill's document id. Reserved for future back-link
+   * navigation + breadcrumb affordances; the page component already
+   * renders the breadcrumb itself so the component does not currently
+   * use it, but keeping it in the props keeps the id-based routing
+   * contract symmetric with the old slug-based RunView.
+   */
+  skillId: string;
 }
 
-export function RunView({ runId, workflowSlug }: RunViewProps) {
+// Intentional underscore: see RunViewProps docstring — the prop is reserved
+// for future use; keeping it named keeps call-sites stable.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function RunView({ runId, skillId: _skillId }: RunViewProps) {
   const { events, meta, loading, cancel, cancelPending } =
     useWorkflowRun(runId);
 

@@ -3,11 +3,13 @@
 // OutputCard — shown at the bottom of the run view when the run has
 // completed and produced one or more output documents.
 //
-// Client component (converted from server component in a follow-up fix):
-// the set of output docs is only known after `run_complete` arrives via
-// Realtime, so rendering has to happen from client-side hook state, not
-// from the page's server-rendered snapshot. Titles are fetched via a
-// batched POST to /api/brain/documents/titles.
+// Relocated from src/components/workflows/output-card.tsx during the
+// skill/workflow unification. No behavioural changes.
+//
+// Client component: the set of output docs is only known after
+// `run_complete` arrives via Realtime, so rendering has to happen from
+// client-side hook state, not from the page's server-rendered snapshot.
+// Titles are fetched via a batched POST to /api/brain/documents/titles.
 //
 // When documentIds is empty we render nothing — this lets the caller
 // render <OutputCard> unconditionally when it has the ID list, and the

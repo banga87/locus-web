@@ -4,9 +4,14 @@
 //
 // Three fields: name, description, instructions (plain markdown textarea).
 // POSTs to /api/skills and redirects to /skills/[id] on success.
+//
+// Query param: `?triggerable=1` pre-seeds the instructions body with a
+// `trigger:` frontmatter block so users creating a triggerable skill
+// don't have to remember the YAML shape. This is the UX seam Task 6
+// introduced in place of the deleted /workflows/new page.
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -14,12 +19,33 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
+// Default `trigger:` YAML block seeded when the page loads with
+// ?triggerable=1. Matches the `SkillTrigger` shape the validator accepts
+// (`output: document | message | both`, `requires_mcps: string[]`,
+// optional `output_category`, optional `schedule` cron string).
+// The body after the frontmatter is a placeholder prompt explaining what
+// the triggered skill should do.
+const TRIGGERABLE_SKELETON = `---
+trigger:
+  output: document
+  output_category: null
+  requires_mcps: []
+  schedule: null
+---
+Describe what this triggered skill should do, which documents it should
+consult, and what output it should produce when run.
+`;
+
 export default function NewSkillPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const wantsTriggerable = searchParams.get('triggerable') === '1';
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [instructions, setInstructions] = useState('');
+  const [instructions, setInstructions] = useState(
+    wantsTriggerable ? TRIGGERABLE_SKELETON : '',
+  );
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -92,7 +118,9 @@ export default function NewSkillPage() {
       <div className="topbar">
         <nav className="crumbs" aria-label="Breadcrumb">
           <a href="/skills" className="crumb">Skills</a>
-          <span className="cur">New skill</span>
+          <span className="cur">
+            {wantsTriggerable ? 'New triggerable skill' : 'New skill'}
+          </span>
         </nav>
       </div>
 
@@ -102,11 +130,24 @@ export default function NewSkillPage() {
           className="mx-auto w-full max-w-2xl space-y-6 px-6 py-8"
         >
           <header>
-            <h1 className="text-2xl font-semibold tracking-tight">New skill</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {wantsTriggerable ? 'New triggerable skill' : 'New skill'}
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Write a reusable instruction set for your agents. The instructions
-              field becomes the body of the skill&apos;s{' '}
-              <code className="text-xs font-mono">SKILL.md</code>.
+              {wantsTriggerable ? (
+                <>
+                  Write a triggerable skill. The instructions field has been
+                  pre-seeded with a <code className="text-xs font-mono">trigger:</code>{' '}
+                  block — edit the YAML + body to describe what the skill should do,
+                  then trigger it from the skill detail page.
+                </>
+              ) : (
+                <>
+                  Write a reusable instruction set for your agents. The instructions
+                  field becomes the body of the skill&apos;s{' '}
+                  <code className="text-xs font-mono">SKILL.md</code>.
+                </>
+              )}
             </p>
           </header>
 
@@ -116,7 +157,11 @@ export default function NewSkillPage() {
               id="skill-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Customer support tone"
+              placeholder={
+                wantsTriggerable
+                  ? 'e.g., Weekly report generator'
+                  : 'e.g., Customer support tone'
+              }
               maxLength={200}
               autoFocus
               disabled={submitting}
@@ -145,7 +190,7 @@ export default function NewSkillPage() {
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               placeholder="Write the skill body in markdown. This becomes SKILL.md."
-              rows={12}
+              rows={wantsTriggerable ? 16 : 12}
               disabled={submitting}
               className="font-mono text-sm"
             />

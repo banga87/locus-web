@@ -1,4 +1,8 @@
-// GET /api/workflows/runs/[id]/events — return events for a workflow run.
+// GET /api/skills/runs/[id]/events — return events for a triggered-skill run.
+//
+// Relocated from /api/workflows/runs/[id]/events during the skill/workflow
+// unification. The HTTP surface lives under /skills/; the underlying table
+// keeps the name `workflow_run_events` (operational artefact).
 //
 // Returns all events for the run ordered by sequence ascending.
 // Supports ?after=<seq> for incremental fetch: used by the UI on Realtime

@@ -2,10 +2,17 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import NewSkillPage from '../page';
 
-// Mock next/navigation
+// Mock next/navigation — the page now also reads `?triggerable=1` via
+// useSearchParams(), so the mock has to provide both hooks. The default
+// mock returns an empty URLSearchParams, which matches the on-demand
+// (non-triggerable) path exercised by the existing tests.
 const pushMock = vi.fn();
+const searchParamsRef: { current: URLSearchParams } = {
+  current: new URLSearchParams(),
+};
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => searchParamsRef.current,
 }));
 
 // Mock next/link as a passthrough anchor
@@ -18,6 +25,9 @@ vi.mock('next/link', () => ({
 describe('NewSkillPage', () => {
   beforeEach(() => {
     pushMock.mockClear();
+    // Reset the mocked search params to the default (no ?triggerable=1) so
+    // tests start from the on-demand variant of the form.
+    searchParamsRef.current = new URLSearchParams();
     vi.restoreAllMocks();
   });
 

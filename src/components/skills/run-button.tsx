@@ -1,10 +1,16 @@
 'use client';
 
-// RunButton — triggers POST /api/workflows/runs for a workflow document.
+// RunButton — triggers POST /api/skills/runs for a triggered skill.
+//
+// Relocated from src/components/workflows/run-button.tsx during the
+// skill/workflow unification. Request field name updated to match the
+// new API: `skill_document_id` instead of `workflow_document_id`.
+//
 // Disables itself while the POST is in flight.
 // On 202: navigates to view_url.
+// On 400 skill_not_triggerable: shows a toast with the message.
 // On 400 missing_mcps: shows a toast listing the missing connections + link.
-// On 403: shows a forbidden toast.
+// On 403 forbidden / no_company: shows a forbidden toast.
 // On other errors: shows a generic toast.
 //
 // Uses the browser native alert() for toasts rather than a toast library,
@@ -18,7 +24,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 
 interface Props {
-  workflowDocumentId: string;
+  skillDocumentId: string;
 }
 
 type ApiResponse =
@@ -26,17 +32,17 @@ type ApiResponse =
   | { error: 'missing_mcps'; missing: string[] }
   | { error: string; message?: string };
 
-export function RunButton({ workflowDocumentId }: Props) {
+export function RunButton({ skillDocumentId }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
   async function handleRun() {
     setPending(true);
     try {
-      const res = await fetch('/api/workflows/runs', {
+      const res = await fetch('/api/skills/runs', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ workflow_document_id: workflowDocumentId }),
+        body: JSON.stringify({ skill_document_id: skillDocumentId }),
       });
 
       const data = (await res.json()) as ApiResponse;
@@ -54,19 +60,28 @@ export function RunButton({ workflowDocumentId }: Props) {
         // Using window.alert for v0 — no toast library installed.
         // TODO: replace with a proper toast when ui/toast.tsx is added.
         window.alert(
-          `Cannot run workflow: missing MCP connections.\n\nRequired: ${list}\n\nGo to Settings → MCP Connections to add them.`,
+          `Cannot run skill: missing MCP connections.\n\nRequired: ${list}\n\nGo to Settings → MCP Connections to add them.`,
+        );
+        return;
+      }
+
+      if (res.status === 400 && err.error === 'skill_not_triggerable') {
+        window.alert(
+          err.message ??
+            'This skill is not configured as triggerable. Add a `trigger:` block in its frontmatter to make it runnable.',
         );
         return;
       }
 
       if (res.status === 403) {
         window.alert(
-          err.message ?? 'Your role cannot trigger workflows.',
+          err.message ?? 'Your role cannot trigger skills.',
         );
         return;
       }
 
-      // 409 (terminal run state — shouldn't happen from index) or 500
+      // 404 (skill_not_found — cross-tenant or deleted), 409 (terminal run
+      // state — shouldn't happen from the detail page), or 500.
       window.alert(
         err.message ?? `Unexpected error (${res.status}). Please try again.`,
       );

@@ -1,7 +1,12 @@
 /**
  * @vitest-environment node
  */
-// Integration test for GET /api/workflows/runs/[id]/events.
+// Integration test for GET /api/skills/runs/[id]/events.
+//
+// Relocated from /api/workflows/runs/[id]/events during the skill/workflow
+// unification. The underlying workflow_run_events table keeps its name;
+// only the HTTP path moved. Fixture docs are seeded as type='skill' with a
+// nested `trigger:` block in metadata to match the new shape.
 //
 // Focused scope: Fix 2 from review — ?after param validation. A
 // non-numeric ?after previously coerced to NaN via Number() and was
@@ -53,7 +58,7 @@ vi.mock('@/lib/api/auth', async () => {
   };
 });
 
-import { GET } from '@/app/api/workflows/runs/[id]/events/route';
+import { GET } from '@/app/api/skills/runs/[id]/events/route';
 
 // --- Fixtures -----------------------------------------------------------
 
@@ -61,7 +66,7 @@ const suffix = `events-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let companyId: string;
 let brainId: string;
 let userId: string;
-let workflowDocId: string;
+let skillDocId: string;
 let runId: string;
 
 beforeAll(async () => {
@@ -98,33 +103,35 @@ beforeAll(async () => {
     })
     .returning({ id: folders.id });
 
-  const [wfDoc] = await db
+  const [skillDoc] = await db
     .insert(documents)
     .values({
       companyId,
       brainId,
       folderId: folder!.id,
-      title: 'Events WF',
-      slug: `events-wf-${suffix}`,
-      path: `ev-folder-${suffix}/events-wf-${suffix}`,
-      content: '---\ntype: workflow\noutput: document\nrequires_mcps: []\n---\nTest.',
-      type: 'workflow',
+      title: 'Events Skill',
+      slug: `events-skill-${suffix}`,
+      path: `ev-folder-${suffix}/events-skill-${suffix}`,
+      content:
+        '---\ntype: skill\ntrigger:\n  output: document\n  requires_mcps: []\n---\nTest.',
+      type: 'skill',
       metadata: {
-        type: 'workflow',
-        output: 'document',
-        requires_mcps: [],
-        output_category: null,
-        schedule: null,
+        trigger: {
+          output: 'document',
+          requires_mcps: [],
+          output_category: null,
+          schedule: null,
+        },
       },
       version: 1,
     })
     .returning({ id: documents.id });
-  workflowDocId = wfDoc!.id;
+  skillDocId = skillDoc!.id;
 
   const [run] = await db
     .insert(workflowRuns)
     .values({
-      workflowDocumentId: workflowDocId,
+      workflowDocumentId: skillDocId,
       triggeredBy: userId,
       status: 'running',
     })
@@ -146,7 +153,7 @@ afterAll(async () => {
   // workflow_run_events ON DELETE CASCADE from workflow_runs.
   await db
     .delete(workflowRuns)
-    .where(eq(workflowRuns.workflowDocumentId, workflowDocId));
+    .where(eq(workflowRuns.workflowDocumentId, skillDocId));
   await db.delete(users).where(eq(users.id, userId));
   await db.delete(brains).where(eq(brains.id, brainId));
   await db.delete(companies).where(eq(companies.id, companyId));
@@ -155,14 +162,14 @@ afterAll(async () => {
 // --- Helpers ------------------------------------------------------------
 
 function buildRequest(after?: string): Request {
-  const url = new URL('http://localhost/api/workflows/runs/x/events');
+  const url = new URL('http://localhost/api/skills/runs/x/events');
   if (after !== undefined) url.searchParams.set('after', after);
   return new Request(url, { method: 'GET' });
 }
 
 // --- Tests --------------------------------------------------------------
 
-describe('GET /api/workflows/runs/[id]/events', () => {
+describe('GET /api/skills/runs/[id]/events', () => {
   it('returns 400 with invalid_param when ?after is non-numeric', async () => {
     const res = await GET(buildRequest('abc'), {
       params: Promise.resolve({ id: runId }),

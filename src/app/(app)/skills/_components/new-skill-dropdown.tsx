@@ -2,8 +2,12 @@
 
 // NewSkillDropdown — "New skill" split button shown in the /skills topbar.
 //
-// "Write instructions" → navigates to /skills/new (Task 26 will build the form).
-// "Ask the agent"      → deep-links to Platform Agent chat with a pre-filled message.
+// "Write instructions"         → /skills/new (plain on-demand skill)
+// "New triggerable skill"      → /skills/new?triggerable=1
+//                                (the form pre-seeds a `trigger:` block in
+//                                the instructions body so users don't have
+//                                to remember the YAML shape)
+// "Ask the agent"              → /chat?prefill=...
 //
 // NOTE: The chat page (/chat) currently does not honour a ?prefill= query
 // parameter. The link is wired here with `?prefill=…` as the agreed param
@@ -39,6 +43,9 @@ export function NewSkillDropdown() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link href="/skills/new?triggerable=1">New triggerable skill</Link>
+          </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link
               href={`/chat?prefill=${encodeURIComponent(AGENT_PREFILL)}`}

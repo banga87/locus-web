@@ -1,6 +1,9 @@
 // Unit tests for `buildUIModel` — the reducer that collapses the flat
 // workflow_run_events stream into ordered turn items.
 //
+// Relocated from src/components/workflows/__tests__/run-view.test.ts
+// during the skill/workflow unification.
+//
 // The reducer is the piece that broke when the runner changed AgentEvent
 // payload keys (camelCase) while the reducer still read snake_case —
 // making every persisted tool call render as "Using Unknown…" and never
@@ -118,9 +121,9 @@ describe('buildUIModel', () => {
 
   it('captures run_error payload.message', () => {
     const { runError } = buildUIModel([
-      ev({ eventType: 'run_error', payload: { message: 'workflow doc missing' } }),
+      ev({ eventType: 'run_error', payload: { message: 'skill document missing' } }),
     ]);
-    expect(runError).toBe('workflow doc missing');
+    expect(runError).toBe('skill document missing');
   });
 
   it('falls back to "unknown" when tool_start payload omits toolName (guard, not a regression gate)', () => {

@@ -38,20 +38,29 @@ export async function preflight(
     return { ok: true };
   }
 
-  // Query active connections whose name matches one of the required slugs.
+  // Match on `catalog_id` — the stable slug written when a connection is
+  // installed from the catalog (see `installFromCatalog` in
+  // `src/app/api/admin/connectors/route.ts`). `name` is a user-editable
+  // display label ("Linear") and must not be used as an identifier.
+  // Custom user-added connections have `catalog_id = null` and therefore
+  // cannot satisfy a `requires_mcps` slug, which is correct.
   const connected = await db
-    .select({ name: mcpConnections.name })
+    .select({ catalogId: mcpConnections.catalogId })
     .from(mcpConnections)
     .where(
       and(
         eq(mcpConnections.companyId, companyId),
         eq(mcpConnections.status, 'active'),
-        inArray(mcpConnections.name, required),
+        inArray(mcpConnections.catalogId, required),
       ),
     );
 
-  const connectedNames = new Set(connected.map((c) => c.name));
-  const missing = required.filter((slug) => !connectedNames.has(slug));
+  const connectedSlugs = new Set(
+    connected
+      .map((c) => c.catalogId)
+      .filter((s): s is string => s !== null),
+  );
+  const missing = required.filter((slug) => !connectedSlugs.has(slug));
 
   if (missing.length === 0) {
     return { ok: true };

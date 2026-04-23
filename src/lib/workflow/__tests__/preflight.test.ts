@@ -42,12 +42,15 @@ async function setupPreflightFixtures(): Promise<PreflightFixtures> {
     status: 'active',
   });
 
-  // Insert two active MCP connections with names matching slugs
+  // Insert two active MCP connections whose catalog_id matches the
+  // slug passed in `requires_mcps`. `name` is deliberately a display
+  // label (not the slug) to mirror the production shape.
   const [gmail] = await db
     .insert(mcpConnections)
     .values({
       companyId: company!.id,
-      name: 'gmail',
+      name: 'Gmail',
+      catalogId: 'gmail',
       serverUrl: 'https://mcp.example.com/gmail',
       authType: 'none',
       status: 'active',
@@ -58,7 +61,8 @@ async function setupPreflightFixtures(): Promise<PreflightFixtures> {
     .insert(mcpConnections)
     .values({
       companyId: company!.id,
-      name: 'hubspot',
+      name: 'HubSpot',
+      catalogId: 'hubspot',
       serverUrl: 'https://mcp.example.com/hubspot',
       authType: 'none',
       status: 'active',
@@ -147,7 +151,8 @@ describe('preflight', () => {
       .insert(mcpConnections)
       .values({
         companyId: fix.companyId,
-        name: 'xero',
+        name: 'Xero',
+        catalogId: 'xero',
         serverUrl: 'https://mcp.example.com/xero',
         authType: 'none',
         status: 'disabled',

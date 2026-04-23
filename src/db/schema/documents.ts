@@ -48,7 +48,9 @@ const vector = customType<{ data: number[] | null; driverData: string | null }>(
   },
   fromDriver(value: string | null): number[] | null {
     if (value === null || value === undefined) return null;
-    return value.replace(/^\[|\]$/g, '').split(',').map(Number);
+    const stripped = value.replace(/^\[|\]$/g, '');
+    if (!stripped) return null;
+    return stripped.split(',').map(Number);
   },
 });
 

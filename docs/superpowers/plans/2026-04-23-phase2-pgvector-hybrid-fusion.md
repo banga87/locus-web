@@ -101,13 +101,16 @@ locus-web/
 **Files:**
 - Modify: `package.json`
 
-- [ ] **Step 1: Install Workflow SDK**
+- [ ] **Step 1: Install Workflow SDK + cross-env**
 
 ```bash
 npm install workflow
+npm install -D cross-env
 ```
 
-Expected: package added to `dependencies`. The Vercel AI Gateway provider (`@ai-sdk/gateway`) is already installed per existing `package.json` — we route OpenAI calls through it rather than installing `@ai-sdk/openai` directly. This gives us OIDC auth, cost tracking via the Gateway dashboard, and provider failover at no extra code cost.
+Expected: `workflow` added to `dependencies`; `cross-env` to `devDependencies`. The Vercel AI Gateway provider (`@ai-sdk/gateway`) is already installed per existing `package.json` — we route OpenAI calls through it rather than installing `@ai-sdk/openai` directly. This gives us OIDC auth, cost tracking via the Gateway dashboard, and provider failover at no extra code cost.
+
+Why `cross-env`: the benchmark npm scripts (Task 25) prefix `MEMORY_WEIGHT_VEC=0 ...` on the same line as the command. That syntax silently ignores the env var on Windows cmd/PowerShell, so a developer running `npm run benchmark:smoke-baseline` would compare hybrid-to-hybrid and declare spurious success. `cross-env` makes the prefix portable. Required because this codebase is developed on Windows.
 
 - [ ] **Step 2: Verify AI Gateway access (OIDC, not raw provider keys)**
 
@@ -2405,19 +2408,10 @@ async function main(): Promise<void> {
   console.log(`[bench] running ${bench.questions.length} questions, weight_vec=${weightVec}`);
   const ranks: Array<number | null> = [];
 
-  // Read the global default weights so we can swap them per-run via env.
-  // The cleanest path is to monkey-patch composeBoostedScore via env-driven
-  // weights override on every retrieve call. Phase 1's retrieve doesn't
-  // accept weights — but Task 16 made composeBoostedScore accept them.
-  // To plumb through, retrieve() needs to pass weights; instead, we set
-  // module-level overrides via dynamic import below (or extend retrieve()
-  // signature in a tiny follow-up).
-  //
-  // Easiest path that doesn't change the runtime API: use weight_vec=0
-  // by setting an env var that retrieve() reads. Implementer should add a
-  // single `process.env.MEMORY_WEIGHT_VEC` read at module scope in
-  // src/lib/memory/scoring/compose.ts that overrides DEFAULT_WEIGHT_VEC.
-  // See Task 21 for the exact patch.
+  // The MEMORY_WEIGHT_VEC env var is read at module load by
+  // src/lib/memory/scoring/compose.ts (Task 21). When unset, defaults to
+  // 0.6 (hybrid). When set to 0, retrieve() runs lexical-only — used to
+  // capture the Phase 1 baseline against the Phase 2 SQL.
   for (const q of bench.questions) {
     const results = await retrieve(
       {
@@ -2897,11 +2891,11 @@ In `package.json` `scripts`, add:
 
 ```json
 "benchmark:smoke": "tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json",
-"benchmark:smoke-baseline": "MEMORY_WEIGHT_VEC=0 BENCH_OUTPUT=tests/benchmarks/results/baseline.json tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json",
-"benchmark:smoke-check": "BENCH_OUTPUT=tests/benchmarks/results/hybrid.json tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json && tsx tests/benchmarks/check-regression.ts"
+"benchmark:smoke-baseline": "cross-env MEMORY_WEIGHT_VEC=0 BENCH_OUTPUT=tests/benchmarks/results/baseline.json tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json",
+"benchmark:smoke-check": "cross-env BENCH_OUTPUT=tests/benchmarks/results/hybrid.json tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json && tsx tests/benchmarks/check-regression.ts"
 ```
 
-> **Note for cross-platform:** `MEMORY_WEIGHT_VEC=0 ...` does not work on Windows cmd. If you need Windows compatibility, use `cross-env`. Phase 1 didn't add `cross-env` so check whether Phase 2 needs it (probably yes — confirm with user).
+`cross-env` was installed in Task 1 specifically to make these scripts portable. On Windows, prefix-form env vars (`VAR=val cmd`) are silently ignored — `cross-env` translates the prefix into a per-platform set/export call.
 
 - [ ] **Step 2: Build the regression checker**
 

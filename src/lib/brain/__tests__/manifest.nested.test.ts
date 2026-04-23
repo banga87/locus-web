@@ -3,7 +3,7 @@
 // Asserts that a brain with a two-level folder hierarchy emits a tree
 // (folders nested under folders), preserves per-document metadata,
 // excludes platform-internal types (agent-scaffolding, skill), and
-// includes workflow docs (type = 'workflow').
+// includes user-authored vocabulary types (e.g. type = 'pricing-model').
 
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -64,10 +64,11 @@ describe('regenerateManifest — nested folders', () => {
     expect(allDocs.find((d) => d.title === 'Skill Doc')).toBeUndefined();
   });
 
-  it('includes documents with type: workflow', async () => {
-    // Workflow docs must appear in the manifest so the Platform Agent can
-    // reference them by name. This guards against a regression to a
-    // blanket `isNull(type)` filter that would silently drop them.
+  it('includes documents with user-authored vocabulary types', async () => {
+    // User-authored `type` values (e.g. "pricing-model", "brand-voice")
+    // are the brain's content and MUST appear in the manifest so the
+    // Platform Agent can reference them. This guards against a regression
+    // to a blanket `isNull(type)` filter that would silently drop them.
     await regenerateManifest(brainId);
     const m = await readCurrentManifest(brainId);
     const allDocs: { title: string }[] = [];
@@ -78,6 +79,6 @@ describe('regenerateManifest — nested folders', () => {
       }
     };
     walk(m.folders);
-    expect(allDocs.find((d) => d.title === 'Weekly Error Report')).toBeDefined();
+    expect(allDocs.find((d) => d.title === 'Pricing Model')).toBeDefined();
   });
 });

@@ -25,7 +25,7 @@ const nowSql = sql`now()`;
 // Status transition helpers
 // ---------------------------------------------------------------------------
 
-/** Transition a run to `running`. Called at the top of runWorkflow. */
+/** Transition a run to `running`. Called at the top of runTriggeredSkill. */
 export async function markRunning(runId: string): Promise<void> {
   await db
     .update(workflowRuns)

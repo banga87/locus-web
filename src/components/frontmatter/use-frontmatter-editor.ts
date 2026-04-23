@@ -2,7 +2,7 @@
 
 // useFrontmatterEditor — React hook that owns the split/join/save lifecycle
 // for a typed document. Lifts the ad-hoc debounce blocks out of
-// document-editor.tsx and workflow-detail-tabs.tsx into one module.
+// document-editor.tsx and the (now-folded) skill-detail pages into one module.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';

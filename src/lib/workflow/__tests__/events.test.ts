@@ -64,18 +64,19 @@ async function setupEventFixtures(): Promise<EventFixtures> {
     })
     .returning({ id: folders.id });
 
-  // Minimal workflow document
+  // Minimal triggered-skill document
   const [wfDoc] = await db
     .insert(documents)
     .values({
       companyId: company!.id,
       brainId: brain!.id,
       folderId: folder!.id,
-      title: 'Test Workflow',
-      slug: 'test-workflow',
-      path: 'workflows/test-workflow',
-      content: '---\ntype: workflow\noutput: document\nrequires_mcps: []\n---\nDo things.',
-      type: 'workflow',
+      title: 'Test Triggered Skill',
+      slug: 'test-triggered-skill',
+      path: 'workflows/test-triggered-skill',
+      content:
+        '---\ntype: skill\ntrigger:\n  output: document\n  output_category: null\n  requires_mcps: []\n  schedule: null\n---\nDo things.',
+      type: 'skill',
       version: 1,
     })
     .returning({ id: documents.id });

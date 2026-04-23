@@ -6,7 +6,7 @@
 // Proves the full coordinator model introduced in the workflow-coordinator
 // plan (Task 5):
 //
-//   1. runWorkflow drives the workflow body under the platform agent
+//   1. runTriggeredSkill drives the skill body under the platform agent
 //      (DEFAULT_MODEL / claude-sonnet-4-6 via Anthropic provider).
 //   2. The platform agent has the `Agent` dispatch tool available.
 //   3. When the platform agent calls the Agent tool with subagent_type

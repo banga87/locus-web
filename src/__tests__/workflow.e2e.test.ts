@@ -1,17 +1,19 @@
 /**
  * @vitest-environment node
  */
-// Workflow Phase 1.5 — end-to-end integration test.
+// Triggered-skill Phase 1.5 — end-to-end integration test.
 //
-// Proves the full stack: seed → trigger → runWorkflow → DB assertions.
+// Proves the full stack: seed → trigger → runTriggeredSkill → DB assertions.
 //
 // Strategy:
-//   1. Seed a user, brain, folders, and a type:workflow document (with
-//      metadata field populated — mirrors how the editor saves workflow docs).
+//   1. Seed a user, brain, folders, and a type:skill document with a nested
+//      `trigger:` block in metadata — mirrors how the editor saves
+//      triggered-skill docs.
 //   2. Stub the LLM to emit one create_document tool call followed by
 //      completion — this exercises the stamp middleware and output tracking.
-//   3. Call runWorkflow(runId) directly (same path the trigger route uses
-//      via waitUntil), bypassing HTTP so we don't need a running dev server.
+//   3. Call runTriggeredSkill(runId) directly (same path the trigger route
+//      uses via waitUntil), bypassing HTTP so we don't need a running dev
+//      server.
 //   4. Poll workflow_runs.status until terminal (max 10s, 200ms interval).
 //   5. Assert all spec acceptance criteria.
 
@@ -26,7 +28,7 @@ import { randomUUID } from 'node:crypto';
 // transitively imports them, so they sit at the top.
 // ---------------------------------------------------------------------------
 
-// Stub the Anthropic provider so runWorkflow never makes real LLM calls.
+// Stub the Anthropic provider so runTriggeredSkill never makes real LLM calls.
 // Each test sets mockProvider.current to a fresh MockLanguageModelV3.
 vi.mock('@ai-sdk/anthropic', () => ({
   anthropic: vi.fn((modelId: string) => mockProvider.currentModel(modelId)),
@@ -166,7 +168,7 @@ async function setupFixtures(): Promise<E2EFixtures> {
 
   // Seed the workflow document with both `content` (raw markdown with
   // frontmatter) and `metadata` (structured frontmatter — the trigger
-  // route and runWorkflow both read from metadata). This mirrors how the
+  // route and runTriggeredSkill both read from metadata). This mirrors how the
   // editor saves workflow docs (Task 7 POST syncs frontmatter → metadata).
   const [wfDoc] = await db
     .insert(documents)

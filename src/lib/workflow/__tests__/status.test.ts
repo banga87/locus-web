@@ -75,8 +75,9 @@ async function setupStatusFixtures(): Promise<StatusFixtures> {
       title: 'Status WF',
       slug: 'status-wf',
       path: 'wf/status-wf',
-      content: '---\ntype: workflow\noutput: document\nrequires_mcps: []\n---\nTest.',
-      type: 'workflow',
+      content:
+        '---\ntype: skill\ntrigger:\n  output: document\n  output_category: null\n  requires_mcps: []\n  schedule: null\n---\nTest.',
+      type: 'skill',
       version: 1,
     })
     .returning({ id: documents.id });

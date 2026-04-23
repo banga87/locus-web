@@ -591,7 +591,13 @@ describe('runTriggeredSkill — triggering user role', () => {
 describe('runTriggeredSkill — coordinator wiring', () => {
   // Spy restore lives in afterEach so a thrown assertion can't leak the
   // spy into subsequent tests in this describe block.
-  let spy: ReturnType<typeof vi.spyOn<typeof agentRunModule, 'runAgentTurn'>> | null = null;
+  //
+  // `vi.spyOn`'s TKey generic is constrained to keys of T whose values are
+  // functions. Vitest infers that set from the module's type, and narrow it
+  // here via ReturnType rather than passing explicit generics (which the
+  // current vitest typings reject for re-exported function-valued keys).
+  type RunAgentTurnSpy = ReturnType<typeof vi.spyOn<typeof agentRunModule, never>>;
+  let spy: RunAgentTurnSpy | null = null;
 
   afterEach(() => {
     spy?.mockRestore();

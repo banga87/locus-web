@@ -124,11 +124,13 @@ export async function seedBrainWithNestedFolders(): Promise<string> {
       companyId: company.id,
       brainId: brain.id,
       folderId: brandFolder.id,
-      title: 'Weekly Error Report',
-      slug: `weekly-error-report-${suffix}`,
-      path: `brand-identity/weekly-error-report-${suffix}`,
-      content: '# Weekly Error Report workflow',
-      type: 'workflow',
+      title: 'Pricing Model',
+      slug: `pricing-model-${suffix}`,
+      path: `brand-identity/pricing-model-${suffix}`,
+      content: '# Pricing',
+      // User-authored vocabulary type. Not in MANIFEST_EXCLUDED_TYPES, so
+      // this row MUST appear in the manifest — the test asserts that below.
+      type: 'pricing-model',
       status: 'active',
       confidenceLevel: 'medium',
     },

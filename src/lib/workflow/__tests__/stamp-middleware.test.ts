@@ -88,18 +88,19 @@ async function setupStampFixtures(): Promise<StampFixtures> {
     status: 'active',
   });
 
-  // Minimal workflow doc
+  // Minimal triggered-skill doc
   const [wfDoc] = await db
     .insert(documents)
     .values({
       companyId: company!.id,
       brainId: brain!.id,
       folderId: folder!.id,
-      title: 'Stamp Workflow',
-      slug: 'stamp-workflow',
-      path: 'docs/stamp-workflow',
-      content: '---\ntype: workflow\noutput: document\nrequires_mcps: []\n---\nDo things.',
-      type: 'workflow',
+      title: 'Stamp Triggered Skill',
+      slug: 'stamp-triggered-skill',
+      path: 'docs/stamp-triggered-skill',
+      content:
+        '---\ntype: skill\ntrigger:\n  output: document\n  output_category: null\n  requires_mcps: []\n  schedule: null\n---\nDo things.',
+      type: 'skill',
       version: 1,
     })
     .returning({ id: documents.id });

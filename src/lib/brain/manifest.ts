@@ -9,9 +9,10 @@
 //
 // Shape: nested `folders[]` tree built from the per-brain folders table
 // via parent_id. Platform-internal document types (agent-scaffolding,
-// agent-definition, skill) are excluded. Knowledge documents (type IS NULL)
-// and workflow documents (type = 'workflow') are included so the Platform
-// Agent can reference workflow definitions by name.
+// agent-definition, skill) are excluded. Knowledge documents — both those
+// with `type IS NULL` and user-authored vocabulary types like
+// 'pricing-model' / 'brand-voice' — are included so the Platform Agent
+// can reference them by name.
 //
 // No outer transaction on the flip-current + insert: if the UPDATE
 // succeeds and the INSERT fails, the next successful regeneration
@@ -31,9 +32,9 @@ import {
 
 /**
  * Platform-internal document types that must NEVER appear in the agent-facing
- * manifest. Any other value of `documents.type` (null, 'workflow', or a
- * user-authored vocabulary type like 'pricing-model' / 'brand-voice' / 'icp')
- * is manifest-visible.
+ * manifest. Any other value of `documents.type` (null or a user-authored
+ * vocabulary type like 'pricing-model' / 'brand-voice' / 'icp') is
+ * manifest-visible.
  *
  * This is a DENYLIST, not an allowlist, by design. Locus's brain concept lets
  * users author docs with arbitrary `type` frontmatter to organise domain

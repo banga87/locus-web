@@ -18,7 +18,7 @@ type WorkflowEventType = InferSelectModel<typeof workflowRunEvents>['eventType']
  *
  * @param runId    UUID of the parent workflow_run row.
  * @param sequence Monotonically increasing counter within this run. The
- *                 caller (runWorkflow) owns this counter — starts at 0 and
+ *                 caller (runTriggeredSkill) owns this counter — starts at 0 and
  *                 increments before each call. Single-writer invariant keeps
  *                 this safe without DB-side enforcement.
  * @param type     Event type. Must be a value in the workflowEventTypeEnum.

@@ -58,17 +58,18 @@ beforeAll(async () => {
     .returning({ id: brains.id });
   brainId = brain.id;
 
-  // Workflow document (type: workflow satisfies FK; content irrelevant here)
+  // Triggered-skill document (content irrelevant — workflow_runs rows
+  // only need a valid documents FK target).
   const [doc] = await db
     .insert(documents)
     .values({
       companyId,
       brainId,
-      title: 'Test Workflow',
-      slug: `test-workflow-${suffix}`,
-      path: `test-workflow-${suffix}`,
-      content: '---\ntype: workflow\n---\n',
-      type: 'workflow',
+      title: 'Test Triggered Skill',
+      slug: `test-triggered-skill-${suffix}`,
+      path: `test-triggered-skill-${suffix}`,
+      content: '---\ntype: skill\n---\n',
+      type: 'skill',
     })
     .returning({ id: documents.id });
   documentId = doc.id;

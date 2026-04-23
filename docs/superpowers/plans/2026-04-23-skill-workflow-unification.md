@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-23
 **Spec:** `docs/superpowers/specs/2026-04-23-skill-workflow-unification-design.md`
-**Status:** In progress
+**Status:** Complete as of 2026-04-23. Task 5 cut; Tasks 1–4, 6, 7 shipped.
 **Branch policy:** direct on local master (user authorised).
 
 ## Problem

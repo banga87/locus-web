@@ -37,7 +37,7 @@ interface RecordUsageParams {
    * plus `parentUsageRecordId` so attribution queries can roll up spend
    * per conversational turn.
    */
-  source?: 'platform_agent' | 'maintenance_agent' | 'mcp' | 'system' | 'subagent';
+  source?: 'platform_agent' | 'maintenance_agent' | 'mcp' | 'system' | 'subagent' | 'embedding_worker';
   /**
    * FK to the parent LLM call's `usage_records.id`. Null for top-level
    * calls; required for subagent invocations so we can sum parent +
@@ -114,6 +114,15 @@ const PROVIDER_COST_PER_1K_TOKENS: Record<
     input: 0.00125,
     cachedInput: 0.000125,
     output: 0.010,
+  },
+  // OpenAI text embeddings (Phase 2). cachedInput unused (no cache for
+  // embeddings), output unused (embeddings have no output tokens). Set to 0
+  // rather than the input rate so a stray usage call with output tokens
+  // doesn't quietly bill.
+  'openai/text-embedding-3-small': {
+    input: 0.00002,
+    cachedInput: 0,
+    output: 0,
   },
 };
 

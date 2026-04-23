@@ -20,6 +20,13 @@
 //   - `recordUsage` requires an ApprovedModelId (dotted form). The 'inherit'
 //     placeholder resolves to `'anthropic/claude-sonnet-4.6'` per the spec
 //     §11 follow-up note.
+//
+// Task 2 extension: an optional `lookupAgent` callback can be passed as the
+// third argument. When supplied it is tried first; only if it returns
+// `undefined` does the dispatcher fall back to `getBuiltInAgent`. This lets
+// the chat route inject user-defined agent definitions without modifying the
+// built-in registry. When `lookupAgent` is not supplied, behaviour is
+// unchanged (built-ins only).
 
 import { randomUUID } from 'node:crypto';
 import { stepCountIs } from 'ai';
@@ -111,11 +118,15 @@ function emitAudit({
 export async function runSubagent(
   dispatchCtx: SubagentDispatchContext,
   invocation: SubagentInvocation,
+  lookupAgent?: (agentType: string) => BuiltInAgentDefinition | undefined,
 ): Promise<SubagentResult> {
   const { parentCtx, parentUsageRecordId } = dispatchCtx;
-  const def: BuiltInAgentDefinition | undefined = getBuiltInAgent(
-    invocation.subagent_type,
-  );
+  // Try the caller-supplied lookup first (user-defined agents), then fall
+  // back to the built-in registry. When no lookup is supplied, skip straight
+  // to the registry so behaviour is identical to the pre-Task-2 path.
+  const def: BuiltInAgentDefinition | undefined =
+    (lookupAgent ? lookupAgent(invocation.subagent_type) : undefined) ??
+    getBuiltInAgent(invocation.subagent_type);
 
   // --- 1. Unknown type → early return with audit ---------------------------
   if (!def) {

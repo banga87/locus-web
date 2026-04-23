@@ -50,6 +50,7 @@ import type { AgentActor, AgentContext } from '@/lib/agent/types';
 import { buildAgentTool } from '@/lib/subagent/AgentTool';
 import { buildAgentToolDescription } from '@/lib/subagent/prompt';
 import { getBuiltInAgents } from '@/lib/subagent/registry';
+import { listUserDefinedAgents } from '@/lib/subagent/userDefinedAgents';
 import { getBrainForCompany } from '@/lib/brain/queries';
 import { parseFrontmatterRaw } from '@/lib/brain/save';
 import { registerContextHandlers } from '@/lib/context/register';
@@ -313,14 +314,26 @@ export async function POST(req: Request) {
   // Merging with MCP OUT externalTools keeps the existing passthrough
   // path in `buildToolSet` unchanged — external tools with no MCP meta
   // are forwarded verbatim.
+  //
+  // Task 2: merge built-in agents with any user-defined `agent-definition`
+  // docs for this company. The merged list drives both the tool description
+  // and the `subagent_type` enum so the model only sees valid slugs.
   let routedExternalTools: Record<string, Tool> = externalTools;
   if (subagentsEnabled) {
+    const userAgents = await listUserDefinedAgents(auth.companyId);
+    const agents = [...getBuiltInAgents(), ...userAgents];
+    // Build a fast lookup map for the lookupAgent callback passed to
+    // runSubagent — checked before the built-in registry so user-defined
+    // agents take precedence over any built-in with the same slug.
+    const agentMap = new Map(agents.map((a) => [a.agentType, a]));
     routedExternalTools = {
       ...externalTools,
       Agent: buildAgentTool({
         parentCtx: ctx,
         getParentUsageRecordId: () => parentUsageRecordRef.id,
-        description: buildAgentToolDescription(getBuiltInAgents()),
+        description: buildAgentToolDescription(agents),
+        agents,
+        lookupAgent: (type) => agentMap.get(type),
         cap: parentTurnCap,
       }),
     };

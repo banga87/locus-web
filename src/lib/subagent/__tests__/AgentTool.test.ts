@@ -2,8 +2,9 @@
 //
 // Strategy: mock `runSubagent` so the tool's execute path never actually
 // dispatches — all we care about here is the schema shape, the per-turn
-// cap, and the getter-based parent usage id threading. The dispatcher's
-// own behaviour is covered in runSubagent.test.ts.
+// cap, the getter-based parent usage id threading, and Task-2 additions:
+//   - z.enum narrowing when a non-empty `agents` list is supplied
+//   - merged-list description rendering
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,7 +21,7 @@ import type { z } from 'zod';
 import { runSubagent } from '../runSubagent';
 import { buildAgentTool } from '../AgentTool';
 import type { AgentContext } from '@/lib/agent/types';
-import type { SubagentResult } from '../types';
+import type { BuiltInAgentDefinition, SubagentResult } from '../types';
 
 // The AI SDK v6 `tool()` helper widens `inputSchema` to a `FlexibleSchema`
 // union at the type level, which hides Zod's `.parse` from TypeScript
@@ -34,6 +35,26 @@ type ZodObj = z.ZodObject<{
 }>;
 function schemaOf(t: ReturnType<typeof buildAgentTool>): ZodObj {
   return t.inputSchema as unknown as ZodObj;
+}
+
+// Looser helper for the z.enum path — just exposes safeParse without
+// forcing the subagent_type field type so both z.string() and z.enum()
+// variants are accessible.
+type AnyZodObj = {
+  safeParse: (v: unknown) => { success: boolean };
+  parse: (v: unknown) => unknown;
+};
+function schemaLoose(t: ReturnType<typeof buildAgentTool>): AnyZodObj {
+  return t.inputSchema as unknown as AnyZodObj;
+}
+
+function buildUserDef(agentType: string): BuiltInAgentDefinition {
+  return {
+    agentType,
+    whenToUse: `Use the ${agentType} agent.`,
+    model: 'inherit',
+    getSystemPrompt: () => `You are ${agentType}.`,
+  };
 }
 
 // --- Fixtures -------------------------------------------------------------
@@ -172,6 +193,7 @@ describe('buildAgentTool', () => {
       expect(runSubagent).toHaveBeenCalledWith(
         { parentCtx, parentUsageRecordId: 'parent-usage-123' },
         input,
+        undefined, // lookupAgent — not supplied in this test
       );
       expect(result).toEqual(buildOkResult());
     });
@@ -328,6 +350,91 @@ describe('buildAgentTool', () => {
       expect(agentTool.description).toBe(
         'Dispatch a subagent to do a thing.',
       );
+    });
+  });
+
+  // --- Task 2: agents list + enum narrowing ---------------------------------
+
+  describe('agents list — inputSchema enum narrowing', () => {
+    it('rejects a subagent_type not in the agents list (enum enforcement)', () => {
+      const agents = [buildUserDef('ResearchAgent'), buildUserDef('WriteAgent')];
+      const agentTool = buildAgentTool({
+        parentCtx: buildParentCtx(),
+        getParentUsageRecordId: () => null,
+        description: 'unused',
+        agents,
+      });
+      const result = schemaLoose(agentTool).safeParse({
+        description: 'do stuff',
+        subagent_type: 'UnknownAgent',
+        prompt: 'go',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a valid subagent_type from the agents list', () => {
+      const agents = [buildUserDef('ResearchAgent'), buildUserDef('WriteAgent')];
+      const agentTool = buildAgentTool({
+        parentCtx: buildParentCtx(),
+        getParentUsageRecordId: () => null,
+        description: 'unused',
+        agents,
+      });
+      const result = schemaLoose(agentTool).safeParse({
+        description: 'do research',
+        subagent_type: 'ResearchAgent',
+        prompt: 'find things',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('falls back to z.string() when agents list is empty', () => {
+      const agentTool = buildAgentTool({
+        parentCtx: buildParentCtx(),
+        getParentUsageRecordId: () => null,
+        description: 'unused',
+        agents: [],
+      });
+      // With an empty list the schema stays z.string() — any non-empty
+      // string passes parse validation.
+      const result = schemaLoose(agentTool).safeParse({
+        description: 'do something',
+        subagent_type: 'AnyAgent',
+        prompt: 'go',
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('agents list — description rendering', () => {
+    it('derives description from the merged agents list when supplied', () => {
+      const agents = [
+        buildUserDef('ResearchAgent'),
+        buildUserDef('WriteAgent'),
+      ];
+      const agentTool = buildAgentTool({
+        parentCtx: buildParentCtx(),
+        getParentUsageRecordId: () => null,
+        description: 'SHOULD_NOT_APPEAR',
+        agents,
+      });
+      expect(agentTool.description).toContain('ResearchAgent');
+      expect(agentTool.description).toContain('WriteAgent');
+      expect(agentTool.description).not.toContain('SHOULD_NOT_APPEAR');
+    });
+
+    it('includes both built-in and user-defined slugs in description', () => {
+      const builtIn = buildUserDef('BrainExplore');
+      const userDef = buildUserDef('project-manager');
+      const agents = [builtIn, userDef];
+      const agentTool = buildAgentTool({
+        parentCtx: buildParentCtx(),
+        getParentUsageRecordId: () => null,
+        description: 'unused',
+        agents,
+      });
+      expect(agentTool.description).toContain('BrainExplore');
+      expect(agentTool.description).toContain('project-manager');
     });
   });
 });

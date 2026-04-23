@@ -544,3 +544,76 @@ describe('runSubagent — model resolution', () => {
     expect(call!.modelHandle).toBe('HANDLE_XYZ');
   });
 });
+
+describe('runSubagent — lookupAgent (Task 2)', () => {
+  it('uses the user-defined def from lookupAgent when it returns one, bypassing the built-in registry', async () => {
+    const userDef = buildDef({
+      agentType: 'UserAgent',
+      model: 'anthropic/claude-haiku-4.5',
+      getSystemPrompt: () => 'user-defined prompt',
+    });
+    // Registry returns nothing for this type — lookupAgent supplies it.
+    vi.mocked(getBuiltInAgent).mockReturnValue(undefined);
+    const lookupAgent = vi.fn((_type: string) => userDef);
+
+    const result = await runSubagent(
+      buildDispatchCtx(),
+      buildInvocation({ subagent_type: 'UserAgent' }),
+      lookupAgent,
+    );
+
+    expect(result.ok).toBe(true);
+    // lookupAgent was called with the requested type.
+    expect(lookupAgent).toHaveBeenCalledWith('UserAgent');
+    // Built-in registry was still called (in case lookupAgent returned undefined).
+    // The important thing is the turn ran with the user-defined def.
+    expect(runAgentTurn).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(runAgentTurn).mock.calls[0]?.[0];
+    expect(call!.system).toBe('user-defined prompt');
+  });
+
+  it('falls back to the built-in registry when lookupAgent returns undefined', async () => {
+    const builtInDef = buildDef({ agentType: 'TestAgent' });
+    vi.mocked(getBuiltInAgent).mockReturnValue(builtInDef);
+    // lookupAgent explicitly returns undefined for this type.
+    const lookupAgent = vi.fn((_type: string) => undefined);
+
+    const result = await runSubagent(
+      buildDispatchCtx(),
+      buildInvocation({ subagent_type: 'TestAgent' }),
+      lookupAgent,
+    );
+
+    expect(result.ok).toBe(true);
+    // getBuiltInAgent was invoked as the fallback.
+    expect(getBuiltInAgent).toHaveBeenCalledWith('TestAgent');
+    expect(runAgentTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns unknown_type when neither lookupAgent nor registry finds the type', async () => {
+    vi.mocked(getBuiltInAgent).mockReturnValue(undefined);
+    vi.mocked(getBuiltInAgents).mockReturnValue([]);
+    const lookupAgent = vi.fn((_type: string) => undefined);
+
+    const result = await runSubagent(
+      buildDispatchCtx(),
+      buildInvocation({ subagent_type: 'GhostAgent' }),
+      lookupAgent,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/Unknown subagent_type: GhostAgent/);
+    }
+    expect(runAgentTurn).not.toHaveBeenCalled();
+  });
+
+  it('behaviour is unchanged when lookupAgent is not supplied', async () => {
+    const def = buildDef();
+    vi.mocked(getBuiltInAgent).mockReturnValue(def);
+
+    const result = await runSubagent(buildDispatchCtx(), buildInvocation());
+    expect(result.ok).toBe(true);
+    expect(getBuiltInAgent).toHaveBeenCalledWith('TestAgent');
+  });
+});

@@ -36,6 +36,7 @@ import { users } from '@/db/schema/users';
 import { runAgentTurn } from '@/lib/agent/run';
 import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { buildToolSet } from '@/lib/agent/tool-bridge';
+import { loadMcpOutTools } from '@/lib/mcp-out/bridge';
 import { registerLocusTools } from '@/lib/tools';
 import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
 import { parseFrontmatterRaw } from '@/lib/brain/save';
@@ -261,8 +262,21 @@ export async function runWorkflow(runId: string): Promise<void> {
     grantedCapabilities,
   };
 
+  // ---- Load MCP OUT tools -----------------------------------------------
+  // Mirrors the chat route — without this, external MCP tools (Linear,
+  // Gmail, HubSpot, etc.) never reach the workflow agent even when
+  // `requires_mcps` lists them and preflight passed. `close()` must run
+  // in a terminal path; we invoke it inside the outer finally below so
+  // transports are released regardless of success/error.
+  const {
+    tools: externalTools,
+    toolMeta: externalToolMeta,
+    connections: externalConnections,
+    close: closeMcp,
+  } = await loadMcpOutTools(workflowDoc.companyId);
+
   // ---- Build the tool set with stamp middleware -------------------------
-  const baseTools = buildToolSet(toolContext);
+  const baseTools = buildToolSet(toolContext, externalTools, externalToolMeta);
   const tools = wrapToolsWithStamping(
     baseTools,
     { runId, workflowDocRef },
@@ -336,6 +350,7 @@ export async function runWorkflow(runId: string): Promise<void> {
     brain: brainRow ?? { name: 'Brain', slug: 'brain' },
     companyName: companyRow?.name ?? 'your company',
     folders: folderRows,
+    externalConnections,
     availableSkills,
   });
 
@@ -455,6 +470,16 @@ export async function runWorkflow(runId: string): Promise<void> {
       // insertEvent itself failing (e.g. DB down) should not mask the original error.
     }
     await markFailed(runId, message);
+  } finally {
+    // Release MCP OUT transports regardless of success/error/cancel path.
+    // Unlike the chat route (which defers via waitUntil to avoid blocking
+    // the response stream) the workflow runner has no HTTP stream to
+    // protect — awaiting inline is the right call.
+    try {
+      await closeMcp();
+    } catch (closeErr) {
+      console.warn('[workflow/run] closeMcp failed', closeErr);
+    }
   }
 }
 

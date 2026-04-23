@@ -87,9 +87,13 @@ describe('buildWorkflowSystemPrompt', () => {
     expect(result).toMatchInlineSnapshot(`
       "## Workflow execution mode
 
-      You are executing the workflow defined in \`workflows/my-workflow\`.
+      You are executing the workflow defined in \`workflows/my-workflow\` autonomously. **There is no user present to respond to you.** Questions, clarifications, and requests for permission will not be answered — they will simply cause the run to end without producing output.
 
-      **Goal:** Produce a brain document as your output. Stop once the declared output is produced — do not continue with unrelated tasks.
+      **You must complete the workflow start to finish using only the tools available to you.** Do not ask for data the user could provide — fetch it with the tools. Do not ask for confirmation — proceed. Do not offer alternatives or propose placeholder output — produce the real declared output.
+
+      If a required tool appears missing, first check the tools you were given: external MCP tools are exposed with namespaced keys (for example \`ext_<hex>_<remote_name>\`) rather than the server's bare name. Only if after inspection no tool can satisfy the step should you abort — and even then, produce the declared output document explaining what was missing, rather than asking.
+
+      **Goal:** Produce a brain document as your final output. Stop once the declared output is produced — do not continue with unrelated tasks.
 
       **Output type:** \`document\`
       Output documents should be filed in the \`reports\` folder.

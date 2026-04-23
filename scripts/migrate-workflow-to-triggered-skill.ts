@@ -40,6 +40,8 @@ export interface MigrationResult {
   skippedAlreadyMigrated: number;
   /** Rows skipped because their content had no parseable frontmatter. */
   warnedMalformed: number;
+  /** Already-migrated rows with a stale `metadata.type='workflow'` key scrubbed. */
+  scrubbedStaleType: number;
 }
 
 interface Row {
@@ -140,6 +142,12 @@ export function rewriteMetadata(
 
   for (const key of TRIGGER_KEYS) {
     delete base[key];
+  }
+
+  // Drop stale denormalised `type` if the old workflow save path mirrored it.
+  // The doc's `documents.type` column is authoritative.
+  if (base.type === 'workflow' || base.type === 'skill') {
+    delete base.type;
   }
 
   base.trigger = trigger;
@@ -244,11 +252,42 @@ export async function migrate(
       );
     skippedAlreadyMigrated += alreadyCount[0]?.n ?? 0;
 
+    // Forward-sweep: already-migrated rows may carry a stale
+    // `metadata.type` key from the pre-unification save path (which
+    // mirrored frontmatter fields wholesale). The authoritative column is
+    // `documents.type`; drop the redundant key so the metadata shape is
+    // consistent across old and new rows.
+    const stale = (await tx
+      .select({ id: documents.id, metadata: documents.metadata })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.type, 'skill'),
+          isNull(documents.deletedAt),
+          sql`${documents.metadata} ? 'type'`,
+        ),
+      )) as Array<{ id: string; metadata: unknown }>;
+
+    let scrubbedStaleType = 0;
+    for (const row of stale) {
+      const md = { ...((row.metadata as Record<string, unknown> | null) ?? {}) };
+      delete md.type;
+      if (dryRun) {
+        console.log(`[migrate-workflow] DRY-RUN id=${row.id} would scrub metadata.type`);
+      } else {
+        await tx
+          .update(documents)
+          .set({ metadata: md, updatedAt: sql`now()` })
+          .where(eq(documents.id, row.id));
+      }
+      scrubbedStaleType += 1;
+    }
+
     console.log(
-      `[migrate-workflow] ${dryRun ? 'DRY-RUN ' : ''}done: touched=${touched} skippedAlreadyMigrated=${skippedAlreadyMigrated} warnedMalformed=${warnedMalformed}`,
+      `[migrate-workflow] ${dryRun ? 'DRY-RUN ' : ''}done: touched=${touched} skippedAlreadyMigrated=${skippedAlreadyMigrated} warnedMalformed=${warnedMalformed} scrubbedStaleType=${scrubbedStaleType}`,
     );
 
-    return { touched, skippedAlreadyMigrated, warnedMalformed };
+    return { touched, skippedAlreadyMigrated, warnedMalformed, scrubbedStaleType };
   });
 }
 

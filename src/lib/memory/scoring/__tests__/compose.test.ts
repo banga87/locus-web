@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { composeBoostedScore } from '../compose';
+import { composeBoostedScore, DEFAULT_WEIGHT_TS } from '../compose';
 
 describe('composeBoostedScore', () => {
   it('multiplies tsRank by all applicable boosts', () => {
@@ -10,7 +10,8 @@ describe('composeBoostedScore', () => {
       docUpdatedAt: new Date('2026-04-22'),
     });
     // phraseBoost: 1.6, properNounBoost: 1.4, temporalProximity: 1.0 (no query date)
-    expect(score).toBeCloseTo(0.5 * 1.6 * 1.4);
+    // Phase 2: weighted by DEFAULT_WEIGHT_TS (0.4); was 0.5 * 1.6 * 1.4 = 1.12 under Phase 1 unweighted formula
+    expect(score).toBeCloseTo(0.5 * 1.6 * 1.4 * DEFAULT_WEIGHT_TS, 5);
   });
 
   it('returns tsRank unchanged when no boosts apply', () => {
@@ -20,7 +21,8 @@ describe('composeBoostedScore', () => {
       content: 'irrelevant content',
       docUpdatedAt: new Date(),
     });
-    expect(score).toBe(0.3);
+    // Phase 2: weighted by DEFAULT_WEIGHT_TS (0.4); was 0.3 under Phase 1 unweighted formula
+    expect(score).toBeCloseTo(0.3 * DEFAULT_WEIGHT_TS, 5);
   });
 });
 

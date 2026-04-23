@@ -344,6 +344,11 @@ export async function POST(req: Request) {
         description: buildAgentToolDescription(agents),
         agents,
         lookupAgent: (type) => agentMap.get(type),
+        // Pass the parent's already-loaded MCP OUT tools through so
+        // dispatched subagents inherit the external surface. The subagent
+        // def's `tool_allowlist` filters the merged set inside runSubagent.
+        externalTools,
+        externalToolMeta,
         cap: parentTurnCap,
       }),
     };

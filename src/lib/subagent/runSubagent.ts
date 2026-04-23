@@ -27,14 +27,26 @@
 // the chat route inject user-defined agent definitions without modifying the
 // built-in registry. When `lookupAgent` is not supplied, behaviour is
 // unchanged (built-ins only).
+//
+// MCP-OUT tool propagation: the parent already loaded MCP OUT tools via
+// `loadMcpOutTools(companyId)` and holds the transports open for its turn.
+// `runSubagent` accepts the parent's loaded `externalTools` +
+// `externalToolMeta` via the `DispatchOptions` argument and threads them
+// into the subagent's `buildToolSet`, then the existing
+// `filterSubagentTools` narrows by the subagent def's allowlist/denylist.
+// Without this, a user-defined subagent with a Linear scoping prompt
+// would have zero Linear tools — defeating the whole coordinator pattern.
+// Transport lifecycle stays with the parent; we never open or close
+// transports here.
 
 import { randomUUID } from 'node:crypto';
-import { stepCountIs } from 'ai';
+import { stepCountIs, type Tool } from 'ai';
 
 import { runAgentTurn } from '@/lib/agent/run';
 import { buildToolSet } from '@/lib/agent/tool-bridge';
 import { runHook } from '@/lib/agent/hooks';
 import type { AgentContext } from '@/lib/agent/types';
+import type { McpToolMeta } from '@/lib/mcp-out/bridge';
 import { resolveModel } from '@/lib/models/resolve';
 import type { ApprovedModelId } from '@/lib/models/approved-models';
 import { logEvent } from '@/lib/audit/logger';
@@ -50,6 +62,28 @@ import type {
   SubagentInvocation,
   SubagentResult,
 } from './types';
+
+/**
+ * Optional behaviours callers can opt into without breaking the
+ * two-positional-arg default signature.
+ */
+export interface DispatchOptions {
+  /**
+   * Caller-supplied lookup for user-defined agent definitions. Tried
+   * before the built-in registry; when it returns `undefined`, the
+   * registry is consulted.
+   */
+  lookupAgent?: (agentType: string) => BuiltInAgentDefinition | undefined;
+  /**
+   * MCP OUT tools already loaded by the parent. Threaded into the
+   * subagent's `buildToolSet` so the subagent inherits the parent's
+   * external tool surface. The subagent def's `tools` / `disallowedTools`
+   * then filter this merged set exactly as it filters the brain tools.
+   */
+  externalTools?: Record<string, Tool>;
+  /** Audit metadata paired 1:1 with `externalTools` (same keys). */
+  externalToolMeta?: Record<string, McpToolMeta>;
+}
 
 type Status = 'ok' | 'validator_failed' | 'aborted' | 'provider_error';
 
@@ -118,9 +152,10 @@ function emitAudit({
 export async function runSubagent(
   dispatchCtx: SubagentDispatchContext,
   invocation: SubagentInvocation,
-  lookupAgent?: (agentType: string) => BuiltInAgentDefinition | undefined,
+  options: DispatchOptions = {},
 ): Promise<SubagentResult> {
   const { parentCtx, parentUsageRecordId } = dispatchCtx;
+  const { lookupAgent, externalTools, externalToolMeta } = options;
   // Try the caller-supplied lookup first (user-defined agents), then fall
   // back to the built-in registry. When no lookup is supplied, skip straight
   // to the registry so behaviour is identical to the pre-Task-2 path.
@@ -181,7 +216,15 @@ export async function runSubagent(
     agentSkillIds: [] as string[],
     webCallsThisTurn: 0,
   };
-  const fullToolset = buildToolSet(toolCtx, {}, {});
+  // Include the parent's MCP OUT tools — the subagent inherits the parent's
+  // external surface, then `filterSubagentTools` applies the def's
+  // allowlist/denylist to the merged set. Omitting either param (e.g. in
+  // tests that pre-date this change) falls back to an empty map.
+  const fullToolset = buildToolSet(
+    toolCtx,
+    externalTools ?? {},
+    externalToolMeta ?? {},
+  );
   const tools = filterSubagentTools(fullToolset, def);
 
   // --- 4. SubagentStart hook gate -----------------------------------------

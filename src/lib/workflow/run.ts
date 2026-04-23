@@ -285,6 +285,12 @@ export async function runWorkflow(runId: string): Promise<void> {
     description: buildAgentToolDescription(agents),
     agents,
     lookupAgent,
+    // Pass the parent's already-loaded MCP OUT tools through so dispatched
+    // subagents inherit the external surface. Without this, a user-defined
+    // subagent would have zero external tools — its `tool_allowlist` (or
+    // lack of one) filters the merged set inside runSubagent.
+    externalTools,
+    externalToolMeta,
     cap: agentToolCap,
   });
 

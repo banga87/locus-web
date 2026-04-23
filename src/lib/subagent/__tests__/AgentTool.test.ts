@@ -193,9 +193,39 @@ describe('buildAgentTool', () => {
       expect(runSubagent).toHaveBeenCalledWith(
         { parentCtx, parentUsageRecordId: 'parent-usage-123' },
         input,
-        undefined, // lookupAgent — not supplied in this test
+        {
+          lookupAgent: undefined,
+          externalTools: undefined,
+          externalToolMeta: undefined,
+        },
       );
       expect(result).toEqual(buildOkResult());
+    });
+
+    it('forwards externalTools + externalToolMeta to runSubagent when supplied', async () => {
+      const parentCtx = buildParentCtx();
+      const externalTools = {
+        ext_abc_list_issues: { description: 'sentinel' } as never,
+      };
+      const externalToolMeta = {
+        ext_abc_list_issues: { connectionId: 'conn-1' } as never,
+      };
+      const agentTool = buildAgentTool({
+        parentCtx,
+        getParentUsageRecordId: () => 'row-7',
+        description: 'Dispatch a subagent.',
+        externalTools,
+        externalToolMeta,
+      });
+      await (agentTool.execute as (i: unknown) => Promise<unknown>)(
+        buildValidInput(),
+      );
+      const call = vi.mocked(runSubagent).mock.calls[0];
+      expect(call![2]).toEqual({
+        lookupAgent: undefined,
+        externalTools,
+        externalToolMeta,
+      });
     });
 
     it('re-reads parentUsageRecordId via getter on each call', async () => {

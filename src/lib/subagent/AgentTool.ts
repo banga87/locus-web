@@ -36,12 +36,13 @@
 // If omitted, the old `description` string path is preserved for
 // backward compatibility with existing callers and tests.
 
-import { tool } from 'ai';
+import { tool, type Tool } from 'ai';
 import { z } from 'zod';
 
 import { runSubagent } from './runSubagent';
 import { buildAgentToolDescription } from './prompt';
 import type { AgentContext } from '@/lib/agent/types';
+import type { McpToolMeta } from '@/lib/mcp-out/bridge';
 import type { BuiltInAgentDefinition } from './types';
 
 const DEFAULT_CAP = Number(
@@ -86,6 +87,18 @@ export interface BuildAgentToolOptions {
    * Constructed by the caller from the `agents` list when supplied.
    */
   lookupAgent?: (agentType: string) => BuiltInAgentDefinition | undefined;
+  /**
+   * Parent-loaded MCP OUT tools. Threaded verbatim into `runSubagent` so
+   * the subagent's tool set inherits the parent's external surface. The
+   * subagent definition's `tools` / `disallowedTools` then filter the
+   * merged set — a user-defined agent with a null `tool_allowlist` sees
+   * everything the parent sees; one with a restricted allowlist only
+   * sees the named tools. Transports are opened and closed by the parent;
+   * this module never touches transport lifecycle.
+   */
+  externalTools?: Record<string, Tool>;
+  /** Audit metadata paired 1:1 with `externalTools` (same keys). */
+  externalToolMeta?: Record<string, McpToolMeta>;
 }
 
 /**
@@ -124,6 +137,8 @@ export function buildAgentTool(opts: BuildAgentToolOptions) {
   }
 
   const lookupAgent = opts.lookupAgent;
+  const externalTools = opts.externalTools;
+  const externalToolMeta = opts.externalToolMeta;
 
   return tool({
     description: toolDescription,
@@ -148,7 +163,7 @@ export function buildAgentTool(opts: BuildAgentToolOptions) {
           parentUsageRecordId: opts.getParentUsageRecordId(),
         },
         input,
-        lookupAgent,
+        { lookupAgent, externalTools, externalToolMeta },
       );
     },
   });

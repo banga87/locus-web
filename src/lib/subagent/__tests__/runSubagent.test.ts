@@ -559,7 +559,7 @@ describe('runSubagent — lookupAgent (Task 2)', () => {
     const result = await runSubagent(
       buildDispatchCtx(),
       buildInvocation({ subagent_type: 'UserAgent' }),
-      lookupAgent,
+      { lookupAgent },
     );
 
     expect(result.ok).toBe(true);
@@ -581,7 +581,7 @@ describe('runSubagent — lookupAgent (Task 2)', () => {
     const result = await runSubagent(
       buildDispatchCtx(),
       buildInvocation({ subagent_type: 'TestAgent' }),
-      lookupAgent,
+      { lookupAgent },
     );
 
     expect(result.ok).toBe(true);
@@ -598,7 +598,7 @@ describe('runSubagent — lookupAgent (Task 2)', () => {
     const result = await runSubagent(
       buildDispatchCtx(),
       buildInvocation({ subagent_type: 'GhostAgent' }),
-      lookupAgent,
+      { lookupAgent },
     );
 
     expect(result.ok).toBe(false);
@@ -615,5 +615,45 @@ describe('runSubagent — lookupAgent (Task 2)', () => {
     const result = await runSubagent(buildDispatchCtx(), buildInvocation());
     expect(result.ok).toBe(true);
     expect(getBuiltInAgent).toHaveBeenCalledWith('TestAgent');
+  });
+});
+
+describe('runSubagent — MCP OUT tool propagation', () => {
+  it('threads parent-supplied externalTools + externalToolMeta into buildToolSet', async () => {
+    const def = buildDef();
+    vi.mocked(getBuiltInAgent).mockReturnValue(def);
+
+    // Sentinel values — we only need identity equality on the first call
+    // to buildToolSet to know the params flowed through runSubagent.
+    const externalTools = {
+      ext_abc_list_issues: { description: 'sentinel' } as never,
+    };
+    const externalToolMeta = {
+      ext_abc_list_issues: { connectionId: 'conn-1' } as never,
+    };
+
+    const result = await runSubagent(
+      buildDispatchCtx(),
+      buildInvocation(),
+      { externalTools, externalToolMeta },
+    );
+
+    expect(result.ok).toBe(true);
+    const buildToolSetCall = vi.mocked(buildToolSet).mock.calls[0];
+    expect(buildToolSetCall).toBeDefined();
+    // Positional args: (toolCtx, externalTools, externalToolMeta)
+    expect(buildToolSetCall![1]).toBe(externalTools);
+    expect(buildToolSetCall![2]).toBe(externalToolMeta);
+  });
+
+  it('defaults externalTools + externalToolMeta to empty maps when omitted', async () => {
+    const def = buildDef();
+    vi.mocked(getBuiltInAgent).mockReturnValue(def);
+
+    const result = await runSubagent(buildDispatchCtx(), buildInvocation());
+    expect(result.ok).toBe(true);
+    const buildToolSetCall = vi.mocked(buildToolSet).mock.calls[0];
+    expect(buildToolSetCall![1]).toEqual({});
+    expect(buildToolSetCall![2]).toEqual({});
   });
 });

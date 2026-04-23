@@ -257,9 +257,11 @@ export async function runWorkflow(runId: string): Promise<void> {
   } = await loadMcpOutTools(workflowDoc.companyId);
 
   // ---- Wire subagent dispatch (always on for workflow runs) ------------
-  // Merge built-in + user-defined agents. User-defined wins on slug collision
-  // so a custom agent can replace a built-in if the company wants to. Mirrors
-  // the chat route pattern (src/app/api/agent/chat/route.ts ~line 324).
+  // Same dedupe semantics as the chat route (src/app/api/agent/chat/route.ts
+  // ~line 324): user-defined wins on slug collision so a company can
+  // override a built-in. Construction differs — the chat route builds a
+  // single merged-lookup map; here we chain user-defined → built-in
+  // registry. Both end up returning the winning agent for a given slug.
   const builtIns = getBuiltInAgents();
   const userDefined = await listUserDefinedAgents(workflowDoc.companyId);
   const userSlugs = new Set(userDefined.map((a) => a.agentType));
@@ -268,8 +270,6 @@ export async function runWorkflow(runId: string): Promise<void> {
     ...userDefined,
   ];
 
-  // Build a per-call lookup so runSubagent can resolve user-defined agents
-  // first, falling back to the built-in registry.
   const userDefinedBySlug = new Map(userDefined.map((a) => [a.agentType, a]));
   const lookupAgent = (slug: string) =>
     userDefinedBySlug.get(slug) ?? getBuiltInAgent(slug);
@@ -292,6 +292,10 @@ export async function runWorkflow(runId: string): Promise<void> {
   // hard-enable subagents — no TATARA_SUBAGENTS_ENABLED gate here (unlike
   // the chat route). Workflows are the proving ground for the coordinator
   // model; chat keeps its gate until the pattern is proven.
+  //
+  // Spread order: `Agent` is written last so it clobbers any MCP OUT tool
+  // coincidentally registered under that name. This is intentional — the
+  // dispatch tool must be reachable under its canonical key.
   const routedExternalTools: Record<string, Tool> = {
     ...externalTools,
     Agent: agentTool,

@@ -1,18 +1,18 @@
-// runWorkflow — top-level workflow execution entry point.
+// runTriggeredSkill — top-level triggered-skill execution entry point.
 //
-// Called from the Task 6 API route via waitUntil so it runs in the
+// Called from the skill-run API route via waitUntil so it runs in the
 // background after the HTTP response is sent. This file is deliberately
 // outside src/lib/agent/ (the platform-agnostic harness) so it can freely
-// import DB helpers, Next.js-adjacent utilities, and workflow-specific
+// import DB helpers, Next.js-adjacent utilities, and run-table-specific
 // modules without violating the harness boundary.
 //
 // Execution model (single-agent, single-turn loop):
-//   1. Load the workflow_run + workflow document from DB.
+//   1. Load the workflow_run + skill document from DB.
 //   2. Run pre-cancellation check — exit early if already cancelled.
 //   3. markRunning — transitions status and anchors updated_at.
 //   4. Build tool set (all registered Locus tools) wrapped with stamp middleware.
-//   5. Build system prompt = base prompt + workflow preamble.
-//   6. Drive runAgentTurn with the workflow body as the user message.
+//   5. Build system prompt = base prompt + triggered-skill preamble.
+//   6. Drive runAgentTurn with the skill body as the user message.
 //   7. Stream events → insertEvent per event, accumulate token counts.
 //   8. At turn_start events: check for cancellation and exit if detected.
 //   9. On normal completion: insertEvent(run_complete) + markCompleted.
@@ -39,7 +39,7 @@ import { buildSystemPrompt } from '@/lib/agent/system-prompt';
 import { buildToolSet } from '@/lib/agent/tool-bridge';
 import { loadMcpOutTools } from '@/lib/mcp-out/bridge';
 import { registerLocusTools } from '@/lib/tools';
-import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
+import { validateSkillTrigger } from '@/lib/brain/frontmatter';
 import { registerContextHandlers } from '@/lib/context/register';
 import { deriveGrantedCapabilities } from '@/app/api/agent/chat/grantedCapabilities';
 import { getBuiltInAgents, getBuiltInAgent } from '@/lib/subagent/registry';
@@ -47,10 +47,16 @@ import { listUserDefinedAgents } from '@/lib/subagent/userDefinedAgents';
 import { buildAgentTool } from '@/lib/subagent/AgentTool';
 import { buildAgentToolDescription } from '@/lib/subagent/prompt';
 
-import { insertEvent } from './events';
-import { markRunning, markCompleted, markFailed, markCancelled, getRunStatus } from './status';
-import { buildWorkflowSystemPrompt } from './system-prompt';
-import { wrapToolsWithStamping } from './stamp-middleware';
+import { insertEvent } from '@/lib/workflow/events';
+import {
+  markRunning,
+  markCompleted,
+  markFailed,
+  markCancelled,
+  getRunStatus,
+} from '@/lib/workflow/status';
+import { wrapToolsWithStamping } from '@/lib/workflow/stamp-middleware';
+import { buildTriggeredSkillSystemPrompt } from './triggered-system-prompt';
 
 // Ensure the tool registry is populated. Safe to call multiple times —
 // registerLocusTools is guarded by a `registered` flag.
@@ -74,8 +80,8 @@ async function getWorkflowRun(runId: string) {
   return row ?? null;
 }
 
-/** Load the workflow document row or return null. */
-async function getWorkflowDoc(documentId: string) {
+/** Load the skill document row or return null. */
+async function getSkillDoc(documentId: string) {
   const [row] = await db
     .select()
     .from(documents)
@@ -104,18 +110,18 @@ type WorkflowEventType =
 // ---------------------------------------------------------------------------
 
 /**
- * Execute a workflow run to completion. Designed to be called inside
- * `waitUntil()` at the route layer (Task 6) so it runs after the HTTP
- * response is sent. Returns when the run reaches a terminal state
+ * Execute a triggered-skill run to completion. Designed to be called inside
+ * `waitUntil()` at the route layer so it runs after the HTTP response is
+ * sent. Returns when the run reaches a terminal state
  * (completed | failed | cancelled).
  *
  * @throws if the runId does not exist in the DB (programming error —
  *         the route should only call this after creating the run row).
  */
-export async function runWorkflow(runId: string): Promise<void> {
-  // ---- Load run + workflow doc ------------------------------------------
+export async function runTriggeredSkill(runId: string): Promise<void> {
+  // ---- Load run + skill doc --------------------------------------------
   const run = await getWorkflowRun(runId);
-  if (!run) throw new Error(`runWorkflow: run ${runId} not found`);
+  if (!run) throw new Error(`runTriggeredSkill: run ${runId} not found`);
 
   // Pre-execution cancellation check — the run may have been cancelled
   // between insertion and this function being invoked (e.g. user cancelled
@@ -125,54 +131,74 @@ export async function runWorkflow(runId: string): Promise<void> {
     return;
   }
 
-  const workflowDoc = await getWorkflowDoc(run.workflowDocumentId);
-  if (!workflowDoc) {
+  const skillDoc = await getSkillDoc(run.workflowDocumentId);
+  if (!skillDoc) {
     // Emit a run_error event before marking failed so the run view's event
     // log has a record of why the run aborted — otherwise post-mortem
     // debugging has to fall back to workflow_runs.error_message alone.
     // Matches the shape used by the triggering-user-missing path below.
-    const message = `Workflow document ${run.workflowDocumentId} not found`;
+    const message = `Skill document ${run.workflowDocumentId} not found`;
     await insertEvent(runId, 0, 'run_error', {
-      reason: 'workflow_doc_missing',
+      reason: 'skill_doc_missing',
       message,
     });
     await markFailed(runId, message);
     return;
   }
 
-  // Parse + validate the workflow frontmatter stored in documents.metadata.
-  // The metadata jsonb column holds the authored workflow fields. `type` is
-  // NOT mirrored into metadata — it's denormalised into the `documents.type`
-  // column by the PATCH/POST sync blocks (see
-  // src/app/api/brain/documents/[id]/route.ts). Inject it here so the
-  // type-requiring validator passes; the trigger route has already
-  // established `documents.type === 'workflow'` before creating this run.
-  const fmResult = validateWorkflowFrontmatter({
-    ...((workflowDoc.metadata as Record<string, unknown> | null) ?? {}),
-    type: 'workflow',
-  });
-  if (!fmResult.ok) {
-    const msg = `Invalid workflow frontmatter: ${fmResult.errors.map((e) => `${e.field} ${e.message}`).join(', ')}`;
+  // Only `type: 'skill'` documents are runnable by this path. The trigger
+  // route has already gated on this, but we re-check here for defence in
+  // depth — runs could be created programmatically or a doc's type could
+  // be changed after the run row was inserted.
+  if (skillDoc.type !== 'skill') {
+    const message = `Document ${skillDoc.id} is not a skill (type='${skillDoc.type}')`;
     await insertEvent(runId, 0, 'run_error', {
-      reason: 'invalid_frontmatter',
+      reason: 'not_a_skill',
+      message,
+    });
+    await markFailed(runId, message);
+    return;
+  }
+
+  // Parse + validate the skill trigger block stored under
+  // documents.metadata.trigger. Skills that are not triggerable have no
+  // `trigger` key — that path is rejected with `skill_not_triggerable`.
+  const metadata =
+    (skillDoc.metadata as Record<string, unknown> | null) ?? {};
+  const triggerRaw = metadata['trigger'];
+  if (triggerRaw === undefined || triggerRaw === null) {
+    const message = `Skill ${skillDoc.id} has no trigger block and is not runnable`;
+    await insertEvent(runId, 0, 'run_error', {
+      reason: 'skill_not_triggerable',
+      message,
+    });
+    await markFailed(runId, message);
+    return;
+  }
+
+  const fmResult = validateSkillTrigger(triggerRaw);
+  if (!fmResult.ok) {
+    const msg = `Invalid skill trigger: ${fmResult.errors.map((e) => `${e.field} ${e.message}`).join(', ')}`;
+    await insertEvent(runId, 0, 'run_error', {
+      reason: 'invalid_trigger',
       message: msg,
     });
     await markFailed(runId, msg);
     return;
   }
-  const frontmatter = fmResult.value;
-  const workflowDocRef = workflowDoc.path;
+  const trigger = fmResult.value;
+  const skillDocRef = skillDoc.path;
 
   // ---- Resolve the triggering user's role --------------------------------
   // The runner acts as a platform_agent on behalf of the user who triggered
   // the run — the permission evaluator (Task 1) gates write tools on
   // actor.role, so the runner MUST pass through the real role rather than a
   // hardcoded value. Without this, any user (including viewers) could
-  // escalate to editor by triggering a workflow that calls write tools.
+  // escalate to editor by triggering a skill that calls write tools.
   //
   // Future hardening: a `triggered_by_role` snapshot column on workflow_runs
   // would freeze the role at trigger time so role changes between trigger
-  // and execution can't affect an already-running workflow. For MVP, live
+  // and execution can't affect an already-running skill. For MVP, live
   // lookup is acceptable — the trigger route rejects viewers up-front so
   // this live lookup only observes editor/admin/owner.
   const [triggeringUser] = await db
@@ -211,7 +237,7 @@ export async function runWorkflow(runId: string): Promise<void> {
   const agentActor = {
     type: 'platform_agent' as const,
     userId: run.triggeredBy,
-    companyId: workflowDoc.companyId,
+    companyId: skillDoc.companyId,
     scopes: ['read', 'write'],
   };
 
@@ -227,16 +253,16 @@ export async function runWorkflow(runId: string): Promise<void> {
       scopes: ['read', 'write'],
       role: triggeringRole,
     },
-    companyId: workflowDoc.companyId,
-    brainId: workflowDoc.brainId,
+    companyId: skillDoc.companyId,
+    brainId: skillDoc.brainId,
     grantedCapabilities,
     webCallsThisTurn: 0,
   };
 
   const agentContext = {
     actor: agentActor,
-    brainId: workflowDoc.brainId,
-    companyId: workflowDoc.companyId,
+    brainId: skillDoc.brainId,
+    companyId: skillDoc.companyId,
     sessionId: null,
     abortSignal: new AbortController().signal,
     agentDefinitionId: null,
@@ -245,7 +271,7 @@ export async function runWorkflow(runId: string): Promise<void> {
 
   // ---- Load MCP OUT tools -----------------------------------------------
   // Mirrors the chat route — without this, external MCP tools (Linear,
-  // Gmail, HubSpot, etc.) never reach the workflow agent even when
+  // Gmail, HubSpot, etc.) never reach the triggered-skill agent even when
   // `requires_mcps` lists them and preflight passed. `close()` must run
   // in a terminal path; we invoke it inside the outer finally below so
   // transports are released regardless of success/error.
@@ -254,16 +280,16 @@ export async function runWorkflow(runId: string): Promise<void> {
     toolMeta: externalToolMeta,
     connections: externalConnections,
     close: closeMcp,
-  } = await loadMcpOutTools(workflowDoc.companyId);
+  } = await loadMcpOutTools(skillDoc.companyId);
 
-  // ---- Wire subagent dispatch (always on for workflow runs) ------------
+  // ---- Wire subagent dispatch (always on for triggered-skill runs) ------
   // Same dedupe semantics as the chat route (src/app/api/agent/chat/route.ts
   // ~line 324): user-defined wins on slug collision so a company can
   // override a built-in. Construction differs — the chat route builds a
   // single merged-lookup map; here we chain user-defined → built-in
   // registry. Both end up returning the winning agent for a given slug.
   const builtIns = getBuiltInAgents();
-  const userDefined = await listUserDefinedAgents(workflowDoc.companyId);
+  const userDefined = await listUserDefinedAgents(skillDoc.companyId);
   const userSlugs = new Set(userDefined.map((a) => a.agentType));
   const agents = [
     ...builtIns.filter((a) => !userSlugs.has(a.agentType)),
@@ -277,10 +303,10 @@ export async function runWorkflow(runId: string): Promise<void> {
   const agentToolCap = { limit: 10, count: 0 };
   const agentTool = buildAgentTool({
     parentCtx: agentContext,
-    // Workflow runs have no parent `usage_records` row to FK to yet (Task 6
-    // stretch). Pass `null` permanently via a stable getter — first-in-run
-    // subagent calls are the only calls, so there's no attribution ordering
-    // concern to solve here like the chat route has.
+    // Triggered-skill runs have no parent `usage_records` row to FK to yet
+    // (Task 6 stretch). Pass `null` permanently via a stable getter —
+    // first-in-run subagent calls are the only calls, so there's no
+    // attribution ordering concern to solve here like the chat route has.
     getParentUsageRecordId: () => null,
     description: buildAgentToolDescription(agents),
     agents,
@@ -294,10 +320,11 @@ export async function runWorkflow(runId: string): Promise<void> {
     cap: agentToolCap,
   });
 
-  // Merge the Agent dispatch tool into the external tools map. Workflow runs
-  // hard-enable subagents — no TATARA_SUBAGENTS_ENABLED gate here (unlike
-  // the chat route). Workflows are the proving ground for the coordinator
-  // model; chat keeps its gate until the pattern is proven.
+  // Merge the Agent dispatch tool into the external tools map.
+  // Triggered-skill runs hard-enable subagents — no TATARA_SUBAGENTS_ENABLED
+  // gate here (unlike the chat route). Triggered skills are the proving
+  // ground for the coordinator model; chat keeps its gate until the pattern
+  // is proven.
   //
   // Spread order: `Agent` is written last so it clobbers any MCP OUT tool
   // coincidentally registered under that name. This is intentional — the
@@ -311,7 +338,7 @@ export async function runWorkflow(runId: string): Promise<void> {
   const baseTools = buildToolSet(toolContext, routedExternalTools, externalToolMeta);
   const tools = wrapToolsWithStamping(
     baseTools,
-    { runId, workflowDocRef },
+    { runId, workflowDocRef: skillDocRef },
     toolContext,
   );
 
@@ -321,19 +348,19 @@ export async function runWorkflow(runId: string): Promise<void> {
   const [brainRow] = await db
     .select({ id: brains.id, name: brains.name, slug: brains.slug })
     .from(brains)
-    .where(eq(brains.id, workflowDoc.brainId))
+    .where(eq(brains.id, skillDoc.brainId))
     .limit(1);
 
   const [companyRow] = await db
     .select({ name: companies.name })
     .from(companies)
-    .where(eq(companies.id, workflowDoc.companyId))
+    .where(eq(companies.id, skillDoc.companyId))
     .limit(1);
 
   const folderRows = await db
     .select({ slug: folders.slug, name: folders.name, description: folders.description })
     .from(folders)
-    .where(eq(folders.brainId, workflowDoc.brainId));
+    .where(eq(folders.brainId, skillDoc.brainId));
 
   const baseSystemPrompt = buildSystemPrompt({
     brain: brainRow ?? { name: 'Brain', slug: 'brain' },
@@ -342,16 +369,16 @@ export async function runWorkflow(runId: string): Promise<void> {
     externalConnections,
   });
 
-  const system = buildWorkflowSystemPrompt(
+  const system = buildTriggeredSkillSystemPrompt(
     baseSystemPrompt,
-    frontmatter,
-    workflowDocRef,
+    trigger,
+    skillDocRef,
   );
 
-  // The workflow body (everything after the frontmatter) is the user
+  // The skill body (everything after the frontmatter) is the user
   // instruction. The whole document content serves as the prompt.
   const messages = [
-    { role: 'user' as const, content: workflowDoc.content },
+    { role: 'user' as const, content: skillDoc.content },
   ];
 
   // ---- Execute ---------------------------------------------------------
@@ -411,10 +438,10 @@ export async function runWorkflow(runId: string): Promise<void> {
         //                cannot complete normally.
         //   - 'denied' → a SessionStart or UserPromptSubmit hook denied
         //                the turn. No hook registers a deny today, but
-        //                the hook bus is public and workflows are a
-        //                long-lived execution surface — closing the gap
-        //                now avoids silent "completed with 0 tokens" runs
-        //                when a handler is added later.
+        //                the hook bus is public and triggered-skill runs
+        //                are a long-lived execution surface — closing the
+        //                gap now avoids silent "completed with 0 tokens"
+        //                runs when a handler is added later.
         if (ev.finishReason === 'error') {
           await insertEvent(runId, sequence++, 'run_error', {
             message: 'LLM stream finished with error',
@@ -448,7 +475,7 @@ export async function runWorkflow(runId: string): Promise<void> {
     // run_error event is useless for post-mortem.
     const chain = flattenErrorChain(err);
     const message = chain.join(' | caused by: ');
-    console.error('[workflow/run] run failed', err);
+    console.error('[skills/run-triggered] run failed', err);
     try {
       await insertEvent(runId, sequence++, 'run_error', {
         message,
@@ -461,12 +488,12 @@ export async function runWorkflow(runId: string): Promise<void> {
   } finally {
     // Release MCP OUT transports regardless of success/error/cancel path.
     // Unlike the chat route (which defers via waitUntil to avoid blocking
-    // the response stream) the workflow runner has no HTTP stream to
-    // protect — awaiting inline is the right call.
+    // the response stream) the triggered-skill runner has no HTTP stream
+    // to protect — awaiting inline is the right call.
     try {
       await closeMcp();
     } catch (closeErr) {
-      console.warn('[workflow/run] closeMcp failed', closeErr);
+      console.warn('[skills/run-triggered] closeMcp failed', closeErr);
     }
   }
 }

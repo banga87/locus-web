@@ -57,7 +57,7 @@ import { workflowRunEvents } from '@/db/schema/workflow-run-events';
 import { registerLocusTools, __resetLocusToolsRegistered } from '@/lib/tools';
 import { __resetRegistryForTests } from '@/lib/tools/executor';
 
-import { runWorkflow } from '@/lib/workflow/run';
+import { runTriggeredSkill } from '@/lib/skills/run-triggered';
 
 // ---------------------------------------------------------------------------
 // Mock provider (same pattern as run.test.ts)
@@ -179,23 +179,25 @@ async function setupFixtures(): Promise<E2EFixtures> {
       path: `workflows-${suffix}/test-workflow-${suffix}`,
       content: [
         '---',
-        'type: workflow',
-        'output: document',
-        `output_category: ${outputFolderSlug}`,
-        'requires_mcps: []',
-        'schedule: null',
+        'type: skill',
+        'trigger:',
+        '  output: document',
+        `  output_category: ${outputFolderSlug}`,
+        '  requires_mcps: []',
+        '  schedule: null',
         '---',
         '',
         "Create a document titled 'Test Output' with body 'hello'.",
       ].join('\n'),
-      type: 'workflow',
+      type: 'skill',
       version: 1,
       metadata: {
-        type: 'workflow',
-        output: 'document',
-        output_category: outputFolderSlug,
-        requires_mcps: [],
-        schedule: null,
+        trigger: {
+          output: 'document',
+          output_category: outputFolderSlug,
+          requires_mcps: [],
+          schedule: null,
+        },
       },
     })
     .returning({ id: documents.id });
@@ -362,7 +364,7 @@ describe('Workflow Phase 1.5 — E2E integration', () => {
       const runId = runRow!.id;
 
       // ---- Execute -------------------------------------------------------
-      await runWorkflow(runId);
+      await runTriggeredSkill(runId);
 
       // ---- Poll until terminal (should be immediate, but be safe). -------
       const finalStatus = await pollUntilTerminal(runId, 10_000);

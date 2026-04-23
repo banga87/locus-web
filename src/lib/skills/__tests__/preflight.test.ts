@@ -11,6 +11,7 @@ import { db } from '@/db';
 import { companies } from '@/db/schema/companies';
 import { users } from '@/db/schema/users';
 import { mcpConnections } from '@/db/schema/mcp-connections';
+import type { SkillTrigger } from '@/lib/brain/frontmatter';
 
 import { preflight } from '../preflight';
 
@@ -83,6 +84,16 @@ async function teardownPreflightFixtures(f: PreflightFixtures): Promise<void> {
   await db.delete(companies).where(eq(companies.id, f.companyId));
 }
 
+/** Helper: build a minimal SkillTrigger for preflight tests. */
+function trigger(requires_mcps: string[]): SkillTrigger {
+  return {
+    output: 'document',
+    output_category: null,
+    requires_mcps,
+    schedule: null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -99,32 +110,26 @@ afterAll(async () => {
 
 describe('preflight', () => {
   it('returns ok=true when requires_mcps is empty', async () => {
-    const result = await preflight(
-      { requires_mcps: [] },
-      fix.companyId,
-    );
+    const result = await preflight(trigger([]), fix.companyId);
     expect(result).toEqual({ ok: true });
   });
 
   it('returns ok=true when all required MCPs are connected and active', async () => {
     const result = await preflight(
-      { requires_mcps: ['gmail', 'hubspot'] },
+      trigger(['gmail', 'hubspot']),
       fix.companyId,
     );
     expect(result).toEqual({ ok: true });
   });
 
   it('returns ok=true when a subset of required MCPs matches', async () => {
-    const result = await preflight(
-      { requires_mcps: ['gmail'] },
-      fix.companyId,
-    );
+    const result = await preflight(trigger(['gmail']), fix.companyId);
     expect(result).toEqual({ ok: true });
   });
 
   it('returns ok=false with missing list when a required MCP is not connected', async () => {
     const result = await preflight(
-      { requires_mcps: ['gmail', 'xero'] },
+      trigger(['gmail', 'xero']),
       fix.companyId,
     );
     expect(result.ok).toBe(false);
@@ -135,7 +140,7 @@ describe('preflight', () => {
 
   it('returns ok=false listing all missing MCPs when none are connected', async () => {
     const result = await preflight(
-      { requires_mcps: ['slack', 'notion'] },
+      trigger(['slack', 'notion']),
       fix.companyId,
     );
     expect(result.ok).toBe(false);
@@ -159,10 +164,7 @@ describe('preflight', () => {
       })
       .returning({ id: mcpConnections.id });
 
-    const result = await preflight(
-      { requires_mcps: ['xero'] },
-      fix.companyId,
-    );
+    const result = await preflight(trigger(['xero']), fix.companyId);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.missing).toEqual(['xero']);

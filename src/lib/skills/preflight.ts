@@ -1,7 +1,7 @@
-// Workflow pre-flight check — verifies required MCP connections are active
-// before a run starts.
+// Triggered-skill pre-flight check — verifies required MCP connections are
+// active before a run starts.
 //
-// `preflight` is called by the run trigger (Task 6 route) before inserting a
+// `preflight` is called by the skill-run trigger route before inserting a
 // workflow_run row. If pre-flight fails, the route returns a 4xx with the
 // missing MCP slugs so the UI can prompt the user to connect them.
 
@@ -9,11 +9,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mcpConnections } from '@/db/schema/mcp-connections';
-
-/** Minimum workflow frontmatter shape needed for pre-flight. */
-interface WorkflowPreflightInput {
-  requires_mcps: string[];
-}
+import type { SkillTrigger } from '@/lib/brain/frontmatter';
 
 /** Tagged-union result: ok or a list of missing MCP slugs. */
 export type PreflightResult =
@@ -21,17 +17,18 @@ export type PreflightResult =
   | { ok: false; missing: string[] };
 
 /**
- * Check that every MCP slug listed in `requires_mcps` has an `active`
- * connection for the given company.
+ * Check that every MCP slug listed in `trigger.requires_mcps` has an
+ * `active` connection for the given company.
  *
- * @param frontmatter  Workflow frontmatter (only `requires_mcps` is used).
- * @param companyId    The company whose connections are checked.
+ * @param trigger    Validated skill trigger block (only `requires_mcps`
+ *                   is consulted).
+ * @param companyId  The company whose connections are checked.
  */
 export async function preflight(
-  frontmatter: WorkflowPreflightInput,
+  trigger: SkillTrigger,
   companyId: string,
 ): Promise<PreflightResult> {
-  const required = frontmatter.requires_mcps;
+  const required = trigger.requires_mcps;
 
   // Fast-path: no requirements → always passes.
   if (required.length === 0) {

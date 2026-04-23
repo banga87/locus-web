@@ -36,8 +36,8 @@ import { waitUntil } from '@vercel/functions';
 
 import { requireAuth } from '@/lib/api/auth';
 import { ApiAuthError } from '@/lib/api/errors';
-import { runWorkflow } from '@/lib/workflow/run';
-import { preflight } from '@/lib/workflow/preflight';
+import { runTriggeredSkill } from '@/lib/skills/run-triggered';
+import { preflight } from '@/lib/skills/preflight';
 import { validateWorkflowFrontmatter } from '@/lib/brain/frontmatter';
 import {
   getWorkflowDocById,
@@ -152,7 +152,7 @@ export async function POST(req: Request) {
   // We are NOT using Vercel Workflow DevKit's start() from
   // @vercel/workflow/api — that is the Approach A path and is out of scope
   // for Phase 1.5. See spec Section 6 "Upgrade Seams" for rationale.
-  waitUntil(runWorkflow(runId));
+  waitUntil(runTriggeredSkill(runId));
 
   return Response.json(
     { run_id: runId, view_url: `/workflows/${doc.slug}/runs/${runId}` },

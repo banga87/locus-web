@@ -1,4 +1,4 @@
-// runWorkflow integration tests.
+// runTriggeredSkill integration tests.
 //
 // Uses MockLanguageModelV3 (same pattern as src/lib/agent/__tests__/run.test.ts)
 // to drive the runner without real LLM calls. Seeds real DB rows.
@@ -52,7 +52,7 @@ import {
 import * as agentRunModule from '@/lib/agent/run';
 import { DEFAULT_MODEL } from '@/lib/agent/run';
 
-import { runWorkflow } from '../run';
+import { runTriggeredSkill } from '../run-triggered';
 
 // ---------------------------------------------------------------------------
 // Mock provider (same pattern as agent/run.test.ts)
@@ -112,8 +112,8 @@ interface RunFixtures {
   userId: string;
   /** Secondary user seeded with role='viewer' for the permission-denial test. */
   viewerUserId: string;
-  workflowDocId: string;
-  workflowDocPath: string;
+  skillDocId: string;
+  skillDocPath: string;
 }
 
 async function setupRunFixtures(): Promise<RunFixtures> {
@@ -134,8 +134,8 @@ async function setupRunFixtures(): Promise<RunFixtures> {
     .values({
       companyId: company!.id,
       brainId: brain!.id,
-      slug: 'wf',
-      name: 'Workflows',
+      slug: 'skills',
+      name: 'Skills',
     })
     .returning({ id: folders.id });
 
@@ -175,34 +175,36 @@ async function setupRunFixtures(): Promise<RunFixtures> {
     status: 'active',
   });
 
-  const workflowDocPath = 'wf/test-workflow';
-  const [wfDoc] = await db
+  const skillDocPath = 'skills/test-skill';
+  const [skillDoc] = await db
     .insert(documents)
     .values({
       companyId: company!.id,
       brainId: brain!.id,
       folderId: folder!.id,
-      title: 'Test Workflow',
-      slug: 'test-workflow',
-      path: workflowDocPath,
+      title: 'Test Skill',
+      slug: 'test-skill',
+      path: skillDocPath,
       content: [
         '---',
-        'type: workflow',
-        'output: document',
-        'output_category: reports',
-        'requires_mcps: []',
-        'schedule: null',
+        'type: skill',
+        'trigger:',
+        '  output: document',
+        '  output_category: reports',
+        '  requires_mcps: []',
+        '  schedule: null',
         '---',
         'Create a report document in the reports folder.',
       ].join('\n'),
-      type: 'workflow',
+      type: 'skill',
       version: 1,
       metadata: {
-        type: 'workflow',
-        output: 'document',
-        output_category: 'reports',
-        requires_mcps: [],
-        schedule: null,
+        trigger: {
+          output: 'document',
+          output_category: 'reports',
+          requires_mcps: [],
+          schedule: null,
+        },
       },
     })
     .returning({ id: documents.id });
@@ -213,14 +215,14 @@ async function setupRunFixtures(): Promise<RunFixtures> {
     folderId: folder!.id,
     userId,
     viewerUserId,
-    workflowDocId: wfDoc!.id,
-    workflowDocPath,
+    skillDocId: skillDoc!.id,
+    skillDocPath,
   };
 }
 
 async function teardownRunFixtures(f: RunFixtures): Promise<void> {
   // Delete workflow_runs first (FK to users + documents)
-  await db.delete(workflowRuns).where(eq(workflowRuns.workflowDocumentId, f.workflowDocId));
+  await db.delete(workflowRuns).where(eq(workflowRuns.workflowDocumentId, f.skillDocId));
   await db.delete(users).where(eq(users.id, f.userId));
   await db.delete(users).where(eq(users.id, f.viewerUserId));
   // brains cascade to documents + folders
@@ -239,7 +241,7 @@ async function teardownRunFixtures(f: RunFixtures): Promise<void> {
 /**
  * Seed a workflow_run row and return its id.
  *
- * @param f         Fixtures bundle (company/brain/user/workflow doc).
+ * @param f         Fixtures bundle (company/brain/user/skill doc).
  * @param triggeredBy  Optional override — defaults to the editor user.
  *                     Pass `f.viewerUserId` for permission-denial tests.
  */
@@ -251,7 +253,7 @@ async function seedRun(f: RunFixtures, triggeredBy?: string): Promise<string> {
   const [run] = await db
     .insert(workflowRuns)
     .values({
-      workflowDocumentId: f.workflowDocId,
+      workflowDocumentId: f.skillDocId,
       triggeredBy: triggeredBy ?? f.userId,
       status: 'running',
     })
@@ -306,7 +308,7 @@ afterEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('runWorkflow — happy path', () => {
+describe('runTriggeredSkill — happy path', () => {
   // Longer timeout — this test hits the real DB for workflow_run + events
   // + document queries, and the mock LLM stream has a few internal awaits.
   // The per-suite default is too tight under parallel test load.
@@ -317,13 +319,13 @@ describe('runWorkflow — happy path', () => {
     mockProvider.setModel(
       makeStreamModel([
         { type: 'text-start', id: 't1' },
-        { type: 'text-delta', id: 't1', delta: 'Workflow output ready.' },
+        { type: 'text-delta', id: 't1', delta: 'Skill output ready.' },
         { type: 'text-end', id: 't1' },
       ]),
     );
 
     const runId = await seedRun(fix);
-    await runWorkflow(runId);
+    await runTriggeredSkill(runId);
 
     const run = await getRun(runId);
     expect(run).not.toBeNull();
@@ -338,7 +340,7 @@ describe('runWorkflow — happy path', () => {
   });
 });
 
-describe('runWorkflow — cancellation', () => {
+describe('runTriggeredSkill — cancellation', () => {
   it('stops gracefully when status is flipped to cancelled before the run starts', { timeout: 15_000 }, async () => {
     // Model that would produce output — but cancellation is detected at
     // run start (before markRunning) when we pre-flip the status.
@@ -351,13 +353,13 @@ describe('runWorkflow — cancellation', () => {
     );
 
     const runId = await seedRun(fix);
-    // Pre-flip to cancelled before calling runWorkflow
+    // Pre-flip to cancelled before calling runTriggeredSkill
     await db
       .update(workflowRuns)
       .set({ status: 'cancelled', updatedAt: new Date() })
       .where(eq(workflowRuns.id, runId));
 
-    await runWorkflow(runId);
+    await runTriggeredSkill(runId);
 
     const run = await getRun(runId);
     expect(run!.status).toBe('cancelled');
@@ -393,13 +395,13 @@ describe('runWorkflow — cancellation', () => {
 
     const runId = await seedRun(fix);
 
-    // Run the workflow — since the stream finishes immediately in the mock,
+    // Run the skill — since the stream finishes immediately in the mock,
     // we just verify the final state handles an already-cancelled row cleanly.
     // The true mid-turn cancellation is at turn_start of the *next* turn;
     // with maxSteps=1 (single-step model) the run completes normally.
     // We test the "pre-cancelled" path above; mid-execution is verified here
     // by ensuring no panic/exception occurs.
-    await runWorkflow(runId);
+    await runTriggeredSkill(runId);
 
     const run = await getRun(runId);
     // Either completed (if cancellation wasn't detected) or cancelled —
@@ -408,12 +410,12 @@ describe('runWorkflow — cancellation', () => {
   });
 });
 
-describe('runWorkflow — LLM error', () => {
+describe('runTriggeredSkill — LLM error', () => {
   it('marks the run as failed and records errorMessage when the LLM stream errors', { timeout: 15_000 }, async () => {
     mockProvider.setModel(makeErrorModel());
 
     const runId = await seedRun(fix);
-    await runWorkflow(runId);
+    await runTriggeredSkill(runId);
 
     const run = await getRun(runId);
     expect(run!.status).toBe('failed');
@@ -425,7 +427,7 @@ describe('runWorkflow — LLM error', () => {
   });
 });
 
-describe('runWorkflow — hook deny', () => {
+describe('runTriggeredSkill — hook deny', () => {
   it('marks the run as failed when SessionStart denies the turn', { timeout: 15_000 }, async () => {
     // The model would produce output if reached, but SessionStart deny
     // short-circuits before streamText. runAgentTurn still yields a
@@ -444,7 +446,7 @@ describe('runWorkflow — hook deny', () => {
     }));
 
     const runId = await seedRun(fix);
-    await runWorkflow(runId);
+    await runTriggeredSkill(runId);
 
     const run = await getRun(runId);
     expect(run!.status).toBe('failed');
@@ -458,18 +460,18 @@ describe('runWorkflow — hook deny', () => {
   });
 });
 
-describe('runWorkflow — missing run', () => {
+describe('runTriggeredSkill — missing run', () => {
   it('throws when the runId does not exist', { timeout: 15_000 }, async () => {
     mockProvider.setModel(makeStreamModel([]));
-    await expect(runWorkflow(randomUUID())).rejects.toThrow(/not found/);
+    await expect(runTriggeredSkill(randomUUID())).rejects.toThrow(/not found/);
   });
 });
 
-describe('runWorkflow — triggering user role', () => {
-  // This test documents the end-to-end wiring: runWorkflow looks up the
-  // triggering user's role in the DB (not a hardcoded 'editor'), and passes
-  // it through to the permission evaluator. A viewer-triggered workflow
-  // cannot escalate to editor via the workflow path — write tools return
+describe('runTriggeredSkill — triggering user role', () => {
+  // This test documents the end-to-end wiring: runTriggeredSkill looks up
+  // the triggering user's role in the DB (not a hardcoded 'editor'), and
+  // passes it through to the permission evaluator. A viewer-triggered skill
+  // cannot escalate to editor via this path — write tools return
   // permission_denied at the executor gate.
   //
   // We don't enumerate every role × tool combination here — that's covered
@@ -547,7 +549,7 @@ describe('runWorkflow — triggering user role', () => {
 
       // Seed a run triggered by the viewer user.
       const runId = await seedRun(fix, fix.viewerUserId);
-      await runWorkflow(runId);
+      await runTriggeredSkill(runId);
 
       const run = await getRun(runId);
       expect(run).not.toBeNull();
@@ -586,7 +588,7 @@ describe('runWorkflow — triggering user role', () => {
 // Task 3 — coordinator wiring
 // ---------------------------------------------------------------------------
 
-describe('runWorkflow — coordinator wiring', () => {
+describe('runTriggeredSkill — coordinator wiring', () => {
   // Spy restore lives in afterEach so a thrown assertion can't leak the
   // spy into subsequent tests in this describe block.
   let spy: ReturnType<typeof vi.spyOn<typeof agentRunModule, 'runAgentTurn'>> | null = null;
@@ -608,7 +610,7 @@ describe('runWorkflow — coordinator wiring', () => {
     );
 
     const runId = await seedRun(fix);
-    await runWorkflow(runId);
+    await runTriggeredSkill(runId);
 
     expect(spy).toHaveBeenCalledOnce();
     const callArgs = spy.mock.calls[0]![0];
@@ -627,7 +629,7 @@ describe('runWorkflow — coordinator wiring', () => {
     );
 
     const runId = await seedRun(fix);
-    await runWorkflow(runId);
+    await runTriggeredSkill(runId);
 
     expect(spy).toHaveBeenCalledOnce();
     const callArgs = spy.mock.calls[0]![0];
@@ -635,4 +637,3 @@ describe('runWorkflow — coordinator wiring', () => {
     expect(callArgs.tools).toHaveProperty('Agent');
   });
 });
-

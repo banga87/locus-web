@@ -160,7 +160,7 @@ import { clearHooks } from '@/lib/agent/hooks';
 import * as agentRunModule from '@/lib/agent/run';
 import { DEFAULT_MODEL } from '@/lib/agent/run';
 
-import { runWorkflow } from '@/lib/workflow/run';
+import { runTriggeredSkill } from '@/lib/skills/run-triggered';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -251,35 +251,38 @@ async function setupFixtures(): Promise<CoordFixtures> {
     metadata: {},
   });
 
-  // Workflow document — coordinator workflow that delegates to data-fetcher.
+  // Triggerable skill document — coordinator skill that delegates to
+  // data-fetcher.
   const [wfDoc] = await db
     .insert(documents)
     .values({
       companyId: company!.id,
       brainId: brain!.id,
       folderId: wfFolder!.id,
-      title: 'Standup Workflow',
+      title: 'Standup Skill',
       slug: `standup-workflow-${suffix}`,
       path: `workflows-${suffix}/standup-workflow-${suffix}`,
       content: [
         '---',
-        'type: workflow',
-        'output: document',
-        `output_category: ${productFolderSlug}`,
-        'requires_mcps: []',
-        'schedule: null',
+        'type: skill',
+        'trigger:',
+        '  output: document',
+        `  output_category: ${productFolderSlug}`,
+        '  requires_mcps: []',
+        '  schedule: null',
         '---',
         '',
         'Dispatch to the data-fetcher subagent to pull the issue list, then create a summary document at product/standup-summary.',
       ].join('\n'),
-      type: 'workflow',
+      type: 'skill',
       version: 1,
       metadata: {
-        type: 'workflow',
-        output: 'document',
-        output_category: productFolderSlug,
-        requires_mcps: [],
-        schedule: null,
+        trigger: {
+          output: 'document',
+          output_category: productFolderSlug,
+          requires_mcps: [],
+          schedule: null,
+        },
       },
     })
     .returning({ id: documents.id });
@@ -497,7 +500,7 @@ describe('Workflow coordinator — coordinator → subagent dispatch (Task 5)', 
         .returning({ id: workflowRuns.id });
       const runId = runRow!.id;
 
-      await runWorkflow(runId);
+      await runTriggeredSkill(runId);
 
       // -----------------------------------------------------------------------
       // Assertions

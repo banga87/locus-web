@@ -47,3 +47,6 @@ next-env.d.ts
 
 # git worktrees
 /.worktrees
+
+.vercel
+.env*.local

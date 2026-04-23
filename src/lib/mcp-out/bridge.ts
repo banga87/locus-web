@@ -50,6 +50,8 @@ import { dynamicTool, jsonSchema, type Tool } from 'ai';
 import type { JSONSchema7 } from '@ai-sdk/provider';
 
 import type { McpToolMeta } from '@/lib/agent/tool-bridge';
+
+export type { McpToolMeta };
 import {
   listConnections,
   markConnectionError,

@@ -118,7 +118,7 @@ export function buildAgentTool(opts: BuildAgentToolOptions) {
   // Derive the description and subagent_type schema from the agents list
   // when provided; otherwise use the legacy description string + z.string().
   let toolDescription: string;
-  let subagentTypeSchema: z.ZodTypeAny;
+  let subagentTypeSchema: z.ZodType<string>;
 
   if (opts.agents !== undefined) {
     toolDescription = buildAgentToolDescription(opts.agents);

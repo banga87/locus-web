@@ -19,6 +19,16 @@ import type {
   RetrieveQuery,
 } from './types';
 import { composeBoostedScore } from './scoring/compose';
+import { openaiEmbedder } from './embedding/openai';
+import { createQueryEmbeddingCache } from './embedding/cache';
+
+// Module-level cache so identical queries within a process lifetime hit
+// the LRU. Per spec §5.5, this is best-effort under fluid compute; not
+// load-bearing.
+const queryCache = createQueryEmbeddingCache({
+  max: 100,
+  embedder: async (q) => (await openaiEmbedder.embed(q)).vector,
+});
 
 interface RawRow {
   id: string;
@@ -35,6 +45,7 @@ interface RawRow {
   ts_headline: string;
   compact_index: CompactIndex | null;
   folder_slug: string | null;
+  cosine_sim: number | string | null;
 }
 
 function asDate(v: Date | string): Date {
@@ -60,6 +71,9 @@ export async function retrieve(
   assertTierAllowed(caller, q.tierCeiling);
   const limit = q.limit ?? 10;
 
+  const queryEmbedding = await queryCache.get(q.query);
+  const queryEmbeddingLiteral = `[${queryEmbedding.join(',')}]`;
+
   const rows = (await db.execute(sql`
     SELECT
       d.id,
@@ -77,7 +91,11 @@ export async function retrieve(
         'MaxWords=35, MinWords=15'
       ) AS ts_headline,
       d.compact_index,
-      f.slug AS folder_slug
+      f.slug AS folder_slug,
+      CASE WHEN d.embedding IS NOT NULL
+           THEN 1 - (d.embedding <=> ${queryEmbeddingLiteral}::vector)
+           ELSE NULL
+      END AS cosine_sim
     FROM documents d
     LEFT JOIN folders f ON f.id = d.folder_id
     WHERE d.company_id = ${q.companyId}
@@ -85,9 +103,15 @@ export async function retrieve(
       AND d.deleted_at IS NULL
       AND d.status != 'archived'
       AND d.type IS NULL
-      AND d.search_vector @@ plainto_tsquery('english', ${q.query})
+      AND (
+        d.search_vector @@ plainto_tsquery('english', ${q.query})
+        OR d.embedding IS NOT NULL
+      )
       ${q.filters?.folderPath ? sql`AND f.slug = ${q.filters.folderPath}` : sql``}
-    ORDER BY ts_rank DESC
+    ORDER BY (
+      0.4 * ts_rank(d.search_vector, plainto_tsquery('english', ${q.query}))
+      + 0.6 * COALESCE(1 - (d.embedding <=> ${queryEmbeddingLiteral}::vector), 0)
+    ) DESC
     LIMIT ${limit * 3}
   `)) as unknown as RawRow[];
 
@@ -95,8 +119,13 @@ export async function retrieve(
   const scored = rows.map((r) => {
     const tsRank =
       typeof r.ts_rank === 'number' ? r.ts_rank : Number(r.ts_rank);
+    const cosineSim =
+      r.cosine_sim === null
+        ? null
+        : (typeof r.cosine_sim === 'number' ? r.cosine_sim : Number(r.cosine_sim));
     const score = composeBoostedScore({
       tsRank,
+      cosineSim,
       query: q.query,
       content: r.content,
       docUpdatedAt: asDate(r.updated_at),

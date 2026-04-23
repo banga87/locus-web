@@ -10,6 +10,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { retrieve } from '../../src/lib/memory/core';
+import {
+  seedBenchmarkBrain,
+  teardownBenchmarkSeed,
+  waitForEmbeddings,
+} from './seed';
 
 interface Benchmark {
   name: string;
@@ -19,6 +24,7 @@ interface Benchmark {
 
 interface Metrics {
   name: string;
+  mode: string;
   n: number;
   r_at_5: number;
   r_at_10: number;
@@ -28,59 +34,70 @@ interface Metrics {
 async function main(): Promise<void> {
   const fixturePath =
     process.argv[2] ?? 'tests/benchmarks/fixtures/sample.json';
+  const weightVec = Number(process.env.MEMORY_WEIGHT_VEC ?? '0.6');
+  const outputPath = process.env.BENCH_OUTPUT;     // optional, write metrics JSON
+
   const raw = await fs.readFile(path.resolve(fixturePath), 'utf-8');
   const bench: Benchmark = JSON.parse(raw);
 
-  // TODO(Phase 2): seed a fresh benchmark company + brain from bench.corpus.
-  // The seed helper lives at src/lib/memory/__tests__/_fixtures.ts as
-  // seedBrainInCompany — but that's a test-only export. A CLI-friendly
-  // variant without Vitest dependencies is the Phase 2 deliverable.
-  throw new Error(
-    `Benchmark runner is Phase 1 scaffold only. Fixture "${bench.name}" with ` +
-      `${bench.corpus.length} docs and ${bench.questions.length} questions ` +
-      `will be wired up in Phase 2 when LongMemEval is adopted.`,
-  );
-
-  /*
+  console.log(`[bench] seeding "${bench.name}" (${bench.corpus.length} docs)`);
   const seeded = await seedBenchmarkBrain(bench.corpus);
+  console.log(`[bench] waiting for embeddings...`);
+  await waitForEmbeddings(seeded.brainId, bench.corpus.length);
 
-  const results: Array<{ question: string; rank: number | null }> = [];
+  console.log(`[bench] running ${bench.questions.length} questions, weight_vec=${weightVec}`);
+  const ranks: Array<number | null> = [];
+
+  // The MEMORY_WEIGHT_VEC env var is read at module load by
+  // src/lib/memory/scoring/compose.ts (Task 21). When unset, defaults to
+  // 0.6 (hybrid). When set to 0, retrieve() runs lexical-only — used to
+  // capture the Phase 1 baseline against the Phase 2 SQL.
   for (const q of bench.questions) {
-    const res = await retrieve({
-      companyId: seeded.companyId,
-      brainId: seeded.brainId,
-      query: q.query,
-      mode: 'hybrid',
-      tierCeiling: 'extracted',
-      limit: 10,
-    });
-    const slugs = res.map((r) => r.slug);
+    const results = await retrieve(
+      {
+        brainId: seeded.brainId,
+        companyId: seeded.companyId,
+        query: q.query,
+        mode: 'hybrid',
+        tierCeiling: 'extracted',
+        limit: 10,
+      },
+      { role: 'customer_facing' },
+    );
+    const slugs = results.map((r) => r.slug);
     let rank: number | null = null;
     for (const gold of q.gold_slugs) {
       const i = slugs.indexOf(gold);
       if (i >= 0 && (rank === null || i < rank)) rank = i;
     }
-    results.push({ question: q.query, rank });
+    ranks.push(rank);
   }
 
-  const rAt5 =
-    results.filter((r) => r.rank !== null && r.rank < 5).length / results.length;
-  const rAt10 =
-    results.filter((r) => r.rank !== null && r.rank < 10).length / results.length;
+  const rAt5 = ranks.filter((r) => r !== null && r < 5).length / ranks.length;
+  const rAt10 = ranks.filter((r) => r !== null && r < 10).length / ranks.length;
   const mrr =
-    results
-      .filter((r) => r.rank !== null)
-      .reduce((acc, r) => acc + 1 / (r.rank! + 1), 0) / results.length;
+    ranks
+      .filter((r): r is number => r !== null)
+      .reduce((acc, r) => acc + 1 / (r + 1), 0) / ranks.length;
 
   const metrics: Metrics = {
     name: bench.name,
-    n: results.length,
+    mode: weightVec === 0 ? 'lexical-only' : `hybrid (vec=${weightVec})`,
+    n: ranks.length,
     r_at_5: rAt5,
     r_at_10: rAt10,
     mrr,
   };
   console.log(JSON.stringify(metrics, null, 2));
-  */
+
+  if (outputPath) {
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.writeFile(outputPath, JSON.stringify(metrics, null, 2));
+    console.log(`[bench] metrics written to ${outputPath}`);
+  }
+
+  console.log(`[bench] tearing down seed`);
+  await teardownBenchmarkSeed(seeded);
 }
 
 // Re-export types for external tools that want to introspect the contract.

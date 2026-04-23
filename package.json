@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint && npm run check-boundary",
-    "check-boundary": "bash scripts/check-harness-boundary.sh"
+    "check-boundary": "bash scripts/check-harness-boundary.sh",
+    "benchmark:smoke": "tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json",
+    "benchmark:smoke-baseline": "cross-env MEMORY_WEIGHT_VEC=0 BENCH_OUTPUT=tests/benchmarks/results/baseline.json tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json",
+    "benchmark:smoke-check": "cross-env BENCH_OUTPUT=tests/benchmarks/results/hybrid.json tsx tests/benchmarks/runner.ts tests/benchmarks/fixtures/sample.json && tsx tests/benchmarks/check-regression.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.69",

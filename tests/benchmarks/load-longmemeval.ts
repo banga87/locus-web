@@ -33,19 +33,21 @@ function parseArgs(): CliArgs {
 async function main() {
   const { out, maxQuestions } = parseArgs();
   const url =
-    'https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_s.json';
+    'https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_s_cleaned.json';
 
   console.log(`[longmemeval] downloading from ${url}`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`fetch failed: ${res.status} ${res.statusText}`);
+  // In longmemeval_s_cleaned.json the structure is:
+  //   haystack_session_ids: string[]          — ordered list of session IDs
+  //   haystack_sessions: Record<string, [{role,content}]>  — numeric-keyed object
+  //     where key "0" corresponds to haystack_session_ids[0], etc.
   const data = (await res.json()) as Array<{
     question_id: string;
     question: string;
     answer: string;
-    haystack_sessions: Array<{
-      session_id: string;
-      messages: Array<{ role: string; content: string }>;
-    }>;
+    haystack_session_ids: string[];
+    haystack_sessions: Record<string, Array<{ role: string; content: string }>>;
     answer_session_ids: string[];
   }>;
 
@@ -55,14 +57,16 @@ async function main() {
   // Flatten all unique sessions across all questions into the corpus.
   const corpusMap = new Map<string, { slug: string; title: string; content: string }>();
   for (const q of questions) {
-    for (const session of q.haystack_sessions) {
-      if (corpusMap.has(session.session_id)) continue;
-      const content = session.messages
+    const sessionIds = q.haystack_session_ids;
+    for (const [idxStr, messages] of Object.entries(q.haystack_sessions)) {
+      const sessionId = sessionIds[Number(idxStr)];
+      if (!sessionId || corpusMap.has(sessionId)) continue;
+      const content = messages
         .map((m) => `${m.role}: ${m.content}`)
         .join('\n');
-      corpusMap.set(session.session_id, {
-        slug: session.session_id.replace(/[^a-z0-9-]/gi, '-').toLowerCase(),
-        title: `Session ${session.session_id}`,
+      corpusMap.set(sessionId, {
+        slug: sessionId.replace(/[^a-z0-9-]/gi, '-').toLowerCase(),
+        title: `Session ${sessionId}`,
         content,
       });
     }

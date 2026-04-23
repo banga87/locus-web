@@ -35,6 +35,14 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   logger.info(...transformMiddlewareRequest(request));
   event.waitUntil(logger.flush());
 
+  // Waitlist gate: while the private beta runs on the homepage form,
+  // /login and /signup are not reachable by visitors. Bounce them to
+  // the homepage where they can join the waitlist. App-side redirects
+  // to /login (e.g. `(app)/layout.tsx`) inherit this bounce.
+  if (pathname === '/login' || pathname === '/signup') {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
   // Rate-limit all /api/oauth/* endpoints by client IP. Applied before
   // the pass-through branch so register/token are also protected.
   if (pathname.startsWith('/api/oauth/')) {

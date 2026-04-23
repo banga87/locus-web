@@ -143,16 +143,12 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
             <Link href="/home">Open app</Link>
           </Button>
         ) : (
-          <>
-            {/* Desktop-only Sign in link (ghost button) */}
-            <Button asChild variant="ghost" className="hidden lg:inline-flex">
-              <Link href="/login">Sign in</Link>
-            </Button>
-            {/* Request access — anchor hash-scroll to invitation section */}
-            <Button asChild variant="accent">
-              <a href="#invitation">Request access</a>
-            </Button>
-          </>
+          // Waitlist-only CTA. Sign in / Request-access-as-sign-in are
+          // disabled while the private beta is gated behind the waitlist
+          // form in <FinalCTA>.
+          <Button asChild variant="accent">
+            <a href="#invitation">Request access</a>
+          </Button>
         )}
 
         {/* Compact-only hamburger */}
@@ -204,19 +200,6 @@ export function Nav({ authed = false, absolute = true, dark = true }: NavProps) 
               {item.label}
             </a>
           ))}
-          {!authed && (
-            <Link
-              href="/login"
-              onClick={closeMenu}
-              className="block px-5 py-3 text-[15px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--ember-warm)] focus-visible:ring-inset"
-              style={{
-                fontFamily: 'var(--font-body), system-ui, sans-serif',
-                color: 'var(--ink-1)',
-              }}
-            >
-              Sign in
-            </Link>
-          )}
         </div>
       )}
     </nav>

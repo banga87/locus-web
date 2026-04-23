@@ -198,7 +198,10 @@ export async function runWorkflow(runId: string): Promise<void> {
   // write tools (create_document / update_document). Role comes from the
   // DB lookup above — Task 1's evaluator gates write tools on role.
 
-  // Derive capabilities: platform-agent default → ['web'].
+  // Grant the platform-agent default capabilities (['web']). Task 3 will
+  // expose `Agent` dispatch so the coordinator can delegate to a scoped
+  // subagent whose capabilities/tools/model are derived from its
+  // agent-definition doc.
   // Build agentContext.actor first so deriveGrantedCapabilities can read actor.type.
   const agentActor = {
     type: 'platform_agent' as const,
@@ -281,7 +284,6 @@ export async function runWorkflow(runId: string): Promise<void> {
     companyName: companyRow?.name ?? 'your company',
     folders: folderRows,
     externalConnections,
-    availableSkills: [],
   });
 
   const system = buildWorkflowSystemPrompt(

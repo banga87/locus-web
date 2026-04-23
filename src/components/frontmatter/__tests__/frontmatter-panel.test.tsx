@@ -8,7 +8,6 @@ function baseValue() {
     output: 'document',
     output_category: null,
     requires_mcps: [],
-    agent: null,
     schedule: null,
   } as Record<string, unknown>;
 }
@@ -48,7 +47,6 @@ describe('FrontmatterPanel', () => {
     expect(screen.getByLabelText(/output/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/category/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/required mcps/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/run as/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/schedule/i)).toBeInTheDocument();
   });
 
@@ -196,46 +194,4 @@ describe('FrontmatterPanel', () => {
     expect(screen.getByRole('textbox', { name: /yaml/i })).toBeDisabled();
   });
 
-  it('displays an existing agent slug and preserves it when unchanged', () => {
-    const onFieldsChange = vi.fn();
-    render(
-      <FrontmatterPanel
-        schema={workflowSchema}
-        value={{ ...baseValue(), agent: 'my-scoped-agent' }}
-        rawYaml={null}
-        mode="fields"
-        canEdit
-        onFieldsChange={onFieldsChange}
-        onRawChange={() => {}}
-        onModeChange={() => {}}
-        error={null}
-      />,
-    );
-    const input = screen.getByLabelText(/run as/i) as HTMLInputElement;
-    expect(input.value).toBe('my-scoped-agent');
-    // No onChange fired because the user hasn't edited anything.
-    expect(onFieldsChange).not.toHaveBeenCalled();
-  });
-
-  it('emits agent: null when the field is cleared', () => {
-    const onFieldsChange = vi.fn();
-    render(
-      <FrontmatterPanel
-        schema={workflowSchema}
-        value={{ ...baseValue(), agent: 'my-agent' }}
-        rawYaml={null}
-        mode="fields"
-        canEdit
-        onFieldsChange={onFieldsChange}
-        onRawChange={() => {}}
-        onModeChange={() => {}}
-        error={null}
-      />,
-    );
-    const input = screen.getByLabelText(/run as/i);
-    fireEvent.change(input, { target: { value: '' } });
-    expect(onFieldsChange).toHaveBeenCalledWith(
-      expect.objectContaining({ agent: null }),
-    );
-  });
 });

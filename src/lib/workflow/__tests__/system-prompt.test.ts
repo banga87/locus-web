@@ -12,7 +12,6 @@ const baseFrontmatter: WorkflowFrontmatter = {
   output_category: 'reports',
   requires_mcps: ['gmail', 'hubspot'],
   schedule: null,
-  agent: null,
 };
 
 describe('buildWorkflowSystemPrompt', () => {

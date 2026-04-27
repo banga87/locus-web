@@ -1,35 +1,40 @@
-// Section 02 — "All your systems". The breadth-of-connection promise.
-// Two-column layout: headline + body + manifesto line on the left, a
-// letterpress "Connect to…" plate on the right. Server Component.
+// Section 03 — "Across the business". The breadth-of-coverage promise:
+// every department of your business has a place in the brain. Two-column
+// layout: headline + body + manifesto line on the left, a letterpress
+// department plate on the right. Server Component.
 
 import { SectionFrame } from '@/components/marketing/section-frame';
 
-const CONNECTIONS: readonly string[] = [
-  'your CRM',
-  'your inbox',
-  'your lead sources',
-  'your marketing channels',
-  'your product catalogue',
-  'your brand guidelines',
-  'your SOPs and playbooks',
-  'your support history',
+interface Department {
+  name: string;
+  descriptor: string;
+}
+
+const DEPARTMENTS: readonly Department[] = [
+  { name: 'Sales', descriptor: 'conversations, deals, pipeline.' },
+  { name: 'Marketing', descriptor: 'campaigns, positioning, copy.' },
+  { name: 'Product', descriptor: 'roadmap, research, decisions.' },
+  { name: 'Operations', descriptor: 'runbooks, vendors, policy.' },
+  { name: 'Engineering', descriptor: 'architecture, releases, incidents.' },
+  { name: 'Customer success', descriptor: 'accounts, feedback, support.' },
+  { name: 'Finance', descriptor: 'budget, contracts, expenses.' },
+  { name: 'Strategy', descriptor: 'OKRs, goals, planning.' },
 ];
 
 export function AllYourSystems() {
   return (
-    <SectionFrame id="all-your-systems" number="02" kicker="The Connection">
+    <SectionFrame id="across-the-business" number="03" kicker="Across the Business">
       <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[1fr_1.1fr] lg:gap-[72px]">
         {/* Left column — headline, lede, manifesto line. */}
         <div>
           <h2 className="t-h2">
-            Plug in everything.
-            <br />
-            <span style={{ fontStyle: 'italic', fontWeight: 300 }}>Forget nothing.</span>
+            A place for{' '}
+            <span style={{ fontStyle: 'italic', fontWeight: 300 }}>every part of your business.</span>
           </h2>
           <p className="t-body mt-6 max-w-[460px] [text-wrap:pretty]" style={{ color: 'var(--ink-2)' }}>
-            The knowledge that runs your business is scattered across the tools your team uses
-            every day. Tatara connects to every one of them, pulls what matters into a central,
-            always-current operating layer, and hands that layer to the agents you&rsquo;ve built.
+            Sales conversations. Marketing decisions. Product research. Engineering trade-offs.
+            Operations runbooks. Customer history. The brain organises itself around how your
+            business actually runs, and grows every time anyone uses an agent.
           </p>
           <p
             className="mt-10 max-w-[420px] text-[11px] uppercase"
@@ -40,12 +45,11 @@ export function AllYourSystems() {
               lineHeight: 1.6,
             }}
           >
-            Works with any agent or automation system. Build with the tools your team already
-            uses.
+            Whatever departments your company has, the brain has a place for them.
           </p>
         </div>
 
-        {/* Right column — letterpress "Connect to…" plate. */}
+        {/* Right column — letterpress department plate. */}
         <div
           className="paper-scope"
           style={{
@@ -62,13 +66,13 @@ export function AllYourSystems() {
               borderBottom: '1px solid var(--paper-rule)',
             }}
           >
-            Connect to&hellip;
+            Across&hellip;
           </div>
-          {CONNECTIONS.map((c, i) => (
+          {DEPARTMENTS.map((d, i) => (
             <div
-              key={c}
+              key={d.name}
               className={`flex items-baseline gap-4 px-7 py-[18px] ${
-                i < CONNECTIONS.length - 1 ? 'border-b border-[var(--paper-rule)]' : ''
+                i < DEPARTMENTS.length - 1 ? 'border-b border-[var(--paper-rule)]' : ''
               }`}
             >
               <span
@@ -89,7 +93,7 @@ export function AllYourSystems() {
                   color: 'var(--ink-1)',
                 }}
               >
-                Connect to <span style={{ fontStyle: 'italic' }}>{c}</span>.
+                <span style={{ fontStyle: 'italic' }}>{d.name}</span>: {d.descriptor}
               </span>
             </div>
           ))}

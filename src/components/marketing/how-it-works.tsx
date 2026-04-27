@@ -20,20 +20,20 @@ const STAGES: readonly Stage[] = [
   {
     n: '01',
     stage: 'STOKE',
-    title: 'Connect your systems.',
-    body: 'Plug in your CRM, your inbox, your sales funnel, your SOPs, whatever runs the business. Tatara reads from each, automatically. No spreadsheet kept in sync by hand.',
+    title: 'Every agent contributes.',
+    body: 'Any agent that speaks MCP pushes findings, decisions, and artifacts into the brain — Claude Code, Claude Desktop, ChatGPT, Codex, or one your team built. No new tool to learn.',
   },
   {
     n: '02',
     stage: 'TEMPER',
-    title: 'Tatara keeps it current.',
-    body: 'As your business changes, Tatara notices. New deal, new policy, new launch. The operating knowledge your agents rely on updates itself. No stale information, no drift, no one chasing a document trail.',
+    title: 'The brain maintains itself.',
+    body: 'A Maintenance Agent reviews every write: validates structure, kills duplicates, classifies, traces sources. The brain stays clean as it grows.',
   },
   {
     n: '03',
     stage: 'ANNEAL',
-    title: 'Your agents run on real context.',
-    body: 'Whatever agent framework your team uses, it reads from Tatara. Your AI now answers from the same picture you do, with sources you can trace and a knowledge base that never goes cold.',
+    title: 'You approve the edge cases.',
+    body: 'A small inbox surfaces only the writes that need human judgement. Everything else flows automatically.',
   },
 ];
 
@@ -41,9 +41,9 @@ export function HowItWorks() {
   return (
     <SectionFrame
       id="how-it-works"
-      number="03"
-      kicker="HOW IT RUNS"
-      title="Three stages, one fire kept lit."
+      number="02"
+      kicker="HOW IT WORKS"
+      title="Every agent. One brain. No black holes."
     >
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-3 lg:gap-12">
         {STAGES.map((s) => (

@@ -57,7 +57,7 @@ export function FinalCTA() {
           className="relative mx-auto max-w-[1100px] px-6 py-[96px] text-center lg:px-12 lg:py-[160px]"
           style={{ color: 'var(--ink-inverse)' }}
         >
-          <Eyebrow number="08" color="var(--brass-soft)">
+          <Eyebrow number="04" color="var(--brass-soft)">
             The Invitation
           </Eyebrow>
 

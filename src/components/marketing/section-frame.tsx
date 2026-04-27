@@ -1,16 +1,9 @@
-// Shared wrapper for the marketing mid-page sections (HowItWorks, Features,
-// Positioning, PricingTeaser). Server Component.
+// Shared wrapper for the marketing mid-page sections. Server Component.
 //
-// Task 5.5 refactor: delegates the section header to the Tatara design
-// system. When `title` is passed, renders the full <SectionHeader> (eyebrow
-// + h2 + rule). When it's omitted (the current behavior for Features /
-// Positioning / PricingTeaser, which each own their own <h2>), renders just
-// the <Eyebrow> so those callers stay unbroken.
-//
-// Uses the semantic Tatara tokens (`--surface-0`, `--ink-1`,
-// `--ink-inverse`, `--brass-soft`) plus a `#1B1410` literal for the dark
-// background (no exact surface token maps to that warm near-black in the
-// current palette).
+// Delegates the section header to the Tatara design system. When `title`
+// is passed, renders the full <SectionHeader> (eyebrow + h2 + rule). When
+// omitted, the caller owns its own <h2> and the frame renders only the
+// <Eyebrow>.
 
 import type { ReactNode } from 'react';
 import { Eyebrow, SectionHeader } from '@/components/tatara';

@@ -43,22 +43,22 @@ export function Hero({ authed = false }: HeroProps) {
       {/* Copy deck on cream. */}
       <div className="flex flex-col items-center px-6 pb-[88px] pt-10 text-center lg:px-12 lg:pb-[112px] lg:pt-12">
         <h1 className="t-h1">
-          The operator&rsquo;s console{' '}
-          <span style={{ fontStyle: 'italic', fontWeight: 300 }}>for AI labor.</span>
+          The company brain{' '}
+          <span style={{ fontStyle: 'italic', fontWeight: 300 }}>your agents write to.</span>
         </h1>
 
         <p className="t-lede mx-auto mt-6 max-w-[640px]">
-          Tatara is the operating knowledge behind every agent you run. Always current across
-          your CRM, inbox, leads, and SOPs. You stay on the controls. Your agents work from the
-          same picture you do.
+          Every conversation with every agent goes into one self-maintaining brain. Sales,
+          marketing, product, ops, engineering. The next agent works from everything that came
+          before. So does the next person.
         </p>
 
         <div className="mt-9 flex flex-wrap justify-center gap-3">
           <Button variant="default" size="lg" asChild>
-            <Link href="#invitation">Request early access</Link>
+            <Link href="#invitation">Request access</Link>
           </Button>
           <Button variant="accent" size="lg" asChild>
-            <Link href="#how-it-works">See how it runs</Link>
+            <Link href="#how-it-works">See how it works</Link>
           </Button>
         </div>
       </div>

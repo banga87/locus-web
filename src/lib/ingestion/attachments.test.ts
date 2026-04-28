@@ -81,6 +81,7 @@ beforeAll(async () => {
       brainId,
       slug: `atta-cat-${suffix}`,
       name: 'Attachment fixtures',
+      path: `atta-cat-${suffix}`,
     })
     .returning({ id: folders.id });
   folderId = folder.id;

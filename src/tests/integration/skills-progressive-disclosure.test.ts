@@ -202,6 +202,7 @@ beforeAll(async () => {
       brainId,
       slug: `pr1-sk-cat-${suffix}`,
       name: 'PR1 Skills',
+      path: `pr1-sk-cat-${suffix}`,
     })
     .returning({ id: folders.id });
   folderId = folder.id;

@@ -44,6 +44,8 @@ export const MCP_ALLOWED_TOOLS = new Set<string>([
   'get_document',
   'get_document_diff',
   'get_diff_history',
+  'get_taxonomy',
+  'get_type_schema',
 ]);
 
 // Log-once-per-cold-start flag so we can see in logs that the stub is

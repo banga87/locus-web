@@ -61,6 +61,7 @@ async function setupEventFixtures(): Promise<EventFixtures> {
       brainId: brain!.id,
       slug: 'workflows',
       name: 'Workflows',
+      path: 'workflows',
     })
     .returning({ id: folders.id });
 

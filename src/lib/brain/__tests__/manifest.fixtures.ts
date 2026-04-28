@@ -62,6 +62,7 @@ export async function seedBrainWithNestedFolders(): Promise<string> {
       name: 'Brand & Identity',
       description: 'Voice, tone, and visuals.',
       sortOrder: 0,
+      path: 'brand-identity',
     })
     .returning({ id: folders.id });
 
@@ -74,6 +75,7 @@ export async function seedBrainWithNestedFolders(): Promise<string> {
       name: 'Product & Service',
       description: 'What we sell.',
       sortOrder: 1,
+      path: 'product-service',
     })
     .returning({ id: folders.id });
 
@@ -87,6 +89,7 @@ export async function seedBrainWithNestedFolders(): Promise<string> {
       name: 'Terravolt Products',
       description: 'The Terravolt range.',
       sortOrder: 0,
+      path: 'product-service/terravolt-products',
     })
     .returning({ id: folders.id });
 

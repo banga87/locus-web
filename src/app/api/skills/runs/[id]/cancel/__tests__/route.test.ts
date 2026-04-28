@@ -125,6 +125,7 @@ beforeAll(async () => {
       brainId,
       slug: `cn-folder-${suffix}`,
       name: 'Cancels',
+      path: `cn-folder-${suffix}`,
     })
     .returning({ id: folders.id });
 

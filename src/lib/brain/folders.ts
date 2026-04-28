@@ -123,12 +123,16 @@ export async function createFolder(
   if (!slug) throw new Error('folder name must contain alphanumeric characters');
 
   // Verify parent (if any) belongs to the same brain + company.
+  let parentPath: string | null = null;
   if (input.parentId) {
     const parent = await loadFolderForCompany(input.parentId, input.companyId);
     if (parent.brainId !== input.brainId) {
       throw new Error(`folder not found: ${input.parentId}`);
     }
+    parentPath = parent.path;
   }
+
+  const path = parentPath ? `${parentPath}/${slug}` : slug;
 
   await assertSlugAvailable(input.brainId, input.parentId, slug);
 
@@ -142,6 +146,7 @@ export async function createFolder(
         parentId: input.parentId,
         name,
         slug,
+        path,
       })
       .returning({ id: folders.id });
     id = row.id;

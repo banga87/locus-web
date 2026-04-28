@@ -44,6 +44,12 @@ export const folders = pgTable(
     // Machine-readable slug (e.g., "brand", "pricing", "processes").
     slug: varchar('slug', { length: 128 }).notNull(),
 
+    // Full-ancestor path. Top-level folders: path = slug. Nested
+    // folders: path = `${parent.path}/${slug}`. NOT NULL in the live
+    // schema (added by an earlier ancestor-paths migration that hasn't
+    // landed in this Drizzle schema file yet).
+    path: varchar('path', { length: 1024 }).notNull(),
+
     name: text('name').notNull(),
 
     description: text('description'),

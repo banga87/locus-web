@@ -34,12 +34,21 @@ export function registerMcpTools(
 
   server.tool(
     'search_documents',
-    'Full-text search across brain documents. Returns ranked results with snippets. ' +
-      'Filter by category slug, cap results with max_results. Use when you need to ' +
-      'locate information by content rather than by known path.',
+    'Full-text and semantic search across the Tatara brain. Returns ranked ' +
+      'results with snippets, document ids, types, and confidence levels. ' +
+      'Use when you need to locate information by content rather than by known ' +
+      'path. Always run a search before proposing a new document — duplicates ' +
+      'are common and the Maintenance Agent will flag them. ' +
+      'Filters: type (canonical | decision | note | fact | procedure | entity | artifact), ' +
+      'folder (/company | /customers | /market | /product | /marketing | /operations | /signals), ' +
+      'topics (array of topic tags), confidence_min (low | medium | high), ' +
+      'max_results (1–50, default 10).',
     {
       query: z.string().min(1),
-      category: z.string().optional(),
+      folder: z.string().optional(),
+      type: z.string().optional(),
+      topics: z.array(z.string()).optional(),
+      confidence_min: z.enum(['low', 'medium', 'high']).optional(),
       max_results: z.number().int().min(1).max(50).optional(),
     },
     async (input) =>
@@ -104,6 +113,51 @@ export function registerMcpTools(
       }),
   );
   registered.add('get_diff_history');
+
+  server.tool(
+    'get_taxonomy',
+    "Returns the workspace's allowed folders, document types, and topic " +
+      'vocabulary. Cache the result for the duration of your session — ' +
+      'taxonomy changes infrequently. Call once at the start of any session ' +
+      'that may write to the brain. Without taxonomy, you cannot construct ' +
+      'valid documents. Returns: folders (slug + description), types (name + ' +
+      'description), topics (controlled vocabulary), source_format (how to ' +
+      'format the source field).',
+    {},
+    async (input) =>
+      handleToolCall({
+        toolName: 'get_taxonomy',
+        rawInput: input,
+        request,
+      }),
+  );
+  registered.add('get_taxonomy');
+
+  server.tool(
+    'get_type_schema',
+    'Returns the YAML frontmatter schema for a given document type — required ' +
+      'fields, optional fields, and value constraints. Call before writing a ' +
+      'document of a type you have not written before in this session. Type ' +
+      'must be one of: canonical, decision, note, fact, procedure, entity, artifact.',
+    {
+      type: z.enum([
+        'canonical',
+        'decision',
+        'note',
+        'fact',
+        'procedure',
+        'entity',
+        'artifact',
+      ]),
+    },
+    async (input) =>
+      handleToolCall({
+        toolName: 'get_type_schema',
+        rawInput: input,
+        request,
+      }),
+  );
+  registered.add('get_type_schema');
 
   // Compile-time link to `MCP_ALLOWED_TOOLS` — the gate in `./handler.ts`
   // rejects any tool name not in that set with `unknown_tool`, so a name

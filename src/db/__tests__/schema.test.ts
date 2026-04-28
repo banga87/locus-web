@@ -63,6 +63,7 @@ beforeAll(async () => {
       brainId,
       slug: 'brand',
       name: 'Brand & Voice',
+      path: 'brand',
     })
     .returning({ id: folders.id });
   folderId = folder.id;

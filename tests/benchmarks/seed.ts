@@ -58,7 +58,7 @@ export async function seedBenchmarkBrain(
 
   const [folder] = await db
     .insert(folders)
-    .values({ companyId: company.id, brainId: brain.id, slug: 'corpus', name: 'Corpus' })
+    .values({ companyId: company.id, brainId: brain.id, slug: 'corpus', name: 'Corpus', path: 'corpus' })
     .returning({ id: folders.id });
 
   const ownerId = randomUUID();

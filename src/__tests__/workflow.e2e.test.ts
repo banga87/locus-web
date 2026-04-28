@@ -138,6 +138,7 @@ async function setupFixtures(): Promise<E2EFixtures> {
       brainId: brain!.id,
       slug: `workflows-${suffix}`,
       name: 'Workflows',
+      path: `workflows-${suffix}`,
     })
     .returning({ id: folders.id });
 
@@ -151,6 +152,7 @@ async function setupFixtures(): Promise<E2EFixtures> {
       brainId: brain!.id,
       slug: outputFolderSlug,
       name: 'Output',
+      path: outputFolderSlug,
     })
     .returning({ id: folders.id });
 

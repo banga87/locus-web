@@ -202,6 +202,7 @@ async function setupFixtures(): Promise<CoordFixtures> {
       brainId: brain!.id,
       slug: `workflows-${suffix}`,
       name: 'Workflows',
+      path: `workflows-${suffix}`,
     })
     .returning({ id: folders.id });
 
@@ -214,6 +215,7 @@ async function setupFixtures(): Promise<CoordFixtures> {
       brainId: brain!.id,
       slug: productFolderSlug,
       name: 'Product',
+      path: productFolderSlug,
     })
     .returning({ id: folders.id });
 

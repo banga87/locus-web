@@ -11,6 +11,7 @@ import {
   jsonb,
   index,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { companies } from './companies';
 
 export const brains = pgTable(
@@ -44,6 +45,19 @@ export const brains = pgTable(
     // Brain-level settings: maintenance schedule, default approval rules,
     // model routing preferences.
     settings: jsonb('settings').default({}),
+
+    // Workspace topic vocabulary — { terms: [...], synonyms: {...},
+    // version }. Seeded at brain provisioning (see
+    // src/lib/taxonomy/seed.ts). v1 is fixed at 33 terms; admin
+    // extension is out of scope.
+    //
+    // The default uses sql`'{}'::jsonb` to match the migration's
+    // SQL DDL exactly. Drizzle's `default({})` for jsonb sometimes
+    // emits parameterised empty objects instead of the SQL literal,
+    // which can cause drizzle-kit drift on later introspection.
+    topicVocabulary: jsonb('topic_vocabulary')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
 
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()

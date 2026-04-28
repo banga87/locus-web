@@ -51,6 +51,7 @@ export async function setupFixtures(label: string): Promise<Fixtures> {
       brainId: brain.id,
       slug: 'brand',
       name: 'Brand & Voice',
+      path: 'brand',
     })
     .returning({ id: folders.id });
 
@@ -61,6 +62,7 @@ export async function setupFixtures(label: string): Promise<Fixtures> {
       brainId: brain.id,
       slug: 'pricing',
       name: 'Pricing',
+      path: 'pricing',
     })
     .returning({ id: folders.id });
 

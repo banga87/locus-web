@@ -10,6 +10,7 @@
 import { db } from '@/db';
 import { documents, folders } from '@/db/schema';
 import { regenerateManifest } from '@/lib/brain/manifest';
+import { seedDefaultVocabulary } from '@/lib/taxonomy/seed';
 
 import { UNIVERSAL_PACK } from './universal-pack';
 
@@ -74,6 +75,8 @@ export async function seedBrainFromUniversalPack(
       });
     }
   });
+
+  await seedDefaultVocabulary(brainId);
 
   // Regenerate the navigation manifest outside the seed transaction. If
   // this fails the seed itself is already committed — the next write to

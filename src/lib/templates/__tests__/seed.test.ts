@@ -133,4 +133,15 @@ describe('seedBrainFromUniversalPack', () => {
       expect(slugById.get(row.folderId!)).toBe(tmpl!.folder);
     }
   });
+
+  it('seeds the default topic vocabulary into brains.topic_vocabulary', async () => {
+    const [row] = await db
+      .select({ vocab: brains.topicVocabulary })
+      .from(brains)
+      .where(eq(brains.id, brainId))
+      .limit(1);
+    const v = row!.vocab as { terms: string[]; version: number };
+    expect(v.terms.length).toBe(33);
+    expect(v.version).toBe(1);
+  });
 });

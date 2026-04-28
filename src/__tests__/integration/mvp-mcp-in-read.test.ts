@@ -105,6 +105,8 @@ describe('MVP MCP IN — tool surface', () => {
       'get_document',
       'get_document_diff',
       'get_diff_history',
+      'get_taxonomy',
+      'get_type_schema',
     ]);
     for (const t of allTools) {
       if (!mcpExposed.has(t.name)) continue;
@@ -149,6 +151,8 @@ describe('MVP MCP IN — tool surface', () => {
       'get_diff_history',
       'get_document',
       'get_document_diff',
+      'get_taxonomy',
+      'get_type_schema',
       'search_documents',
     ]);
 
@@ -210,6 +214,38 @@ describe('MVP MCP IN — tool invocation', () => {
       request: mcpRequest(),
     });
     expect(history.isError).toBeFalsy();
+  });
+
+  it('exposes get_taxonomy as a read tool over MCP IN', { timeout: 30_000 }, async () => {
+    const response = await handleToolCall({
+      toolName: 'get_taxonomy',
+      rawInput: {},
+      request: mcpRequest(),
+    });
+    expect(response.isError).toBeFalsy();
+    const data = JSON.parse(response.content[0].text) as {
+      folders: unknown[];
+      types: unknown[];
+      topics: unknown[];
+    };
+    expect(data.folders.length).toBe(7);
+    expect(data.types.length).toBe(7);
+    expect(data.topics.length).toBe(33);
+  });
+
+  it('exposes get_type_schema as a read tool over MCP IN', { timeout: 30_000 }, async () => {
+    const response = await handleToolCall({
+      toolName: 'get_type_schema',
+      rawInput: { type: 'canonical' },
+      request: mcpRequest(),
+    });
+    expect(response.isError).toBeFalsy();
+    const data = JSON.parse(response.content[0].text) as {
+      required_fields: Record<string, unknown>;
+    };
+    expect(Object.keys(data.required_fields)).toEqual(
+      expect.arrayContaining(['owner', 'last_reviewed_at']),
+    );
   });
 
   it('surfaces an unknown_tool MCP error envelope for a write-tool attempt', { timeout: 30_000 }, async () => {

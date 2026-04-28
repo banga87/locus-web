@@ -114,6 +114,51 @@ export function registerMcpTools(
   );
   registered.add('get_diff_history');
 
+  server.tool(
+    'get_taxonomy',
+    "Returns the workspace's allowed folders, document types, and topic " +
+      'vocabulary. Cache the result for the duration of your session — ' +
+      'taxonomy changes infrequently. Call once at the start of any session ' +
+      'that may write to the brain. Without taxonomy, you cannot construct ' +
+      'valid documents. Returns: folders (slug + description), types (name + ' +
+      'description), topics (controlled vocabulary), source_format (how to ' +
+      'format the source field).',
+    {},
+    async (input) =>
+      handleToolCall({
+        toolName: 'get_taxonomy',
+        rawInput: input,
+        request,
+      }),
+  );
+  registered.add('get_taxonomy');
+
+  server.tool(
+    'get_type_schema',
+    'Returns the YAML frontmatter schema for a given document type — required ' +
+      'fields, optional fields, and value constraints. Call before writing a ' +
+      'document of a type you have not written before in this session. Type ' +
+      'must be one of: canonical, decision, note, fact, procedure, entity, artifact.',
+    {
+      type: z.enum([
+        'canonical',
+        'decision',
+        'note',
+        'fact',
+        'procedure',
+        'entity',
+        'artifact',
+      ]),
+    },
+    async (input) =>
+      handleToolCall({
+        toolName: 'get_type_schema',
+        rawInput: input,
+        request,
+      }),
+  );
+  registered.add('get_type_schema');
+
   // Compile-time link to `MCP_ALLOWED_TOOLS` — the gate in `./handler.ts`
   // rejects any tool name not in that set with `unknown_tool`, so a name
   // registered here but missing from the set would be unreachable, and

@@ -138,6 +138,28 @@ export const documents = pgTable(
     // section. Cheap to query via partial index `documents_brain_pinned_idx`.
     isPinned: boolean('is_pinned').notNull().default(false),
 
+    // Set true when the Maintenance Agent (Phase 2) routes a write to
+    // the Inbox for human review. The doc is committed regardless;
+    // this flag tells consuming agents/UI that a human hasn't OK'd it
+    // yet. Cleared by the Inbox decide endpoint or by the 30-day
+    // expiry cron (Phase 3B).
+    pendingReview: boolean('pending_review').notNull().default(false),
+
+    // Controlled-vocabulary tags — distinct from the freeform `tags`
+    // jsonb above (which is legacy). Validated against
+    // `brains.topic_vocabulary` at write time. Empty array is a valid
+    // (if low-quality) state; agents are nudged toward 1–5 topics.
+    topics: text('topics')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+
+    // Provenance string: "agent:<name>" | "human:<name>" |
+    // "agent:maintenance". Stamped from auth context by the write
+    // tool, never from agent input. Nullable for backward compat with
+    // pre-Phase-1 rows; new rows always set it.
+    source: text('source'),
+
     // ---------------------------------------------------------------------
 
     // Estimated token count for this document. Pre-computed on save so
@@ -237,5 +259,11 @@ export const documents = pgTable(
       'hnsw',
       sql`embedding vector_cosine_ops`,
     ),
+    // Inbox query — scans only docs awaiting review.
+    index('documents_pending_review_idx')
+      .on(table.brainId, table.pendingReview)
+      .where(sql`"pending_review" = true`),
+    // search_documents `topics` filter.
+    index('documents_topics_idx').using('gin', table.topics),
   ]
 );

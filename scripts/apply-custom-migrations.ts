@@ -52,6 +52,7 @@ const CUSTOM_MIGRATIONS = [
   '0015_mcp_in_oauth.sql',
   '0016_connectors.sql',
   '0019_skills_progressive_disclosure.sql',
+  '0024_document_standard.sql',
 ];
 
 async function main() {

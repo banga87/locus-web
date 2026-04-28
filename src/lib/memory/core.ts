@@ -102,7 +102,7 @@ export async function retrieve(
       AND d.brain_id = ${q.brainId}
       AND d.deleted_at IS NULL
       AND d.status != 'archived'
-      AND d.type IS NULL
+      AND (d.type IS NULL OR d.type NOT IN ('agent-scaffolding', 'agent-definition', 'skill'))
       AND (
         d.search_vector @@ plainto_tsquery('english', ${q.query})
         OR d.embedding IS NOT NULL

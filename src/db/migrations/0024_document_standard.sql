@@ -13,33 +13,37 @@
 --
 -- One new table: inbox_items. Schema only — no API, page, or cron
 -- writes here yet (those land in Phase 3B).
+--
+-- All statements use IF NOT EXISTS / CREATE TABLE IF NOT EXISTS guards so
+-- re-running apply-custom-migrations.ts (which executes every migration on
+-- every invocation) is safe and produces no errors on an already-migrated DB.
 
 ALTER TABLE "documents"
-  ADD COLUMN "pending_review" boolean NOT NULL DEFAULT false;
+  ADD COLUMN IF NOT EXISTS "pending_review" boolean NOT NULL DEFAULT false;
 --> statement-breakpoint
 ALTER TABLE "documents"
-  ADD COLUMN "topics" text[] NOT NULL DEFAULT '{}';
+  ADD COLUMN IF NOT EXISTS "topics" text[] NOT NULL DEFAULT '{}';
 --> statement-breakpoint
 ALTER TABLE "documents"
-  ADD COLUMN "source" text;
+  ADD COLUMN IF NOT EXISTS "source" text;
 --> statement-breakpoint
 
 -- Partial index — Inbox queries scan only the open-review subset.
-CREATE INDEX "documents_pending_review_idx"
+CREATE INDEX IF NOT EXISTS "documents_pending_review_idx"
   ON "documents" USING btree ("brain_id", "pending_review")
   WHERE "pending_review" = true;
 --> statement-breakpoint
 
 -- GIN index — search_documents will filter by topic membership.
-CREATE INDEX "documents_topics_idx"
+CREATE INDEX IF NOT EXISTS "documents_topics_idx"
   ON "documents" USING gin ("topics");
 --> statement-breakpoint
 
 ALTER TABLE "brains"
-  ADD COLUMN "topic_vocabulary" jsonb NOT NULL DEFAULT '{}';
+  ADD COLUMN IF NOT EXISTS "topic_vocabulary" jsonb NOT NULL DEFAULT '{}';
 --> statement-breakpoint
 
-CREATE TABLE "inbox_items" (
+CREATE TABLE IF NOT EXISTS "inbox_items" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "company_id" uuid NOT NULL,
   "brain_id" uuid NOT NULL,
@@ -68,5 +72,5 @@ CREATE TABLE "inbox_items" (
 );
 --> statement-breakpoint
 
-CREATE INDEX "inbox_items_company_status_created_idx"
+CREATE INDEX IF NOT EXISTS "inbox_items_company_status_created_idx"
   ON "inbox_items" USING btree ("company_id", "status", "created_at" DESC);

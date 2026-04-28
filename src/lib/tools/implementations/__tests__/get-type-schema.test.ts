@@ -50,10 +50,14 @@ describe('get_type_schema tool', () => {
 
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(Object.keys(result.data.required_fields)).toEqual(
+    const data = result.data as {
+      required_fields: Record<string, unknown>;
+      examples: unknown[];
+    };
+    expect(Object.keys(data.required_fields)).toEqual(
       expect.arrayContaining(['owner', 'last_reviewed_at']),
     );
-    expect(result.data.examples.length).toBeGreaterThan(0);
+    expect(data.examples.length).toBeGreaterThan(0);
   });
 
   it('rejects an unknown type with invalid_input', async () => {
@@ -69,7 +73,7 @@ describe('get_type_schema tool', () => {
       // declares `type` as enum. The tool's own INVALID_INPUT branch is
       // unreachable from this path, but kept in the implementation as
       // belt-and-braces for callers that bypass the executor.
-      expect(result.error.code).toBe('invalid_input');
+      expect(result.error!.code).toBe('invalid_input');
     }
   });
 });

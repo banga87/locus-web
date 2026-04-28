@@ -40,8 +40,8 @@ describe('search_documents tool (post-refactor)', () => {
 
     expect(res.success).toBe(true);
     if (!res.success) return;
-    expect(res.data.results.length).toBeGreaterThan(0);
-    const hit = res.data.results[0];
+    expect(res.data!.results.length).toBeGreaterThan(0);
+    const hit = res.data!.results[0];
     expect(hit.provenance).toBeDefined();
     expect(hit.provenance.brainId).toBe(ctx.brainId);
     expect(hit.provenance.confidenceTier).toBe('extracted');
@@ -99,7 +99,7 @@ describe('search_documents tool (post-refactor)', () => {
       expect(res.success).toBe(true);
       if (!res.success) return;
       // Every result must come from the alpha folder.
-      for (const r of res.data.results) {
+      for (const r of res.data!.results) {
         expect(r.folder).toBe('alpha');
       }
     } finally {
@@ -157,11 +157,11 @@ describe('search_documents tool (post-refactor)', () => {
       expect(res.success).toBe(true);
       if (!res.success) return;
       // Every result must be type=canonical.
-      for (const r of res.data.results) {
+      for (const r of res.data!.results) {
         expect(r.type).toBe('canonical');
       }
       // The canonical doc should appear.
-      expect(res.data.results.some((r) => r.path.includes(suffixC))).toBe(true);
+      expect(res.data!.results.some((r) => r.path.includes(suffixC))).toBe(true);
     } finally {
       await db.delete(documents).where(eq(documents.slug, suffixC));
       await db.delete(documents).where(eq(documents.slug, suffixN));
@@ -218,7 +218,7 @@ describe('search_documents tool (post-refactor)', () => {
       expect(res.success).toBe(true);
       if (!res.success) return;
       // Every result must contain both requested topics.
-      for (const r of res.data.results) {
+      for (const r of res.data!.results) {
         expect(r.topics).toContain('brand');
         expect(r.topics).toContain('voice');
       }
@@ -291,11 +291,11 @@ describe('search_documents tool (post-refactor)', () => {
       expect(res.success).toBe(true);
       if (!res.success) return;
       // No low-confidence result should appear.
-      for (const r of res.data.results) {
+      for (const r of res.data!.results) {
         expect(r.confidence).not.toBe('low');
       }
       // At least medium or high should appear.
-      expect(res.data.results.length).toBeGreaterThan(0);
+      expect(res.data!.results.length).toBeGreaterThan(0);
     } finally {
       await db.delete(documents).where(eq(documents.slug, suffixLow));
       await db.delete(documents).where(eq(documents.slug, suffixMed));

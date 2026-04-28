@@ -47,14 +47,16 @@ describe('get_taxonomy tool', () => {
 
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(result.data.folders.map((f: { slug: string }) => f.slug)).toEqual(
-      FOLDERS,
-    );
-    expect(result.data.types.map((t: { type: string }) => t.type)).toEqual(
-      DOCUMENT_TYPES,
-    );
-    expect(result.data.topics.length).toBe(33);
-    expect(result.data.source_format).toMatch(/agent:/);
-    expect(result.data.source_format).toMatch(/human:/);
+    const data = result.data as {
+      folders: { slug: string }[];
+      types: { type: string }[];
+      topics: unknown[];
+      source_format: string;
+    };
+    expect(data.folders.map((f) => f.slug)).toEqual(FOLDERS);
+    expect(data.types.map((t) => t.type)).toEqual(DOCUMENT_TYPES);
+    expect(data.topics.length).toBe(33);
+    expect(data.source_format).toMatch(/agent:/);
+    expect(data.source_format).toMatch(/human:/);
   });
 });

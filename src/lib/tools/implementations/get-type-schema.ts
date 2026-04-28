@@ -105,9 +105,11 @@ function describeZodObject(schema: z.ZodObject<z.ZodRawShape>): {
   const shape = schema.shape;
   for (const [name, fieldSchema] of Object.entries(shape)) {
     const isOptional = fieldSchema instanceof z.ZodOptional;
-    const inner = isOptional
-      ? (fieldSchema as z.ZodOptional<z.ZodTypeAny>)._def.innerType
-      : fieldSchema;
+    // Use .unwrap() (Zod v4 API) rather than ._def.innerType to avoid the
+    // $ZodType vs ZodType variance mismatch in strict TS mode.
+    const inner: z.ZodTypeAny = isOptional
+      ? (fieldSchema as z.ZodOptional<z.ZodTypeAny>).unwrap()
+      : (fieldSchema as z.ZodTypeAny);
     const spec: FieldSpec = {
       description: '',
       value_constraint: describeZodType(inner),
@@ -127,7 +129,7 @@ function describeZodType(schema: z.ZodTypeAny): string {
   }
   if (schema instanceof z.ZodArray) {
     // Zod v4: _def.type holds the string 'array'; use schema.element instead
-    return `array of ${describeZodType(schema.element)}`;
+    return `array of ${describeZodType(schema.element as z.ZodTypeAny)}`;
   }
   return 'value';
 }

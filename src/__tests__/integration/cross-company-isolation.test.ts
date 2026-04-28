@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { documents } from '@/db/schema';
+import { documents, folders } from '@/db/schema';
 import { handleToolCall } from '@/lib/mcp/handler';
 
 import {
@@ -24,6 +24,38 @@ let companyA: TestCompany;
 let companyB: TestCompany;
 let tokenA: string;
 
+/**
+ * Insert a single fixture document into a brain. The universal pack v1
+ * seeds 0 documents, so isolation tests need their own fixtures.
+ * (Task 10 / Task 16: pack overhaul — ca3d531.)
+ */
+async function insertFixtureDoc(
+  company: TestCompany,
+  slug: string,
+): Promise<void> {
+  const [firstFolder] = await db
+    .select({ id: folders.id })
+    .from(folders)
+    .where(eq(folders.brainId, company.brainId))
+    .limit(1);
+
+  await db.insert(documents).values({
+    companyId: company.companyId,
+    brainId: company.brainId,
+    folderId: firstFolder?.id ?? null,
+    title: 'Brand Voice & Tone',
+    slug,
+    path: `company/${slug}`,
+    content:
+      '# Brand Voice & Tone\n\nOur voice is warm, direct, and confident.',
+    status: 'active',
+    isCore: true,
+    confidenceLevel: 'medium',
+    topics: ['brand', 'voice'],
+    type: 'canonical',
+  });
+}
+
 beforeAll(async () => {
   companyA = await createSeededCompany('rlsA');
   companyB = await createSeededCompany('rlsB');
@@ -31,6 +63,12 @@ beforeAll(async () => {
     companyA.companyId,
     companyA.userId,
   ));
+
+  // Insert matching fixture docs in each company so the isolation tests
+  // have something to assert against. Both companies get slug
+  // 'brand-voice-tone' so the cross-tenant path-match logic works.
+  await insertFixtureDoc(companyA, 'brand-voice-tone');
+  await insertFixtureDoc(companyB, 'brand-voice-tone');
 }, 120_000);
 
 afterAll(async () => {

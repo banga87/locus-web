@@ -27,7 +27,7 @@ interface GetTaxonomyOutput {
   source_format: string;
 }
 
-export const getTaxonomyTool: LocusTool<{}, GetTaxonomyOutput> = {
+export const getTaxonomyTool: LocusTool<Record<string, never>, GetTaxonomyOutput> = {
   name: 'get_taxonomy',
   description:
     "Returns the workspace's allowed folders, document types, and topic " +
@@ -48,7 +48,7 @@ export const getTaxonomyTool: LocusTool<{}, GetTaxonomyOutput> = {
   },
 
   async call(
-    _input: {},
+    _input: Record<string, never>,
     context: ToolContext,
   ): Promise<ToolResult<GetTaxonomyOutput>> {
     const vocab = await getTaxonomy(context.brainId);

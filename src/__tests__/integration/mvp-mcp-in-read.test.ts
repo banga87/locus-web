@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { auditEvents, documents } from '@/db/schema';
+import { auditEvents, documents, folders } from '@/db/schema';
 import { flushEvents } from '@/lib/audit/logger';
 import { executeTool } from '@/lib/tools/executor';
 import { handleToolCall } from '@/lib/mcp/handler';
@@ -46,6 +46,31 @@ beforeAll(async () => {
   // Brain tools must be registered before executeTool() or handleToolCall
   // can dispatch. registerLocusTools is idempotent.
   registerLocusTools();
+
+  // Universal pack v1 seeds 0 documents. Insert a fixture doc so that
+  // search_documents and get_document calls in the tool-invocation tests
+  // have something to find. (Task 10 / Task 16: pack overhaul — ca3d531.)
+  const [firstFolder] = await db
+    .select({ id: folders.id })
+    .from(folders)
+    .where(eq(folders.brainId, company.brainId))
+    .limit(1);
+
+  await db.insert(documents).values({
+    companyId: company.companyId,
+    brainId: company.brainId,
+    folderId: firstFolder?.id ?? null,
+    title: 'Brand Voice & Tone',
+    slug: 'brand-voice-tone-mcp',
+    path: 'company/brand-voice-tone-mcp',
+    content:
+      '# Brand Voice & Tone\n\nOur voice is warm, direct, and confident.',
+    status: 'draft',
+    isCore: true,
+    confidenceLevel: 'medium',
+    topics: ['brand', 'voice'],
+    type: 'canonical',
+  });
 }, 60_000);
 
 afterAll(async () => {

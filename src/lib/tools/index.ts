@@ -15,6 +15,7 @@ import { loadSkillTool } from './implementations/load-skill';
 import { readSkillFileTool } from './implementations/read-skill-file';
 import { createDocumentTool } from './implementations/create-document';
 import { updateDocumentTool } from './implementations/update-document';
+import { getTaxonomyTool } from './implementations/get-taxonomy';
 
 let registered = false;
 
@@ -37,6 +38,8 @@ export function registerLocusTools(): void {
   // Write tools (Task 2)
   registerTool(createDocumentTool);
   registerTool(updateDocumentTool);
+  // Discovery tools (Task 11)
+  registerTool(getTaxonomyTool);
   registered = true;
 }
 
@@ -56,4 +59,5 @@ export {
   readSkillFileTool,
   createDocumentTool,
   updateDocumentTool,
+  getTaxonomyTool,
 };

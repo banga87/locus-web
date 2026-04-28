@@ -100,6 +100,7 @@ beforeAll(async () => {
       brainId,
       slug: `ev-folder-${suffix}`,
       name: 'Events',
+      path: `ev-folder-${suffix}`,
     })
     .returning({ id: folders.id });
 

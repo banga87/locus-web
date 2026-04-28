@@ -168,6 +168,7 @@ beforeAll(async () => {
       brainId,
       slug: `t11-lc-cat-${suffix}`,
       name: 'T11 Lifecycle',
+      path: `t11-lc-cat-${suffix}`,
     })
     .returning({ id: folders.id });
   folderId = folder.id;

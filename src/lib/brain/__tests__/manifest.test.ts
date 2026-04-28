@@ -58,6 +58,7 @@ beforeAll(async () => {
       name: 'Brand & Voice',
       description: 'How we sound.',
       sortOrder: 0,
+      path: 'brand',
     })
     .returning({ id: folders.id });
 
@@ -70,6 +71,7 @@ beforeAll(async () => {
       name: 'Pricing',
       description: null,
       sortOrder: 1,
+      path: 'pricing',
     })
     .returning({ id: folders.id });
 
@@ -262,6 +264,7 @@ describe('regenerateManifest', () => {
         slug: emptySlug,
         name: 'Empty Folder',
         sortOrder: 99,
+        path: emptySlug,
       })
       .returning({ id: folders.id });
 

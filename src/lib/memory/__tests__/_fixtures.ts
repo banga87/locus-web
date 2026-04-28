@@ -61,6 +61,7 @@ async function seedCompanyBrainAndFolder(label: string): Promise<{
       brainId: brain.id,
       slug: 'pricing',
       name: 'Pricing',
+      path: 'pricing',
     })
     .returning({ id: folders.id });
 

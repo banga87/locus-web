@@ -136,6 +136,7 @@ async function setupRunFixtures(): Promise<RunFixtures> {
       brainId: brain!.id,
       slug: 'skills',
       name: 'Skills',
+      path: 'skills',
     })
     .returning({ id: folders.id });
 
@@ -145,6 +146,7 @@ async function setupRunFixtures(): Promise<RunFixtures> {
     brainId: brain!.id,
     slug: 'reports',
     name: 'Reports',
+    path: 'reports',
   });
 
   // Seed as editor — the runner now passes through the triggering user's

@@ -50,6 +50,7 @@ beforeAll(async () => {
       brainId,
       slug: `up-cat-${suffix}`,
       name: 'User-prompt fixtures',
+      path: `up-cat-${suffix}`,
     })
     .returning({ id: folders.id });
   folderId = folder.id;

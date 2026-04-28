@@ -54,6 +54,7 @@ async function setupStatusFixtures(): Promise<StatusFixtures> {
       brainId: brain!.id,
       slug: 'wf',
       name: 'Workflows',
+      path: 'wf',
     })
     .returning({ id: folders.id });
 

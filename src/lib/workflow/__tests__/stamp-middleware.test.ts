@@ -76,6 +76,7 @@ async function setupStampFixtures(): Promise<StampFixtures> {
       brainId: brain!.id,
       slug: 'docs',
       name: 'Docs',
+      path: 'docs',
     })
     .returning({ id: folders.id });
 

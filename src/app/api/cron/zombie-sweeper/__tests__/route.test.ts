@@ -65,6 +65,7 @@ beforeAll(async () => {
       brainId,
       slug: `zb-folder-${suffix}`,
       name: 'Zombies',
+      path: `zb-folder-${suffix}`,
     })
     .returning({ id: folders.id });
 

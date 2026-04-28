@@ -94,6 +94,7 @@ beforeAll(async () => {
       brainId,
       slug: `scaf-cat-${suffix}`,
       name: 'Scaffolding',
+      path: `scaf-cat-${suffix}`,
     })
     .returning({ id: folders.id });
   folderId = folder.id;

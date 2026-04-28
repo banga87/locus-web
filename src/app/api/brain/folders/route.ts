@@ -65,15 +65,17 @@ export const POST = (req: Request) =>
     const brain = await getBrainForCompany(companyId);
 
     // If a parent is specified, make sure it lives in this brain.
+    let parentPath: string | null = null;
     if (input.parentId) {
       const [parent] = await db
-        .select({ id: folders.id })
+        .select({ id: folders.id, path: folders.path })
         .from(folders)
         .where(and(eq(folders.id, input.parentId), eq(folders.brainId, brain.id)))
         .limit(1);
       if (!parent) {
         return error('parent_not_found', 'Parent folder not found.', 400);
       }
+      parentPath = parent.path;
     }
 
     // Friendly uniqueness check before hitting the DB constraint. Slug is
@@ -111,6 +113,8 @@ export const POST = (req: Request) =>
       sortOrder = (m?.max ?? 0) + 10;
     }
 
+    const path = parentPath ? `${parentPath}/${input.slug}` : input.slug;
+
     try {
       const [row] = await db
         .insert(folders)
@@ -122,6 +126,7 @@ export const POST = (req: Request) =>
           slug: input.slug,
           description: input.description ?? null,
           sortOrder,
+          path,
         })
         .returning();
 
